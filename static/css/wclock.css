@@ -945,6 +945,11 @@ body:not(.edit-mode) .resize-handle {
     transition: all 0.3s ease;
     max-width: 320px;
     overflow: visible;
+    opacity: 0.2;
+}
+
+.chart-control-panel:hover {
+    opacity: 1;
 }
 
 .chart-control-panel .panel-buttons,
