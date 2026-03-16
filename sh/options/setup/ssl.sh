@@ -18,5 +18,13 @@ echo "Getting SSL certificate..."
 ssh "$SSH_TARGET" "
     certbot --nginx -d $DOMAIN --redirect --agree-tos -m $SSL_EMAIL --non-interactive
 "
+
+echo ""
+echo "Restart Nginx? (recommended)"
+read -p "Restart nginx? (yes/no): " RESTART_CHOICE
+if [ "$RESTART_CHOICE" = "yes" ]; then
+    ssh "$SSH_TARGET" "systemctl restart nginx && echo 'Nginx restarted.'"
+fi
+
 echo "=== SSL setup complete ==="
 echo "Check: certbot certificates"
