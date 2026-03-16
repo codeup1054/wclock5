@@ -15,6 +15,9 @@
 #   10) Restart services
 #   11) Copy static files
 #   12) Full rebuild (clean + upload + docker build)
+#   13) Setup Nginx
+#   14) Setup SSL (certbot)
+#   15) Full setup (Nginx + SSL + deploy)
 #   0) Exit
 # ============================================
 
@@ -50,6 +53,9 @@ if [ -z "$CHOICE" ]; then
     echo "10) Restart services"
     echo "11) Copy static files only"
     echo "12) Full rebuild (clean + upload + docker build)"
+    echo "13) Setup Nginx config"
+    echo "14) Setup SSL (certbot)"
+    echo "15) Full setup (Nginx + SSL + deploy)"
     echo "0) Exit"
     echo ""
     
@@ -101,10 +107,10 @@ case $CHOICE in
         read -p "Select: " LOG_CHOICE
 
         case $LOG_CHOICE in
-            1) CONTAINER="wclock4-app" ;;
-            2) CONTAINER="wclock4-parser" ;;
-            3) CONTAINER="wclock4-inv" ;;
-            4) CONTAINER="wclock4-tickers" ;;
+            1) CONTAINER="${DOCKER_PREFIX}-app" ;;
+            2) CONTAINER="${DOCKER_PREFIX}-parser" ;;
+            3) CONTAINER="${DOCKER_PREFIX}-inv" ;;
+            4) CONTAINER="${DOCKER_PREFIX}-tickers" ;;
             5) 
                 echo "=== All Container Logs ==="
                 ssh "$SSH_TARGET" "docker ps --format '{{.Names}}' | while read n; do echo \"=== \$n ===\"; docker logs --tail 30 \$n 2>&1; done"
@@ -124,13 +130,9 @@ case $CHOICE in
         echo "=== Daemon Logs (last 30 lines) ==="
         echo ""
         echo "--- invest-parser ---"
-        ssh "$SSH_TARGET" "docker logs \$(docker ps -q -f name=wclock4-inv) --tail 30 2>&1 | tail -20"
-        echo ""
-        echo "--- tickers-parser ---"
-        ssh "$SSH_TARGET" "docker logs \$(docker ps -q -f name=wclock4-tickers) --tail 30 2>&1 | tail -20"
-        echo ""
-        echo "--- weather-parser ---"
-        ssh "$SSH_TARGET" "docker logs \$(docker ps -q -f name=wclock4-parser) --tail 30 2>&1 | tail -20"
+        ssh "$SSH_TARGET" "docker logs \$(docker ps -q -f name=${DOCKER_PREFIX}-inv) --tail 30 2>&1 | tail -20"
+        ssh "$SSH_TARGET" "docker logs \$(docker ps -q -f name=${DOCKER_PREFIX}-tickers) --tail 30 2>&1 | tail -20"
+        ssh "$SSH_TARGET" "docker logs \$(docker ps -q -f name=${DOCKER_PREFIX}-parser) --tail 30 2>&1 | tail -20"
         ;;
 
     5)
@@ -276,7 +278,7 @@ case $CHOICE in
                 ssh "$SSH_TARGET" "systemctl restart nginx && echo 'Nginx restarted.'"
                 ;;
             3)
-                ssh "$SSH_TARGET" "systemctl restart wclock4 && echo 'uvicorn restarted.'"
+                echo "Docker containers restarted."
                 ;;
             4)
                 ssh "$SSH_TARGET" "
@@ -338,6 +340,131 @@ case $CHOICE in
         
         echo ""
         echo "=== Full rebuild complete ==="
+        ;;
+
+    13)
+        echo "=== Setup Nginx ==="
+        echo "Domain: $DOMAIN"
+        echo "Port: $PORT"
+        echo ""
+        read -p "Continue? (yes/no): " CONFIRM
+        if [ "$CONFIRM" != "yes" ]; then
+            echo "Cancelled."
+            exit 0
+        fi
+
+        echo "Creating Nginx config..."
+        ssh "$SSH_TARGET" "
+            # Create nginx config
+            cat > /etc/nginx/sites-available/$DOMAIN << NGINX_EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    location / {
+        proxy_pass http://localhost:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /static {
+        alias $REMOTE_PATH/static;
+    }
+}
+NGINX_EOF
+
+            # Enable site
+            ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+
+            # Remove default or conflicting
+            rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+            # Test and reload
+            nginx -t && systemctl reload nginx || echo 'Nginx config error!'
+        "
+        echo "=== Nginx setup complete ==="
+        ;;
+
+    14)
+        echo "=== Setup SSL (Certbot) ==="
+        echo "Domain: $DOMAIN"
+        echo "Email: $SSL_EMAIL"
+        echo ""
+        echo "IMPORTANT: Nginx must be running and domain must resolve!"
+        read -p "Continue? (yes/no): " CONFIRM
+        if [ "$CONFIRM" != "yes" ]; then
+            echo "Cancelled."
+            exit 0
+        fi
+
+        echo "Getting SSL certificate..."
+        ssh "$SSH_TARGET" "
+            certbot --nginx -d $DOMAIN --redirect --agree-tos -m $SSL_EMAIL --non-interactive
+        "
+        echo "=== SSL setup complete ==="
+        echo "Check: certbot certificates"
+        ;;
+
+    15)
+        echo "=== Full Setup: Nginx + SSL + Deploy ==="
+        echo "Domain: $DOMAIN"
+        echo "Port: $PORT"
+        read -p "Continue? (yes/no): " CONFIRM
+        if [ "$CONFIRM" != "yes" ]; then
+            echo "Cancelled."
+            exit 0
+        fi
+
+        # Step 1: Setup Nginx
+        echo "1/3 Setting up Nginx..."
+        ssh "$SSH_TARGET" "
+            cat > /etc/nginx/sites-available/$DOMAIN << NGINX_EOF
+server {
+    listen 80;
+    server_name $DOMAIN;
+
+    location / {
+        proxy_pass http://localhost:$PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /static {
+        alias $REMOTE_PATH/static;
+    }
+}
+NGINX_EOF
+
+            ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
+            rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+            nginx -t && systemctl reload nginx || echo 'Nginx config error!'
+        "
+
+        # Step 2: Setup SSL
+        echo "2/3 Getting SSL certificate..."
+        ssh "$SSH_TARGET" "
+            certbot --nginx -d $DOMAIN --redirect --agree-tos -m $SSL_EMAIL --non-interactive
+        "
+
+        # Step 3: Deploy
+        echo "3/3 Deploying..."
+        IGNORE_FILE="${SCRIPT_DIR}/deploy_ignore.txt"
+        ssh "$SSH_TARGET" "mkdir -p $REMOTE_PATH"
+        tar -X "$IGNORE_FILE" -czf - -C "$PROJECT_ROOT" . | \
+            ssh "$SSH_TARGET" "tar -xzf - -C $REMOTE_PATH"
+
+        ssh "$SSH_TARGET" "
+            cd $REMOTE_PATH
+            PORT=$PORT docker-compose up -d --build
+        "
+
+        echo ""
+        echo "=== Full setup complete ==="
+        echo "URL: https://$DOMAIN"
         ;;
         
     0)
