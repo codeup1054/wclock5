@@ -50,3 +50,7 @@ README.md
 Dockerfile
 docker-compose.yml
 .dockerignore
+
+# Large files
+static/js/invest_chart_data.js
+static/js/invest_chart_data.js
