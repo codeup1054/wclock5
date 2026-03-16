@@ -1,4 +1,4 @@
-// Auto-generated chart data - 2026-03-16T08:42:28.410036
+// Auto-generated chart data - 2026-03-16T08:45:21.969905
 // Do not edit manually
 
 window.investChartData = {
@@ -26990,6 +26990,10 @@ window.investChartData = {
     {
       "timestamp": "2026-03-16T08:42:27.684112+00:00",
       "value": 10479239.54
+    },
+    {
+      "timestamp": "2026-03-16T08:45:21.046735+00:00",
+      "value": 10479242.07
     }
   ],
   "hour": [
@@ -81316,6 +81320,10 @@ window.investChartData = {
     {
       "timestamp": "2026-03-16T08:42:27.684112+00:00",
       "value": 10479239.54
+    },
+    {
+      "timestamp": "2026-03-16T08:45:21.046735+00:00",
+      "value": 10479242.07
     }
   ],
   "day": [
@@ -223518,6 +223526,10 @@ window.investChartData = {
     {
       "timestamp": "2026-03-16T08:42:27.684112+00:00",
       "value": 10479239.54
+    },
+    {
+      "timestamp": "2026-03-16T08:45:21.046735+00:00",
+      "value": 10479242.07
     }
   ]
 };
