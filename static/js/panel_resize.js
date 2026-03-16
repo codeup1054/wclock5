@@ -9,7 +9,7 @@
 
     const PANEL_COOKIE = 'wclock_panels';
     const EDIT_MODE_COOKIE = 'wclock_edit_mode';
-    const PANEL_IDS = ['invest_panel', 'invest_panel_banner', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'date_panel', 'moon_panel', 'chart_control_panel'];
+    const PANEL_IDS = ['invest_panel', 'invest_panel_banner', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'seconds_panel', 'date_panel', 'moon_panel', 'chart_control_panel'];
     // Default per-panel chart scales (0.0..1.0). Panels with charts: weather_panel, invest_panel
     const DEFAULT_PANEL_CHART_SCALES = {
         weather_panel: 1,
@@ -34,8 +34,10 @@
 
     // Load panel positions from cookie
     function loadPanelConfig() {
+        console.log('[EditMode] loadPanelConfig called, looking for:', PANEL_COOKIE);
         try {
             const saved = localStorage.getItem(PANEL_COOKIE);
+            console.log('[EditMode] localStorage value:', saved);
             return saved ? JSON.parse(saved) : null;
         } catch (e) {
             console.warn('[PanelResize] Ошибка загрузки:', e);
@@ -45,8 +47,10 @@
 
     // Save panel positions to cookie
     function savePanelConfig(config) {
+        console.log('[EditMode] savePanelConfig called with:', config);
         try {
             localStorage.setItem(PANEL_COOKIE, JSON.stringify(config));
+            console.log('[EditMode] Saved to localStorage:', PANEL_COOKIE);
         } catch (e) {
             console.warn('[PanelResize] Ошибка сохранения:', e);
         }
@@ -64,16 +68,30 @@
 
     // Apply panel configuration
     function applyPanelConfig() {
+        console.log('[EditMode] applyPanelConfig called');
+        
+        // Сначала проверяем localStorage
+        const localConfig = loadPanelConfig();
+        console.log('[EditMode] localConfig:', localConfig);
+        if (localConfig) {
+            console.log('[EditMode] Applying localStorage config');
+            applyConfigToPanels(localConfig);
+            return;
+        }
+        
+        // Если нет в localStorage - пробуем БД
         const isDesktop = window.innerWidth >= 1024;
         const dbConfigKey = isDesktop ? 'panel_config_desktop' : 'panel_config_tablet';
+        console.log('[EditMode] dbConfigKey:', dbConfigKey);
         
-        // Try to load from database first
         fetch('/api/settings')
             .then(response => response.json())
             .then(settings => {
+                console.log('[EditMode] DB settings:', settings);
                 if (settings[dbConfigKey]) {
                     try {
                         const dbConfig = JSON.parse(settings[dbConfigKey]);
+                        console.log('[EditMode] DB config found, applying:', dbConfig);
                         applyConfigToPanels(dbConfig);
                         // Also save to localStorage for quick access
                         savePanelConfig(dbConfig);
@@ -82,22 +100,12 @@
                         console.warn('[PanelResize] Error parsing DB config:', e);
                     }
                 }
-                // Fall back to localStorage or defaults
-                const localConfig = loadPanelConfig();
-                if (localConfig) {
-                    applyConfigToPanels(localConfig);
-                } else {
-                    applyDefaultPanelConfig();
-                }
+                console.log('[EditMode] No DB config, applying defaults');
+                applyDefaultPanelConfig();
             })
             .catch(() => {
-                // On error, fall back to localStorage or defaults
-                const localConfig = loadPanelConfig();
-                if (localConfig) {
-                    applyConfigToPanels(localConfig);
-                } else {
-                    applyDefaultPanelConfig();
-                }
+                console.log('[EditMode] API error, applying defaults');
+                applyDefaultPanelConfig();
             });
     }
 
@@ -307,14 +315,20 @@ function normalizePanelPosition(panel) {
         panel.appendChild(btn);
     }
 
-    // Initialize resize handle for a panel
+    // Initialize resize handles for a panel (all edges and corners)
     function initResizeHandle(panel) {
-        const handle = document.createElement('div');
-        handle.className = 'panel-resize-handle';
-        panel.appendChild(handle);
+        const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+        
+        handles.forEach(pos => {
+            const handle = document.createElement('div');
+            handle.className = 'panel-resize-handle panel-resize-' + pos;
+            handle.dataset.pos = pos;
+            panel.appendChild(handle);
+        });
 
         let isResizing = false;
-        let startX, startY, startWidth, startHeight;
+        let currentHandle = null;
+        let startX, startY, startWidth, startHeight, startTop, startLeft;
 
         function setButtonsDisabled(disabled) {
             const fullscreen = document.getElementById('fullscreen');
@@ -335,19 +349,24 @@ function normalizePanelPosition(panel) {
             if (panel.classList.contains('panel-fullscreen')) return;
             
             isResizing = true;
+            currentHandle = e.target.dataset.pos;
             const pos = getClientPos(e);
             startX = pos.x;
             startY = pos.y;
             startWidth = panel.offsetWidth;
             startHeight = panel.offsetHeight;
+            startTop = panel.offsetTop;
+            startLeft = panel.offsetLeft;
             setButtonsDisabled(true);
             
             e.preventDefault();
             e.stopPropagation();
         }
 
-        handle.addEventListener('mousedown', onResizeStart);
-        handle.addEventListener('touchstart', onResizeStart, { passive: false });
+        panel.querySelectorAll('.panel-resize-handle').forEach(handle => {
+            handle.addEventListener('mousedown', onResizeStart);
+            handle.addEventListener('touchstart', onResizeStart, { passive: false });
+        });
 
         function onResizeMove(e) {
             if (!isResizing) return;
@@ -355,9 +374,28 @@ function normalizePanelPosition(panel) {
             const pos = getClientPos(e);
             const dx = pos.x - startX;
             const dy = pos.y - startY;
+            const pos_ = currentHandle;
             
-            panel.style.width = Math.max(50, startWidth + dx) + 'px';
-            panel.style.height = Math.max(30, startHeight + dy) + 'px';
+            // Width
+            if (pos_.includes('e')) {
+                panel.style.width = Math.max(50, startWidth + dx) + 'px';
+            }
+            if (pos_.includes('w')) {
+                const newWidth = Math.max(50, startWidth - dx);
+                panel.style.width = newWidth + 'px';
+                panel.style.left = (startLeft + dx) + 'px';
+            }
+            
+            // Height
+            if (pos_.includes('s')) {
+                panel.style.height = Math.max(30, startHeight + dy) + 'px';
+            }
+            if (pos_.includes('n')) {
+                const newHeight = Math.max(30, startHeight - dy);
+                panel.style.height = newHeight + 'px';
+                panel.style.top = (startTop + dy) + 'px';
+            }
+            
             panel.style.right = 'auto';
             panel.style.bottom = 'auto';
         }
@@ -368,6 +406,7 @@ function normalizePanelPosition(panel) {
         function onResizeEnd() {
             if (!isResizing) return;
             isResizing = false;
+            currentHandle = null;
             setButtonsDisabled(false);
             normalizePanelPosition(panel);
             resizeCharts();
@@ -450,6 +489,7 @@ function normalizePanelPosition(panel) {
 
     // Save current configuration
     function saveCurrentConfig() {
+        console.log('[EditMode] saveCurrentConfig called');
         const config = {};
 
         PANEL_IDS.forEach(id => {
@@ -466,15 +506,19 @@ function normalizePanelPosition(panel) {
             };
         });
         
+        console.log('[EditMode] Config to save:', config);
         savePanelConfig(config);
     }
 
     // Toggle edit mode
     function toggleEditMode() {
+        console.log('[EditMode] toggleEditMode called');
         const body = document.body;
         const btn = document.getElementById('edit_mode_btn');
         const wasEdit = body.classList.contains('edit-mode');
         const isEdit = body.classList.toggle('edit-mode');
+        
+        console.log('[EditMode] wasEdit:', wasEdit, 'isEdit:', isEdit);
         
         if (btn) {
             btn.classList.toggle('active', isEdit);
@@ -482,11 +526,15 @@ function normalizePanelPosition(panel) {
         
         if (wasEdit && !isEdit) {
             // Ask to save or cancel
+            console.log('[EditMode] Exiting edit mode, asking to save');
             const save = confirm('Сохранить изменения панелей?');
             if (save) {
+                console.log('[EditMode] User chose to save, calling saveCurrentConfig');
                 saveCurrentConfig();
+                console.log('[EditMode] Config saved');
             } else {
                 // Reload to restore previous state
+                console.log('[EditMode] User chose to cancel, reloading');
                 location.reload();
             }
         }
@@ -530,6 +578,48 @@ function normalizePanelPosition(panel) {
         }
     }
 
+    // Масштабирование содержимого панелей при ресайзе
+    const PANEL_CONTENT_SELECTORS = {
+        'wind_cond_precip_panel': '#wind_cond_precip',
+        'press_humidity_temp_panel': '#press_humidity_temp',
+        'sun_panel': '#sun',
+        'clock_panel': '#clock',
+        'date_panel': '#day',
+        'moon_panel': '#moon_phase'
+    };
+    
+    const PANEL_BASE_SIZES = {
+        'wind_cond_precip_panel': { width: 457, height: 179 },
+        'press_humidity_temp_panel': { width: 469, height: 172 },
+        'sun_panel': { width: 492, height: 58 },
+        'clock_panel': { width: 445, height: 167 }
+    };
+    
+    function initContentScaling(panel) {
+        const contentSelector = PANEL_CONTENT_SELECTORS[panel.id];
+        if (!contentSelector) return;
+        
+        const content = panel.querySelector(contentSelector);
+        if (!content) return;
+        
+        const baseSize = PANEL_BASE_SIZES[panel.id] || { width: 400, height: 150 };
+        
+        const observer = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                const scaleX = entry.contentRect.width / baseSize.width;
+                const scaleY = entry.contentRect.height / baseSize.height;
+                const scale = Math.min(scaleX, scaleY, 1.5); // max scale 1.5
+                
+                content.style.transform = `scale(${scale})`;
+                content.style.transformOrigin = 'top left';
+                content.style.width = baseSize.width + 'px';
+                content.style.height = baseSize.height + 'px';
+            }
+        });
+        
+        observer.observe(panel);
+    }
+    
     // Initialize all panels
     function initPanels() {
         PANEL_IDS.forEach(id => {
@@ -550,6 +640,7 @@ function normalizePanelPosition(panel) {
             initFullscreenButton(panel);
             initResizeHandle(panel);
             initDrag(panel);
+            initContentScaling(panel);
         });
         
         // Apply saved configuration

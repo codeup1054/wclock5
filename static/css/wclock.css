@@ -226,12 +226,16 @@ body.view-invest #invest_panel { display: block !important; }
     line-height: 1;
 }
 
-#clock_panel #clock_seconds {
+/* ─── Seconds Panel ──────────────────────────────────────────── */
+#seconds_panel {
+    left: 1vw;
+    top: 38vh;
+    min-width: 100px;
+}
+
+#seconds_panel #clock_seconds {
     text-align: center;
-    font-size: 4vw;
-    width: 100%;
-    position: absolute;
-    top:43%;
+    font-size: 8vw;
     line-height: 1;
 }
 
@@ -260,8 +264,8 @@ body.view-invest #invest_panel { display: block !important; }
 }
 
 #moon_panel #moon_phase {
-    width: 11vh;
-    height: 11vh;
+    width: 21vh;
+    height: 21vh;
     background-size: auto 11vh;
     background-repeat: no-repeat;
 }
@@ -340,6 +344,7 @@ body.view-invest #invest_panel { display: block !important; }
 #temp div{
     position: absolute;
     font-size: 8vw;
+    line-height: 5vw;
     /* width: 8vw; */
     /* text-align: right; */
 }
@@ -407,10 +412,10 @@ div[id*='forecast_'] { bottom: 0vh !important; }
     text-align: center;
     color: var(--accent-cyan);
     font-size: 8vw;
-    /* line-height: 8vh; */
+    ; line-height: 5vw; 
 }
 
-[id*=prec_prob].v100 { font-size: 6vw; }
+[id*=prec_prob].v100 { font-size: 6vw; line-height: 7vw; }
 #fact_prec_prob { top: 2vh; }
 
 [id*=wind_speed] {
@@ -424,10 +429,10 @@ div[id*='forecast_'] { bottom: 0vh !important; }
 
 [id*=_wind_dir_a] {
     position: absolute;
-    width: 12vw;
-    height: 12vw;
+    width: 10vw;
+    height: 10vw;
     background: url("/static/images/compass_a.png") no-repeat;
-    background-size: 12vw auto;
+    background-size: 10vw auto;
     opacity: 0.9;
     left: 0vw;
 }
@@ -436,7 +441,7 @@ div[id*='forecast_'] { bottom: 0vh !important; }
     top: -1vh !important;
 }
 div#forecast_1_wind_dir_a {
-    bottom: -5vh !important;
+    bottom: 0vh !important;
 }
  
 
@@ -444,12 +449,12 @@ div#forecast_1_wind_dir_a {
 img[id*=condition] {
     position: absolute;
     right: 11vw;
-    width: 10vw;
+    width: 9vw;
     opacity: 0.9;
 }
 
 #fact_condition { top: -1vh; }
-#forecast_1_condition { bottom:-12px !important; }
+#forecast_1_condition { bottom:-32px !important; }
 
 #sunrise, #daylight, #sunset {
     position: absolute;
@@ -538,8 +543,126 @@ div#browser_reload.panel-dragging {
     position: relative;
     width: 100%;
     height: 100%;
-    min-height: 0; /* Важно для flex-контейнеров */
+    min-height: 0;
 }
+
+#invest_banner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    font-family: helvetica, arial, sans-serif;
+    font-size: 13px;
+    color: #ddd;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+#invest_banner .banner-message {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+}
+
+#invest_banner .banner-message.error {
+    color: #e74c3c;
+}
+
+#invest_banner .banner-capital {
+    font-size: 68px;
+    font-weight: normal;
+    color: #8d9d9d;
+    line-height: 1.2;
+}
+
+#invest_banner .banner-changes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 21px;
+}
+
+#invest_banner .change-positive {
+    color: #2ecc71;
+}
+
+#invest_banner .change-negative {
+    color: #e74c3c;
+}
+
+#invest_banner .tgold-data {
+    color: #FFD700;
+}
+
+#invest_banner .banner-assets {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+#invest_banner .asset-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+#invest_banner .asset-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+}
+
+#invest_banner .asset-ticker {
+    width: 45px;
+    font-weight: bold;
+    color: #ddd;
+}
+
+#invest_banner .asset-value {
+    flex: 1;
+    text-align: right;
+    padding-right: 8px;
+}
+
+#invest_banner .asset-percent {
+    width: 45px;
+    text-align: right;
+    color: #aaa;
+}
+
+#invest_banner .asset-bar-container {
+    position: relative;
+    height: 10px;
+    background: rgba(100, 100, 100, 0.3);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+#invest_banner .asset-bar-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(100, 100, 100, 0.3);
+    border-radius: 3px;
+}
+
+#invest_banner .asset-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 3px;
+    min-width: 2px;
+}
+
 
 canvas#weatherChart {
     position: absolute;
@@ -1018,43 +1141,34 @@ body.edit-mode .panel-fullscreen-btn {
     border-color: rgba(255, 255, 255, 0.7);
 }
 
-/* ─── Resize Handle ─────────────────────────────────────────── */
+/* ─── Resize Handles ─────────────────────────────────────────── */
 .panel-resize-handle {
     position: absolute;
-    right: 0;
-    bottom: 0;
-    width: 16px;
-    height: 16px;
-    cursor: se-resize;
-    z-index: 5;
+    z-index: 1000;
     display: none;
 }
 
 body.edit-mode .panel-resize-handle {
     display: block;
+    background: var(--accent-orange);
+    opacity: 0.5;
 }
 
-.panel-resize-handle::before {
-    content: '';
-    position: absolute;
-    right: 3px;
-    bottom: 3px;
-    width: 8px;
-    height: 8px;
-    border-right: 2px solid var(--accent-orange);
-    border-bottom: 2px solid var(--accent-orange);
-    opacity: 0.6;
+body.edit-mode .panel-resize-handle:hover {
+    opacity: 1;
 }
-/* Ensure handles and fullscreen buttons sit above panel content */
-.panel-resize-handle {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 14px;
-  height: 14px;
-  cursor: se-resize;
-  z-index: 1000;
-}
+
+/* Corners */
+.panel-resize-nw { top: 0; left: 0; width: 3px; height: 3px; cursor: nw-resize; border-radius: 2px 0 2px 0; }
+.panel-resize-ne { top: 0; right: 0; width: 3px; height: 3px; cursor: ne-resize; border-radius: 0 2px 0 2px; }
+.panel-resize-sw { bottom: 0; left: 0; width: 3px; height: 3px; cursor: sw-resize; border-radius: 0 2px 0 2px; }
+.panel-resize-se { bottom: 0; right: 0; width: 3px; height: 3px; cursor: se-resize; border-radius: 2px 0 0 2px; }
+
+/* Edges */
+.panel-resize-n { top: 0; left: 3px; right: 3px; height: 3px; cursor: n-resize; }
+.panel-resize-s { bottom: 0; left: 3px; right: 3px; height: 3px; cursor: s-resize; }
+.panel-resize-e { top: 3px; bottom: 3px; right: 0; width: 3px; cursor: e-resize; }
+.panel-resize-w { top: 3px; bottom: 3px; left: 0; width: 3px; cursor: w-resize; }
 .panel-fullscreen-btn {
   position: absolute;
   z-index: 1000;

@@ -1,15 +1,26 @@
 // static/js/invest_banner.js
-console.log("🚀 invest_banner.js загружен");
+// HTML-версия баннера (без Chart.js)
+console.log("🚀 invest_banner.js загружен (HTML version)");
 
 (function($) {
     'use strict';
 
     let investBannerInterval = null;
+    let tgoldData = null;
+
+    const COLORS = {
+        capital: '#8d9d9d',
+        positive: '#2ecc71',
+        negative: '#e74c3c',
+        ticker: '#ddd',
+        rubTicker: '#26aa71',
+        tgold: '#FFD700',
+        barBackground: 'rgba(100, 100, 100, 0.5)',
+        assetColors: ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
+    };
 
     function formatCurrency(value) {
         return value.toLocaleString('ru-RU', { 
-            style: 'decimal', // 'currency' or 'decimal'
-            currency: 'RUB',
             minimumFractionDigits: 0,
             maximumFractionDigits: 0
         });
@@ -25,77 +36,190 @@ console.log("🚀 invest_banner.js загружен");
         return `${sign}${Math.abs(value).toFixed(2)}%`;
     }
 
-    function updateInvestBanner() {
-        // Получаем историю (все снимки)
-        $.getJSON('/api/invest/history', function(historyData) {
-            if (!historyData || Object.keys(historyData).length === 0) {
-                $('#invest_banner').html('<p>Нет данных</p>');
-                return;
+    function getAssetsData(positions) {
+        if (!Array.isArray(positions) || positions.length === 0) return [];
+
+        const totalValue = positions.reduce((sum, p) => sum + (p.value || 0), 0);
+        
+        return positions
+            .map(p => ({
+                ticker: p.name?.slice(0, 4) || '???',
+                name: p.name || '???',
+                quantity: p.quantity || 0,
+                value: p.value || 0,
+                percent: totalValue > 0 ? ((p.value || 0) / totalValue) * 100 : 0
+            }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5);
+    }
+
+    function calculateBaselineTotal(historyData, timestamps) {
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        for (const ts of timestamps) {
+            const entry = historyData[ts];
+            if (new Date(ts) >= todayStart && Array.isArray(entry) && entry.length > 0) {
+                return entry.reduce((sum, p) => sum + (p.value || 0), 0);
             }
-
-            // Получаем все временные метки и сортируем по возрастанию
-            const timestamps = Object.keys(historyData).sort();
-            if (timestamps.length === 0) {
-                $('#invest_banner').html('<p>Нет данных</p>');
-                return;
+        }
+        
+        const yesterdayEnd = new Date(todayStart.getTime() - 1);
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+            const entry = historyData[timestamps[i]];
+            if (new Date(timestamps[i]) <= yesterdayEnd && Array.isArray(entry) && entry.length > 0) {
+                return entry.reduce((sum, p) => sum + (p.value || 0), 0);
             }
+        }
+        
+        const firstEntry = historyData[timestamps[0]];
+        return Array.isArray(firstEntry)
+            ? firstEntry.reduce((sum, p) => sum + (p.value || 0), 0)
+            : 0;
+    }
 
-            // Последний снимок — текущее состояние
-            const latestTs = timestamps[timestamps.length - 1];
-            const latestPositions = historyData[latestTs];
+    function calculateWeekBaselineTotal(historyData, timestamps) {
+        const now = new Date();
+        const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
 
-            // Считаем общую стоимость последнего снимка
-            const currentTotal = latestPositions.reduce((sum, p) => sum + p.value, 0);
+        for (const ts of timestamps) {
+            const entry = historyData[ts];
+            if (new Date(ts) >= weekAgo && Array.isArray(entry) && entry.length > 0) {
+                return entry.reduce((sum, p) => sum + (p.value || 0), 0);
+            }
+        }
 
-            // Находим первый снимок после 00:00 сегодняшнего дня
-            const now = new Date();
-            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            let baselineTotal = currentTotal; // по умолчанию — текущее значение
+        const firstEntry = historyData[timestamps[0]];
+        return Array.isArray(firstEntry)
+            ? firstEntry.reduce((sum, p) => sum + (p.value || 0), 0)
+            : 0;
+    }
 
-            for (const ts of timestamps) {
-                const tsDate = new Date(ts); // строка вида "2026-01-18T10:20:53.204828+00:00"
-                if (tsDate >= todayStart) {
-                    baselineTotal = historyData[ts].reduce((sum, p) => sum + p.value, 0);
-                    break;
+    function loadTgoldData(callback) {
+        $.getJSON('/api/invest/ticker/TGLD@')
+            .done(function(data) {
+                if (data && !data.error) {
+                    tgoldData = data;
+                    console.log('[InvestBanner] TGLD@ data loaded:', data);
+                    if (callback) callback(data);
+                } else {
+                    console.warn('[InvestBanner] TGLD@: Нет данных:', data?.error);
                 }
-            }
-
-            // Вычисляем изменение
-            const absChange = currentTotal - baselineTotal;
-            const pctChange = baselineTotal !== 0 ? (absChange / baselineTotal * 100) : 0;
-
-            // Формируем HTML
-            let html = '';
-
-            // Строка TOTAL с изменением
-            const changeClass = absChange >= 0 ? 'change-positive' : 'change-negative';    
-
-            html += `<div class="flex-row total-row ${changeClass}">
-                <span class="tick_val">${formatCurrency(currentTotal)}</span>
-                <span class="tick_change">${formatChange(absChange)} ${formatPercent(pctChange)}</span>
-            </div>`;
-
-            // Остальные позиции — из последнего снимка //${p.quantity.toLocaleString('ru-RU')}</span>
-            latestPositions.forEach(p => {
-                const rowClass = p.name === 'RUB000UTSTOM' ? 'rub-currency' : '';
-                html += `<div class="flex-row ${rowClass}">
-                    <span class="tick_name">${p.name.slice(0, 4)}</span>
-                    <span class="tick_qnt">${formatCurrency(p.quantity)}</span> 
-                    <span class="tick_val">${formatCurrency(p.value)}</span>
-                </div>`;
+            })
+            .fail(function(err) {
+                console.error('[InvestBanner] TGLD@ Ошибка загрузки:', err);
             });
+    }
 
-            $('#invest_banner').html(html);
+    function renderBanner(historyData) {
+        const $banner = $('#invest_banner');
+        
+        if (!historyData || Object.keys(historyData).length === 0) {
+            $banner.html('<div class="banner-message">Нет данных</div>');
+            return;
+        }
 
+        const timestamps = Object.keys(historyData).sort();
+        if (timestamps.length === 0) {
+            $banner.html('<div class="banner-message">Нет данных</div>');
+            return;
+        }
+
+        const latestTs = timestamps[timestamps.length - 1];
+        const latestPositions = historyData[latestTs];
+        
+        if (!Array.isArray(latestPositions) || latestPositions.length === 0) {
+            $banner.html('<div class="banner-message">Нет позиций</div>');
+            return;
+        }
+
+        const currentTotal = latestPositions.reduce((sum, p) => sum + (p.value || 0), 0);
+        const baselineTotal = calculateBaselineTotal(historyData, timestamps);
+        const baselineWeekTotal = calculateWeekBaselineTotal(historyData, timestamps);
+        
+        const absChange = currentTotal - baselineTotal;
+        const pctChange = baselineTotal !== 0 ? (absChange / baselineTotal * 100) : 0;
+        const absChangeWeek = currentTotal - baselineWeekTotal;
+        const pctChangeWeek = baselineWeekTotal !== 0 ? (absChangeWeek / baselineWeekTotal * 100) : 0;
+
+        const assets = getAssetsData(latestPositions);
+
+        let html = '';
+
+        // === CAPITAL ===
+        const dayChangeClass = absChange >= 0 ? 'change-positive' : 'change-negative';
+        const weekChangeClass = absChangeWeek >= 0 ? 'change-positive' : 'change-negative';
+
+        html += `<div class="banner-capital">${formatCurrency(currentTotal)}</div>`;
+
+        // === CHANGES ===
+        html += `<div class="banner-changes">`;
+        html += `<span class="${dayChangeClass}">Д: ${formatChange(absChange)} ${formatPercent(pctChange)}</span>`;
+        html += `<span class="${weekChangeClass}">7д: ${formatChange(absChangeWeek)} ${formatPercent(pctChangeWeek)}</span>`;
+        
+        // === TGLD@ ===
+        if (tgoldData) {
+            const dayPct = (tgoldData.day_change_pct || 0).toFixed(2);
+            const weekPct = (tgoldData.week_change_pct || 0).toFixed(2);
+            const daySign = (tgoldData.day_change || 0) >= 0 ? '+' : '';
+            const weekSign = (tgoldData.week_change || 0) >= 0 ? '+' : '';
+            html += `<span class="tgold-data">TGLD: ${(tgoldData.current_price || 0).toFixed(2)}  Д: ${daySign}${dayPct}%  Н: ${weekSign}${weekPct}%</span>`;
+        }
+        html += `</div>`;
+
+        // === ASSETS BARS ===
+        if (assets.length > 0) {
+            html += `<div class="banner-assets">`;
+            
+            assets.forEach((asset, index) => {
+                let color = COLORS.assetColors[index % COLORS.assetColors.length];
+                if (asset.ticker.includes('TGLD')) color = '#ffb700';
+                if (asset.ticker.includes('RUB')) color = COLORS.rubTicker;
+
+                html += `<div class="asset-row">`;
+                html += `<div class="asset-info">`;
+                html += `<span class="asset-ticker">${asset.ticker}</span>`;
+                html += `<span class="asset-value">${formatCurrency(asset.value)} ₽</span>`;
+                html += `<span class="asset-percent">${asset.percent.toFixed(1)}%</span>`;
+                html += `</div>`;
+                html += `<div class="asset-bar-container">`;
+                html += `<div class="asset-bar-bg"></div>`;
+                html += `<div class="asset-bar" style="width: ${asset.percent}%; background-color: ${color};"></div>`;
+                html += `</div>`;
+                html += `</div>`;
+            });
+            
+            html += `</div>`;
+        }
+
+        $banner.html(html);
+        console.log('[InvestBanner] Banner rendered, capital:', currentTotal, 'assets:', assets.length);
+    }
+
+    function updateInvestBanner() {
+        console.log('[InvestBanner] updateInvestBanner called');
+        
+        const $banner = $('#invest_banner');
+        
+        $.getJSON('/api/invest/history', function(historyData) {
+            console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
+            renderBanner(historyData);
         }).fail(function(xhr, status, error) {
-            console.error('Ошибка загрузки истории:', error);
-            $('#invest_banner').html('<p>❌ Ошибка загрузки портфеля</p>');
+            console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
+            $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
         });
     }
 
     function init() {
+        console.log('[InvestBanner] init called');
+        
+        loadTgoldData();
         updateInvestBanner();
-        investBannerInterval = setInterval(updateInvestBanner, 120000); // каждые 2 минуты
+        
+        investBannerInterval = setInterval(function() {
+            loadTgoldData();
+            updateInvestBanner();
+        }, 120000);
 
         $(window).on('beforeunload', () => {
             if (investBannerInterval) {
@@ -109,6 +233,7 @@ console.log("🚀 invest_banner.js загружен");
 
     window.InvestBanner = {
         update: updateInvestBanner,
+        loadTgold: loadTgoldData,
         stop: () => {
             if (investBannerInterval) {
                 clearInterval(investBannerInterval);

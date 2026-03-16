@@ -304,26 +304,15 @@
 
     // Standalone render function for invest_panel_banner canvas
     window.renderInvestBanner = function() {
-        console.log('[Banner] renderInvestBanner called');
         const overlay = document.getElementById('investBanner');
-        if (!overlay) {
-            console.log('[Banner] Canvas not found');
-            return;
-        }
+        if (!overlay) return;
         
         const ctx = overlay.getContext('2d');
-        if (!ctx) {
-            console.log('[Banner] No context');
-            return;
-        }
+        if (!ctx) return;
         
         const w = overlay.clientWidth;
         const h = overlay.clientHeight;
-        console.log('[Banner] Canvas size:', w, h);
-        if (!w || !h || w < 10 || h < 10) {
-            console.log('[Banner] Canvas too small');
-            return;
-        }
+        if (!w || !h || w < 10 || h < 10) return;
         
         const dpr = window.devicePixelRatio || 1;
         overlay.width = w * dpr;
@@ -332,13 +321,8 @@
         
         ctx.clearRect(0, 0, w, h);
         
-        // Debug: add background color
-        ctx.fillStyle = 'rgba(30, 30, 30, 0.5)';
-        ctx.fillRect(0, 0, w, h);
-        
         const data = window.ChartBannerData;
-        console.log('[Banner] Data at render:', data?.capital, 'assets:', data?.assets?.length);
-        if (!data || !data.assets) {
+        if (!data || !data.assets || !data.assets.length) {
             ctx.fillStyle = '#888';
             ctx.font = '14px sans-serif';
             ctx.textAlign = 'center';
@@ -346,49 +330,25 @@
             return;
         }
         
-        if (data.assets.length === 0) {
-            ctx.fillStyle = '#888';
-            ctx.font = '14px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('Нет данных', w/2, h/2);
-            return;
-        }
-        
         const plugin = window.ChartBannerPlugin;
-        console.log('[Banner] Plugin exists:', !!plugin, 'drawBannerOnCanvas:', !!(plugin && plugin.drawBannerOnCanvas));
         if (plugin && plugin.drawBannerOnCanvas) {
-            console.log('[Banner] Calling drawBannerOnCanvas, w:', w, 'h:', h);
-            try {
-                plugin.drawBannerOnCanvas(ctx, w, h, data.capital, data.absChange, data.pctChange, data.absChangeWeek, data.pctChangeWeek, data.assets);
-                console.log('[Banner] drawBannerOnCanvas completed');
-            } catch(e) {
-                console.error('[Banner] Error in drawBannerOnCanvas:', e);
-            }
+            plugin.drawBannerOnCanvas(ctx, w, h, data.capital, data.absChange, data.pctChange, data.absChangeWeek, data.pctChangeWeek, data.assets);
         }
     };
 
     // Обновление данных баннера
     window.updateInvestBannerData = function(historyData) {
-        console.log('[Banner] updateInvestBannerData called, keys:', historyData ? Object.keys(historyData).length : 'null');
-        
-        if (!historyData || Object.keys(historyData).length === 0) {
-            console.log('[Banner] No history data, returning null');
-            return null;
-        }
+        if (!historyData || Object.keys(historyData).length === 0) return null;
 
         const timestamps = Object.keys(historyData).sort();
         if (timestamps.length === 0) return null;
 
         // Последний снимок — текущее состояние
         const latestTs = timestamps[timestamps.length - 1];
-        console.log('[Banner] Latest ts:', latestTs, 'data:', historyData[latestTs]);
-        
         const latestPositions = historyData[latestTs]; // ← Это уже массив!
         const currentTotal = Array.isArray(latestPositions)
             ? latestPositions.reduce((sum, p) => sum + (p.value || 0), 0)
             : 0;
-        
-        console.log('[Banner] Current total:', currentTotal);
 
         // Базовое значение (на начало дня)
         const baselineTotal = calculateBaselineTotal(historyData, timestamps);
@@ -493,22 +453,11 @@
         const originalUpdate = window.updateInvestBannerData;
         if (originalUpdate) {
             window.updateInvestBannerData = function(historyData) {
-                console.log('[Banner] Wrapper called, data keys:', historyData ? Object.keys(historyData).length : 'null');
-                
-                // Не обновляем если пришли пустые данные а уже есть хорошие данные
-                if (!historyData || Object.keys(historyData).length === 0) {
-                    console.log('[Banner] Empty data received, keeping old data');
-                    setTimeout(window.renderInvestBanner, 100);
-                    return window.ChartBannerData;
-                }
-                
                 const result = originalUpdate.apply(this, arguments);
-                console.log('[Banner] Wrapper result:', result?.capital, 'assets:', result?.assets?.length);
                 if (result) {
                     const savedTgold = window.ChartBannerData?.tgoldData;
                     window.ChartBannerData = result;
                     window.ChartBannerData.tgoldData = savedTgold || null;
-                    console.log('[Banner] Wrapper set ChartBannerData, capital:', window.ChartBannerData.capital);
                     setTimeout(window.renderInvestBanner, 100);
                 }
                 return result;
