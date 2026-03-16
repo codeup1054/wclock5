@@ -1,0 +1,35 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+
+package "Backup Strategy" {
+    
+    folder "Local" {
+        [Database\nSQLite] as db_local
+        [Config\n.env] as config_local
+    }
+    
+    cloud "Remote Backup" {
+        [rsync/\nS3] as backup_remote
+        [GitHub\nRepo] as github
+    }
+    
+    folder "Server" {
+        [Production\nDB] as db_prod
+        [Production\nConfig] as config_prod
+    }
+}
+
+db_local -> github : git push (dev)
+config_local -> github : git push (secrets)
+
+db_prod -> backup_remote : daily rsync
+config_prod -> backup_remote : daily rsync
+
+note right of backup_remote
+  Retention: 7 daily
+  4 weekly
+  12 monthly
+end note
+
+@enduml

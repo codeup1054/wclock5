@@ -1,0 +1,33 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+
+package "Monitoring" {
+    
+    [Prometheus\n:9090] as prom
+    [Grafana\n:3000] as grafana
+    [AlertManager] as alert
+    [Node\nExporter] as node_exp
+    [cAdvisor] as cadvisor
+    
+    [Email/\nTelegram] as notification
+}
+
+package "Application" {
+    [wclock4-app] as app
+    [wclock4-parser] as parser
+    [wclock4-inv] as inv
+}
+
+app --> prom : /metrics
+parser --> prom : /metrics
+inv --> prom : /metrics
+
+prom --> grafana : visualize
+prom --> alert : rules
+alert --> notification : alerts
+
+node_exp --> prom : system metrics
+cadvisor --> prom : container metrics
+
+@enduml

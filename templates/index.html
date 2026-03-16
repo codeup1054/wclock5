@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Weather Clock</title>
+    
+    <link rel="stylesheet" href="/static/css/wclock.css">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.png">
+
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
+
+    <!-- Chart.js и плагины -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-crosshair@2.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.min.js"></script>
+
+    <!-- Локальные скрипты -->
+    <script src="/static/js/cookie.js"></script>
+    <script src="/static/js/lib.js?v=3"></script>
+    <script src="/static/js/control_panel.js"></script>
+    <script src="/static/js/battery.js"></script>
+    <script src="/static/js/weather_chart.js?2"></script>
+    <script src="/static/js/panel_configs.js"></script>
+    <script src="/static/js/panel_resize.js?v=3"></script>
+
+    {% if show_invest %}
+    <script>console.log('[Index] show_invest = true');</script>
+    <script src="/static/js/invest_chart_banner.js?v=22"></script>
+    <script src="/static/js/chart_plugins.js"></script>
+    <script src="/static/js/invest_chart_data.js?v=1"></script>
+    <script src="/static/js/invest_chart.js?v=23"></script>
+    {% else %}
+    <script>console.log('[Index] show_invest = false');</script>
+    {% endif %}
+
+    <!-- Оркестратор обновлений -->
+    <script src="/static/js/cron.js"></script>
+
+    <!-- Основной модуль -->
+    <script src="/static/js/index.js"></script>
+
+</head>
+<body>
+<div>
+    <div id="layout">
+        <div id="console" class="fullscreen"></div>
+        
+        <!-- Weather Panel -->
+        <div id="weather_panel" class="clock-panel">
+            <canvas id="weatherChart" class="weatherChart-normal fullscreen"></canvas>
+        </div>
+
+        <!-- Battery Indicator Panel -->
+        <div id="battery_indicator_panel" class="clock-panel">
+            <div class="battery-icon"><div class="battery-fill" id="battery_fill"></div></div>
+            <span class="battery-text" id="battery_text"></span>
+        </div>
+        
+        <!-- Battery Chart Panel -->
+        <div id="battery_chart_panel" class="clock-panel">
+            <canvas id="volumeChart"></canvas>
+        </div>
+        
+        <!-- Investment Chart Panel moved to chart_control_panel; invest panel contains volumeChart now -->
+        <div id="invest_panel" class="clock-panel" >
+            <canvas id="investChart" class="fullscreen"></canvas>
+        </div>
+
+
+        <!-- Investment Chart Panel moved to chart_control_panel; invest panel contains volumeChart now -->
+        <div id="invest_panel_banner" class="clock-panel" data-chart-scale=".8">
+            <canvas id="investBanner" class="fullscreen"></canvas>
+        </div>
+        
+        <!-- Pressure/Humidity/Temp Panel -->
+        <div id="press_humidity_temp_panel" class="clock-panel">
+            <div id="press_humidity_temp">
+                <div id="fact_pressure_mm"></div>
+                <div id="forecast_1_pressure_mm"></div>
+                <div id="fact_humidity"></div>
+                <div id="forecast_1_humidity"></div>
+                <div id="temp">
+                    <div id="fact_temperature"></div>
+                    <div id="fact_feels_like"></div>
+                    <div id="forecast_1_temperature"></div>
+                    <div id="forecast_1_feels_like"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Wind/Condition/Precipitation Panel -->
+        <div id="wind_cond_precip_panel" class="clock-panel">
+            <div id="wind_cond_precip">
+                <img id="fact_condition">
+                <img id="forecast_1_condition">
+                <div id="fact_prec_prob"></div>
+                <div id="forecast_1_prec_prob"></div>
+                <div id="fact_wind_dir"></div>
+                <div id="fact_wind_dir_a"></div>
+                <div id="forecast_1_wind_dir"></div>
+                <div id="forecast_1_wind_dir_a"></div>
+                <div id="fact_wind_speed"></div>
+                <div id="forecast_1_wind_speed"></div>
+            </div>
+        </div>
+
+        <!-- Sun Panel -->
+        <div id="sun_panel" class="clock-panel">
+            <div id="sun">
+                <div id="sunrise"></div>
+                <div id="daylight"></div>
+                <div id="sunset"></div>
+            </div>
+        </div>
+
+        <!-- Clock Panel -->
+        <div id="clock_panel" class="clock-panel">
+            <div id="clock"></div>
+            <div id="clock_seconds"></div>
+        </div>
+        
+        <!-- Date Panel -->
+        <div id="date_panel" class="clock-panel">
+            <div id="day"></div>
+            <div id="month"></div>
+            <div id="weekday"></div>
+        </div>
+        
+        <!-- Moon Panel -->
+        <div id="moon_panel" class="clock-panel">
+            <div id="moon_phase"></div>
+        </div>
+        
+        
+        <!-- Control Buttons -->
+        <div id="browser_fullscreen"></div>
+        <div id="browser_reload"></div>
+        <!-- <div id="mode_toggle" title="Переключить режим" style="display: none;"></div> -->
+        <div id="contentDiv"></div>
+        
+        <!-- Chart Control Panel loaded dynamically -->
+        <div id="chart_control_panel" class="clock-panel" ></div>
+    </div>
+</div>
+</body>
+</html>

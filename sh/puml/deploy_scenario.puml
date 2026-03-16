@@ -1,0 +1,141 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+
+start
+
+:Main Menu;
+:Select option;
+
+if (Choice?) then (1)
+  :Server Resources;
+  note right
+  42-58
+  end note
+  :ssh uptime, top, free, df;
+  :Result: resources;
+
+elseif (2)
+  :Docker Status;
+  note right
+  62-73
+  end note
+  :docker ps, images, network, volume;
+  :Result: docker state;
+
+elseif (3)
+  :Docker Logs;
+  note right
+  76-102
+  end note
+  :select container;
+  :docker logs --tail 50;
+  :Result: logs;
+
+elseif (4)
+  :Daemon Logs;
+  note right
+  105-115
+  end note
+  :invest/tickers/weather parser;
+  :Result: parser logs;
+
+elseif (5)
+  :Nginx Status;
+  note right
+  118-126
+  end note
+  :systemctl status nginx;
+  :tail error.log, access.log;
+  :Result: nginx state;
+
+elseif (6)
+  :SSL Certificates;
+  note right
+  129-134
+  end note
+  :certbot certificates;
+  :certbot renew --dry-run;
+  :Result: SSL info;
+
+elseif (7)
+  :Full System Check;
+  note right
+  137-162
+  end note
+  :nslookup DOMAIN;
+  :curl HTTPS;
+  :free -h, df -h;
+  :docker ps;
+  :ss -tlnp :80 :443;
+  :certbot certificates;
+  :Result: full report;
+
+elseif (8)
+  :Checklist;
+  note right
+  165-207
+  end note
+  :DNS resolves?;
+  :HTTP 200?;
+  :Nginx active?;
+  :Docker running?;
+  :SSL valid?;
+  :Port listening?;
+
+  if (Apply fix?) then (yes)
+    :docker-compose restart;
+  elseif (nginx)
+    :systemctl restart nginx;
+  elseif (rebuild)
+    :docker-compose down && up -d --build;
+  endif
+
+  :Result: check complete;
+
+elseif (9)
+  :Cleanup Docker;
+  note right
+  210-238
+  end note
+  :confirm yes/no;
+  :docker container prune;
+  :docker network prune;
+  :docker image prune;
+  :docker builder prune;
+  :Result: cleaned;
+
+elseif (10)
+  :Restart Services;
+  note right
+  242-270
+  end note
+
+  if (option?) then (docker)
+    :docker-compose restart;
+  elseif (nginx)
+    :systemctl restart nginx;
+  elseif (service)
+    :systemctl restart wclock4;
+  elseif (all)
+    :docker + nginx restart;
+  endif
+
+  :Result: restarted;
+
+elseif (11)
+  :Copy Static Files;
+  note right
+  274-285
+  end note
+  :mkdir -p static templates;
+  :tar -X exclude → ssh;
+  :docker-compose restart;
+  :Result: files copied;
+
+else (0)
+  :Exit;
+endif
+
+stop
+@enduml

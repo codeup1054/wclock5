@@ -1,0 +1,46 @@
+@startuml
+!theme plain
+
+start
+
+:User reports issue;
+
+if (HTTPS works?) then (no)
+    :Check SSL cert;
+    if (Cert valid?) then (no)
+        :Run certbot;
+    else (yes)
+        :Check Nginx;
+    endif
+else (yes)
+endif
+
+if (App responds?) then (no)
+    :Check container status;
+    if (Running?) then (no)
+        :docker start;
+        :Check logs;
+    else (yes)
+        :Check port;
+    endif
+else (yes)
+endif
+
+if (Data updates?) then (no)
+    :Check parsers;
+    if (Running?) then (no)
+        :Restart parser;
+    else (yes)
+        :Check API keys;
+    endif
+else (yes)
+endif
+
+if (Performance OK?) then (no)
+    :Check resources;
+    :Check logs;
+endif
+
+stop
+
+@enduml

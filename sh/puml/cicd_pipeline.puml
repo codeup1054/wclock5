@@ -1,0 +1,44 @@
+@startuml
+!theme plain
+
+skinparam linetype ortho
+
+node "Developer\nWorkstation" {
+    [VS Code] as ide
+    [Git] as git
+    [Docker\nLocal] as docker_local
+}
+
+node "Build Server" {
+    [Source\nCode] as source
+    [Build\nAgent] as build
+    [Unit\nTests] as tests
+    [Build\nArtifact] as artifact
+}
+
+node "Registry" {
+    [Docker\nRegistry] as registry
+}
+
+node "Staging" {
+    [Staging\nServer] as staging
+    [Smoke\nTests] as smoke
+}
+
+node "Production" {
+    [Production\nServer] as prod
+    [Monitoring] as monitor
+}
+
+ide -> git : commit & push
+git -> source : webhook
+source -> build : trigger
+build -> tests : run unit tests
+tests -> artifact : package
+artifact -> registry : push image
+registry -> staging : pull & deploy
+staging -> smoke : run tests
+smoke -> prod : promote
+prod -> monitor : metrics
+
+@enduml

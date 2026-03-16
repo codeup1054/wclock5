@@ -1,0 +1,26 @@
+@startuml
+!theme plain
+
+state "Container Lifecycle" as lifecycle {
+    
+    [*] --> Created
+    Created --> Running : docker start
+    Running --> Paused : docker pause
+    Paused --> Running : docker unpause
+    Running --> Stopped : docker stop
+    Stopped --> Running : docker start
+    Stopped --> Removed : docker rm
+    Running --> Killed : docker kill
+    Killed --> Removed : docker rm
+    Removed --> [*]
+    
+    Running --> Restarting : restart policy
+    Restarting --> Running
+}
+
+note right of Restarting
+  Auto-healing via
+  restart: always
+end note
+
+@enduml

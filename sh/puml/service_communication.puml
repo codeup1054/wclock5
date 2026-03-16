@@ -1,0 +1,40 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+
+package "Docker Network" {
+    [Nginx\nReverse Proxy] as nginx
+    
+    [wclock4-app\n:8000] as app
+    
+    [wclock4-parser\n:8001] as parser_w
+    
+    [wclock4-inv\n:8002] as parser_i
+    
+    [wclock4-tickers\n:8003] as tickers
+    
+    [PostgreSQL\n:5432] as db
+    
+    [Redis\n:6379] as cache
+}
+
+cloud "Internet" {
+    [Client\nBrowser] as client
+    [External\nAPIs] as ext_api
+}
+
+client --> nginx : HTTPS :443
+nginx --> app : HTTP :8000
+
+app --> parser_w : HTTP :8001
+app --> parser_i : HTTP :8002
+app --> tickers : HTTP :8003
+
+parser_w --> db : SQL
+parser_i --> db : SQL
+app --> db : SQL
+
+app --> cache : GET/SET
+tickers --> ext_api : Fetch prices
+
+@enduml

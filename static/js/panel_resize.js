@@ -1,0 +1,765 @@
+/**
+ * panel_resize.js
+ * Drag and resize functionality for panels with cookie persistence
+ * Configs are stored in panel_configs.js
+ */
+
+(function(window) {
+    'use strict';
+
+    const PANEL_COOKIE = 'wclock_panels';
+    const EDIT_MODE_COOKIE = 'wclock_edit_mode';
+    const PANEL_IDS = ['invest_panel', 'invest_panel_banner', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'date_panel', 'moon_panel', 'chart_control_panel'];
+    // Default per-panel chart scales (0.0..1.0). Panels with charts: weather_panel, invest_panel
+    const DEFAULT_PANEL_CHART_SCALES = {
+        weather_panel: 1,
+        invest_panel: 1,
+        invest_panel_banner: 1,
+        chart_control_panel: 1
+    };
+
+    // Use configs from panel_configs.js (loaded before this script)
+    const DEFAULT_PANEL_CONFIG_DESKTOP = typeof PANEL_CONFIG_DESKTOP !== 'undefined' ? PANEL_CONFIG_DESKTOP : {};
+    const DEFAULT_PANEL_CONFIG_TABLET = typeof PANEL_CONFIG_TABLET !== 'undefined' ? PANEL_CONFIG_TABLET : {};
+
+    function getDefaultPanelConfig() {
+        const width = window.innerWidth;
+        if (width >= 1024) return DEFAULT_PANEL_CONFIG_DESKTOP;
+        return DEFAULT_PANEL_CONFIG_TABLET;
+    }
+
+    const DEFAULT_PANEL_CONFIG = getDefaultPanelConfig();
+
+    
+
+    // Load panel positions from cookie
+    function loadPanelConfig() {
+        try {
+            const saved = localStorage.getItem(PANEL_COOKIE);
+            return saved ? JSON.parse(saved) : null;
+        } catch (e) {
+            console.warn('[PanelResize] Ошибка загрузки:', e);
+            return null;
+        }
+    }
+
+    // Save panel positions to cookie
+    function savePanelConfig(config) {
+        try {
+            localStorage.setItem(PANEL_COOKIE, JSON.stringify(config));
+        } catch (e) {
+            console.warn('[PanelResize] Ошибка сохранения:', e);
+        }
+    }
+
+    // Load edit mode from cookie
+    function loadEditMode() {
+        return localStorage.getItem(EDIT_MODE_COOKIE) === 'true';
+    }
+
+    // Save edit mode to cookie
+    function saveEditMode(enabled) {
+        localStorage.setItem(EDIT_MODE_COOKIE, enabled ? 'true' : 'false');
+    }
+
+    // Apply panel configuration
+    function applyPanelConfig() {
+        const isDesktop = window.innerWidth >= 1024;
+        const dbConfigKey = isDesktop ? 'panel_config_desktop' : 'panel_config_tablet';
+        
+        // Try to load from database first
+        fetch('/api/settings')
+            .then(response => response.json())
+            .then(settings => {
+                if (settings[dbConfigKey]) {
+                    try {
+                        const dbConfig = JSON.parse(settings[dbConfigKey]);
+                        applyConfigToPanels(dbConfig);
+                        // Also save to localStorage for quick access
+                        savePanelConfig(dbConfig);
+                        return;
+                    } catch (e) {
+                        console.warn('[PanelResize] Error parsing DB config:', e);
+                    }
+                }
+                // Fall back to localStorage or defaults
+                const localConfig = loadPanelConfig();
+                if (localConfig) {
+                    applyConfigToPanels(localConfig);
+                } else {
+                    applyDefaultPanelConfig();
+                }
+            })
+            .catch(() => {
+                // On error, fall back to localStorage or defaults
+                const localConfig = loadPanelConfig();
+                if (localConfig) {
+                    applyConfigToPanels(localConfig);
+                } else {
+                    applyDefaultPanelConfig();
+                }
+            });
+    }
+
+    function applyConfigToPanels(config) {
+        PANEL_IDS.forEach(panelId => {
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+
+            const defaults = DEFAULT_PANEL_CONFIG[panelId] || {};
+            const pos = config[panelId] || {};
+
+            panel.style.top = pos.top || defaults.top || '';
+            panel.style.left = pos.left || defaults.left || '';
+            panel.style.width = pos.width || defaults.width || '';
+            panel.style.height = pos.height || defaults.height || '';
+            panel.style.right = pos.right || '';
+            panel.style.bottom = pos.bottom || '';
+            normalizePanelPosition(panel);
+            
+            const visible = pos.visible !== undefined ? pos.visible : (defaults.visible !== false);
+            panel.style.display = visible ? '' : 'none';
+            
+            const defaultScale = DEFAULT_PANEL_CHART_SCALES[panelId] || 1;
+            panel.dataset.chartScale = defaultScale;
+        });
+
+        PANEL_IDS.forEach(panelId => {
+            if (config[panelId]) return;
+            const panel = document.getElementById(panelId);
+            if (panel) applyDefaultPanel(panel, panelId);
+        });
+    }
+
+    function applyDefaultPanel(panel, panelId) {
+        const pos = DEFAULT_PANEL_CONFIG[panelId] || {};
+        panel.style.top = pos.top || panel.style.top || '';
+        panel.style.left = pos.left || panel.style.left || '';
+        panel.style.width = pos.width || panel.style.width || '';
+        panel.style.height = pos.height || panel.style.height || '';
+        panel.style.right = '';
+        panel.style.bottom = '';
+        // Apply visibility
+        panel.style.display = pos.visible !== false ? '' : 'none';
+        // ensure default chart scale for this panel if charts are present
+        panel.dataset.chartScale = DEFAULT_PANEL_CHART_SCALES[panelId] || 1;
+        normalizePanelPosition(panel);
+    }
+
+    function applyDefaultPanelConfig() {
+        PANEL_IDS.forEach(panelId => {
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            applyDefaultPanel(panel, panelId);
+        });
+
+        saveCurrentConfig();
+    }
+
+    function toNumberValue(value, fallback) {
+        const parsed = parseFloat(value);
+        return Number.isNaN(parsed) ? fallback : parsed;
+    }
+
+function normalizePanelPosition(panel) {
+        const minMargin = 5;
+        const viewportW = window.innerWidth;
+        const viewportH = window.innerHeight;
+
+        let top = toNumberValue(panel.style.top, minMargin);
+        let left = toNumberValue(panel.style.left, minMargin);
+        let width = toNumberValue(panel.style.width, panel.offsetWidth || 120);
+        let height = toNumberValue(panel.style.height, panel.offsetHeight || 60);
+
+        if (panel.style.right) panel.style.right = '';
+        if (panel.style.bottom) panel.style.bottom = '';
+
+        if (width > viewportW - minMargin * 2) {
+            width = Math.max(80, viewportW - minMargin * 2);
+        }
+        if (height > viewportH - minMargin * 2) {
+            height = Math.max(60, viewportH - minMargin * 2);
+        }
+
+        left = Math.max(minMargin, Math.min(left, Math.max(minMargin, viewportW - width - minMargin)));
+        top = Math.max(minMargin, Math.min(top, Math.max(minMargin, viewportH - height - minMargin)));
+
+        panel.style.top = `${Math.round(top)}px`;
+        panel.style.left = `${Math.round(left)}px`;
+        panel.style.width = `${Math.round(width)}px`;
+        panel.style.height = `${Math.round(height)}px`;
+    }
+
+    // Adjust text sizes inside press_humidity_temp_panel to be proportional to panel size
+    function adjustTextSizesForPressPanel(panel) {
+        const p = panel || document.getElementById('press_humidity_temp_panel');
+        if (!p) return;
+        const ids = ['fact_pressure_mm','forecast_1_pressure_mm','fact_humidity','forecast_1_humidity','fact_temperature','fact_feels_like','forecast_1_temperature','forecast_1_feels_like'];
+        const height = p.clientHeight || 100;
+        const scale = Math.max(0.6, Math.min(1.2, height / 150));
+        const base = 80;
+        ids.forEach(id => {
+            const el = p.querySelector('#' + id);
+            if (el){
+                el.style.fontSize = Math.round(base * scale) + 'px';
+                el.style.lineHeight = Math.round(base * scale * 0.9) + 'px';
+            }
+            
+        });
+        const tempGroup = p.querySelector('#temp');
+        if (tempGroup) {
+            const inner = tempGroup.querySelectorAll('#fact_temperature, #fact_feels_like, #forecast_1_temperature, #forecast_1_feels_like');
+            inner.forEach(node => {
+                if (node) node.style.fontSize = Math.round(base * scale * 1.1) + 'px';
+            });
+        }
+    }
+
+    // Toggle fullscreen for a panel
+    function toggleFullscreen(panel) {
+        panel.classList.toggle('panel-fullscreen');
+        
+        if (panel.classList.contains('panel-fullscreen')) {
+            panel.dataset.prevWidth = panel.style.width;
+            panel.dataset.prevHeight = panel.style.height;
+            panel.dataset.prevTop = panel.style.top;
+            panel.dataset.prevLeft = panel.style.left;
+            panel.dataset.prevRight = panel.style.right;
+            panel.dataset.prevBottom = panel.style.bottom;
+        } else {
+            // Restore previous position
+            if (panel.dataset.prevWidth) panel.style.width = panel.dataset.prevWidth;
+            if (panel.dataset.prevHeight) panel.style.height = panel.dataset.prevHeight;
+            if (panel.dataset.prevTop) panel.style.top = panel.dataset.prevTop;
+            if (panel.dataset.prevLeft) panel.style.left = panel.dataset.prevLeft;
+            if (panel.dataset.prevRight) panel.style.right = panel.dataset.prevRight;
+            if (panel.dataset.prevBottom) panel.style.bottom = panel.dataset.prevBottom;
+        }
+        
+        resizeCharts();
+    }
+
+    // Initialize fullscreen button for a panel
+    function initFullscreenButton(panel) {
+        // Initialize hide button first (left of fullscreen)
+        const hideBtn = document.createElement('div');
+        hideBtn.className = 'panel-hide-btn';
+        hideBtn.innerHTML = '👁';
+        hideBtn.title = 'Скрыть/показать панель';
+        
+        let btnRect = null;
+        
+        hideBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const isCollapsed = panel.classList.contains('panel-minimized');
+            
+            if (isCollapsed) {
+                // Restore panel
+                panel.classList.remove('panel-minimized');
+                panel.style.height = btnRect?.height || '';
+                panel.style.overflow = '';
+                hideBtn.classList.remove('panel-hidden');
+                hideBtn.style.top = '';
+                hideBtn.style.right = '';
+            } else {
+                // Save position before minimizing
+                btnRect = {
+                    top: panel.style.top || panel.offsetTop + 'px',
+                    left: panel.style.left || panel.offsetLeft + 'px',
+                    width: panel.style.width || panel.offsetWidth + 'px',
+                    height: panel.style.height || panel.offsetHeight + 'px'
+                };
+                panel.classList.add('panel-minimized');
+                panel.style.height = '32px';
+                panel.style.overflow = 'hidden';
+                hideBtn.classList.add('panel-hidden');
+                hideBtn.style.top = '4px';
+                hideBtn.style.right = '27px';
+            }
+            
+            // Save visibility state
+            try {
+                const config = JSON.parse(localStorage.getItem('wclock_panel_config') || '{}');
+                config[panel.id] = config[panel.id] || {};
+                config[panel.id].visible = isCollapsed;
+                localStorage.setItem('wclock_panel_config', JSON.stringify(config));
+            } catch(err) {}
+        });
+        
+        panel.appendChild(hideBtn);
+
+        const btn = document.createElement('div');
+        btn.className = 'panel-fullscreen-btn';
+        
+        // Special case for charts - fullscreen works without edit mode
+        if (panel.id === 'invest_panel' || panel.id === 'invest_panel_banner' || panel.id === 'weather_panel') {
+            btn.classList.add('panel-fullscreen-btn-chart');
+        }
+        
+        btn.innerHTML = '⛶';
+        btn.title = 'На весь экран';
+        
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            toggleFullscreen(panel);
+        });
+        
+        panel.appendChild(btn);
+    }
+
+    // Initialize resize handle for a panel
+    function initResizeHandle(panel) {
+        const handle = document.createElement('div');
+        handle.className = 'panel-resize-handle';
+        panel.appendChild(handle);
+
+        let isResizing = false;
+        let startX, startY, startWidth, startHeight;
+
+        function setButtonsDisabled(disabled) {
+            const fullscreen = document.getElementById('fullscreen');
+            const reload = document.getElementById('reload');
+            if (fullscreen) fullscreen.classList.toggle('panel-dragging', disabled);
+            if (reload) reload.classList.toggle('panel-dragging', disabled);
+        }
+
+        function getClientPos(e) {
+            if (e.touches && e.touches.length > 0) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        function onResizeStart(e) {
+            if (!document.body.classList.contains('edit-mode')) return;
+            if (panel.classList.contains('panel-fullscreen')) return;
+            
+            isResizing = true;
+            const pos = getClientPos(e);
+            startX = pos.x;
+            startY = pos.y;
+            startWidth = panel.offsetWidth;
+            startHeight = panel.offsetHeight;
+            setButtonsDisabled(true);
+            
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        handle.addEventListener('mousedown', onResizeStart);
+        handle.addEventListener('touchstart', onResizeStart, { passive: false });
+
+        function onResizeMove(e) {
+            if (!isResizing) return;
+            
+            const pos = getClientPos(e);
+            const dx = pos.x - startX;
+            const dy = pos.y - startY;
+            
+            panel.style.width = Math.max(50, startWidth + dx) + 'px';
+            panel.style.height = Math.max(30, startHeight + dy) + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+        }
+
+        document.addEventListener('mousemove', onResizeMove);
+        document.addEventListener('touchmove', onResizeMove, { passive: false });
+
+        function onResizeEnd() {
+            if (!isResizing) return;
+            isResizing = false;
+            setButtonsDisabled(false);
+            normalizePanelPosition(panel);
+            resizeCharts();
+        }
+
+        document.addEventListener('mouseup', onResizeEnd);
+        document.addEventListener('touchend', onResizeEnd);
+    }
+
+    // Initialize drag functionality
+    function initDrag(panel) {
+        let isDragging = false;
+        let startX, startY, startTop, startLeft;
+
+        function setButtonsDisabled(disabled) {
+            const fullscreen = document.getElementById('fullscreen');
+            const reload = document.getElementById('reload');
+            if (fullscreen) fullscreen.classList.toggle('panel-dragging', disabled);
+            if (reload) reload.classList.toggle('panel-dragging', disabled);
+        }
+
+        function getClientPos(e) {
+            if (e.touches && e.touches.length > 0) {
+                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+            return { x: e.clientX, y: e.clientY };
+        }
+
+        function onDragStart(e) {
+            if (!document.body.classList.contains('edit-mode')) return;
+            if (e.target.classList.contains('panel-fullscreen-btn')) return;
+            if (e.target.classList.contains('panel-resize-handle')) return;
+            if (panel.classList.contains('panel-fullscreen')) return;
+            
+            isDragging = true;
+            panel.classList.add('dragging');
+            
+            const pos = getClientPos(e);
+            startX = pos.x;
+            startY = pos.y;
+            startTop = panel.offsetTop;
+            startLeft = panel.offsetLeft;
+            setButtonsDisabled(true);
+            
+            e.preventDefault();
+        }
+
+        panel.addEventListener('mousedown', onDragStart);
+        panel.addEventListener('touchstart', onDragStart, { passive: false });
+
+        function onDragMove(e) {
+            if (!isDragging) return;
+            
+            const pos = getClientPos(e);
+            const dx = pos.x - startX;
+            const dy = pos.y - startY;
+            
+            panel.style.top = (startTop + dy) + 'px';
+            panel.style.left = (startLeft + dx) + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+        }
+
+        document.addEventListener('mousemove', onDragMove);
+        document.addEventListener('touchmove', onDragMove, { passive: false });
+
+        function onDragEnd() {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            panel.classList.remove('dragging');
+            setButtonsDisabled(false);
+            normalizePanelPosition(panel);
+            resizeCharts();
+        }
+
+        document.addEventListener('mouseup', onDragEnd);
+        document.addEventListener('touchend', onDragEnd);
+    }
+
+    // Save current configuration
+    function saveCurrentConfig() {
+        const config = {};
+
+        PANEL_IDS.forEach(id => {
+            const panel = document.getElementById(id);
+            if (!panel) return;
+            
+            config[id] = {
+                top: panel.style.top || '',
+                left: panel.style.left || '',
+                right: panel.style.right || '',
+                bottom: panel.style.bottom || '',
+                width: panel.style.width || '',
+                height: panel.style.height || ''
+            };
+        });
+        
+        savePanelConfig(config);
+    }
+
+    // Toggle edit mode
+    function toggleEditMode() {
+        const body = document.body;
+        const btn = document.getElementById('edit_mode_btn');
+        const wasEdit = body.classList.contains('edit-mode');
+        const isEdit = body.classList.toggle('edit-mode');
+        
+        if (btn) {
+            btn.classList.toggle('active', isEdit);
+        }
+        
+        if (wasEdit && !isEdit) {
+            // Ask to save or cancel
+            const save = confirm('Сохранить изменения панелей?');
+            if (save) {
+                saveCurrentConfig();
+            } else {
+                // Reload to restore previous state
+                location.reload();
+            }
+        }
+        
+        saveEditMode(isEdit);
+    }
+
+    // Reset panels to default positions
+    function resetPanels() {
+        localStorage.removeItem(PANEL_COOKIE);
+
+        PANEL_IDS.forEach(id => {
+            const pos = DEFAULT_PANEL_CONFIG[id];
+            const panel = document.getElementById(id);
+            if (!panel) return;
+            if (!pos) return;
+            
+            panel.style.top = pos.top;
+            panel.style.left = pos.left;
+            panel.style.width = pos.width;
+            panel.style.height = pos.height;
+            panel.style.right = '';
+            panel.style.bottom = '';
+            normalizePanelPosition(panel);
+        });
+        
+        saveCurrentConfig();
+        resizeCharts();
+    }
+
+    // Initialize reset button
+    function initResetButton() {
+        const resetBtn = document.getElementById('reset_panels_btn');
+        if (resetBtn) {
+            resetBtn.addEventListener('click', resetPanels);
+        }
+
+        const exportBtn = document.getElementById('export_panels_btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', doExportPanels);
+        }
+    }
+
+    // Initialize all panels
+    function initPanels() {
+        PANEL_IDS.forEach(id => {
+            const panel = document.getElementById(id);
+            if (!panel) return;
+            
+            panel.classList.add('clock-panel');
+            // Header removed: avoid adding header inside panels (keep content tight to top)
+            // Disable fullscreen on weather_panel click as a safety measure
+            if (panel.id === 'weather_panel') {
+                panel.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                });
+            }
+            // Ensure chart scale default per panel
+            const defaultScale = DEFAULT_PANEL_CHART_SCALES[id] || 1;
+            panel.dataset.chartScale = defaultScale;
+            initFullscreenButton(panel);
+            initResizeHandle(panel);
+            initDrag(panel);
+        });
+        
+        // Apply saved configuration
+        applyPanelConfig();
+        
+        // Set edit mode from cookie
+        const editMode = loadEditMode();
+        if (editMode) {
+            document.body.classList.add('edit-mode');
+            const btn = document.getElementById('edit_mode_btn');
+            if (btn) btn.classList.add('active');
+        }
+    }
+
+    // Toggle chart-control-panel collapse
+    function toggleControlPanelCollapse() {
+        const panel = document.querySelector('.chart-control-panel');
+        const btn = document.querySelector('.collapse-btn');
+        if (panel) {
+            const isCollapsed = panel.classList.toggle('collapsed');
+            if (btn) {
+                btn.textContent = isCollapsed ? '▶' : '◀';
+                btn.dataset.collapsed = isCollapsed ? 'true' : 'false';
+            }
+        }
+    }
+
+    // Initialize edit mode button
+    function initEditButton() {
+        const btn = document.getElementById('edit_mode_btn');
+        
+        if (btn) {
+            btn.addEventListener('click', toggleEditMode);
+            btn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                toggleEditMode();
+            });
+        }
+        
+        // Collapse buttons
+        const collapseBtns = document.querySelectorAll('.collapse-btn');
+        collapseBtns.forEach(btn => {
+            btn.addEventListener('click', toggleControlPanelCollapse);
+        });
+    }
+
+    // Resize charts to fit panels (preserve DPR and content size with proportional scaling)
+    // Resize charts to fit panels with proper DPI scaling
+function resizeCharts() {
+    const weatherCanvas = document.getElementById('weatherChart');
+    const volumeCanvas = document.getElementById('volumeChart');
+    const dpr = window.devicePixelRatio || 1;
+    const CHART_RENDER_SCALE = 1.5;
+
+    function adjust(canvas, container) {
+        if (!canvas || !container) return;
+        const rect = container.getBoundingClientRect();
+        
+        // Scale controlled by per-panel data-chart-scale
+        let scale = 1;
+        if (container.dataset && container.dataset.chartScale) {
+            const s = parseFloat(container.dataset.chartScale);
+            if (Number.isFinite(s)) scale = s;
+        }
+        if (scale > 3) scale = 3;
+        if (scale < 0.5) scale = 0.5;
+        
+        const displayWidth = Math.max(1, Math.floor(rect.width * scale));
+        const displayHeight = Math.max(1, Math.floor(rect.height * scale));
+        const actualWidth = Math.floor(displayWidth * dpr * CHART_RENDER_SCALE);
+        const actualHeight = Math.floor(displayHeight * dpr * CHART_RENDER_SCALE);
+
+        canvas.style.width = displayWidth + 'px';
+        canvas.style.height = displayHeight + 'px';
+        canvas.width = actualWidth;
+        canvas.height = actualHeight;
+        
+        // Важно: обновите конфигурацию графика для правильного масштабирования
+        if (canvas.chartInstance) {
+            canvas.chartInstance.options.maintainAspectRatio = false;
+            canvas.chartInstance.options.scales.x.autoSkip = true;
+            canvas.chartInstance.options.scales.x.maxTicksLimit = 10;
+            canvas.chartInstance.options.scales.y.beginAtZero = false;
+            canvas.chartInstance.resize();
+        }
+    }
+
+    if (weatherCanvas && weatherCanvas.parentElement) {
+        adjust(weatherCanvas, weatherCanvas.parentElement);
+        if (window.weatherChart && typeof window.weatherChart.resize === 'function') {
+            window.weatherChart.resize();
+        }
+    }
+    
+    if (volumeCanvas && volumeCanvas.parentElement) {
+        adjust(volumeCanvas, volumeCanvas.parentElement);
+        if (window.investChart && typeof window.investChart.resize === 'function') {
+            window.investChart.resize();
+        }
+    }
+    adjustTextSizesForPressPanel();
+}
+
+    // Initialize on DOM ready
+    function init() {
+        initPanels();
+        initEditButton();
+        initResetButton();
+        
+        setTimeout(resizeCharts, 100);
+        window.addEventListener('resize', resizeCharts);
+    }
+
+    // Export functions for buttons
+    function doExportPanels() {
+        const config = {};
+        PANEL_IDS.forEach(id => {
+            const panel = document.getElementById(id);
+            if (!panel) return;
+            
+            config[id] = {
+                top: panel.style.top || '',
+                left: panel.style.left || '',
+                right: panel.style.right || '',
+                bottom: panel.style.bottom || '',
+                width: panel.style.width || '',
+                height: panel.style.height || ''
+            };
+        });
+
+        // Create tablet config with scale 0.7
+        const tabletConfig = {};
+        Object.keys(config).forEach(key => {
+            const c = config[key];
+            tabletConfig[key] = {
+                top: c.top,
+                left: c.left,
+                right: c.right,
+                bottom: c.bottom,
+                width: c.width ? Math.round(parseInt(c.width) * 0.7) + 'px' : '',
+                height: c.height ? Math.round(parseInt(c.height) * 0.7) + 'px' : ''
+            };
+        });
+
+        const output = `/**
+ * panel_configs.js
+ * Panel configurations for different device types
+ */
+
+const PANEL_CONFIG_DESKTOP = ${JSON.stringify(config, null, 4)};
+
+const PANEL_CONFIG_TABLET = ${JSON.stringify(tabletConfig, null, 4)};
+`;
+        
+        if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(output);
+            alert('Configs copied to clipboard! Save to panel_configs.js');
+        } else {
+            console.log(output);
+        }
+    }
+
+    // Save panel config to database
+    function doSavePanelConfigToDb() {
+        const config = {};
+        PANEL_IDS.forEach(id => {
+            const panel = document.getElementById(id);
+            if (!panel) return;
+            
+            config[id] = {
+                top: panel.style.top || '',
+                left: panel.style.left || '',
+                right: panel.style.right || '',
+                bottom: panel.style.bottom || '',
+                width: panel.style.width || '',
+                height: panel.style.height || ''
+            };
+        });
+
+        // Detect device type
+        const isDesktop = window.innerWidth >= 1024;
+        const configKey = isDesktop ? 'panel_config_desktop' : 'panel_config_tablet';
+
+        // Save to database
+        fetch('/api/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [configKey]: JSON.stringify(config) })
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(isDesktop ? 'Desktop config saved!' : 'Tablet config saved!');
+        })
+        .catch(err => {
+            console.error('Error saving config:', err);
+            alert('Error saving config!');
+        });
+    }
+
+    // Export
+    window.PanelResize = {
+        init: init,
+        toggleEditMode: toggleEditMode,
+        toggleFullscreen: toggleFullscreen,
+        saveConfig: saveCurrentConfig,
+        resetPanels: resetPanels,
+        resizeCharts: resizeCharts
+    };
+
+    window.exportPanels = doExportPanels;
+    window.savePanelConfigToDb = doSavePanelConfigToDb;
+
+})(window);

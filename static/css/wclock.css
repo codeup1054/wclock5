@@ -1,0 +1,1292 @@
+:root {
+    --main-bg: #000;
+    --text-color: #aaa;
+    --accent-orange: #ff4e07;
+    --accent-green: #2ecc71;
+    --accent-blue: #2499b9;
+    --accent-teal: #31e378;
+    --accent-yellow: #ffaa00;
+    --accent-cyan: #a0ffef;
+    --control-bg: rgba(51, 51, 51, 0.9);
+    --control-border: #555;
+    --control-active: #ff4e07;
+    --panel-bg: transparent;
+    --panel-border: #c4c4c41b;
+    --panel-border-hover: #ff9f43;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--main-bg);
+    overflow: hidden;
+    font-family: 'Helvetica', sans-serif;
+    color: var(--text-color);
+}
+
+#energy_save {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: var(--main-bg);
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+#layout {
+    position: absolute;
+    inset: 0;
+    padding: 1vh 1vw;
+}
+
+/* ─── Panel Base Styles ───────────────────────────────────────── */
+.clock-panel {
+    position: absolute;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 20;
+    overflow: hidden;
+    transition: border-color 0.25s ease;
+}
+
+/* chart_control_panel should be below other panels */
+#chart_control_panel.clock-panel {
+    z-index: 200 !important;
+}
+
+body.edit-mode .clock-panel {
+    border: 1px solid rgba(255, 158, 67, 0.349);
+}
+
+body.edit-mode .clock-panel:hover {
+    border-color: rgba(255, 158, 67, 0.852);
+    cursor: move;
+}
+
+.clock-panel canvas {
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.clock-panel .panel-header {
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--panel-border);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    background: var(--panel-bg);
+    border-radius: 8px 8px 0 0;
+}
+
+body.edit-mode .clock-panel .panel-header {
+    display: flex;
+}
+
+.panel-title {
+    font-size: 12px;
+    color: var(--accent-orange);
+    text-transform: uppercase;
+}
+
+.panel-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 12px;
+}
+
+.panel-btn:hover {
+    color: var(--accent-orange);
+}
+
+.panel-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 500 !important;
+    background: rgba(0, 0, 0, 0.95) !important;
+    border: none !important;
+}
+
+.panel-fullscreen .panel-header {
+    display: none !important;
+}
+
+.panel-minimized {
+    height: 32px !important;
+    overflow: hidden !important;
+}
+
+.panel-hidden {
+    position: absolute;
+    z-index: 1001;
+}
+
+.panel-collapsed .panel-content {
+    display: none;
+}
+
+/* ─── Battery ────────────────────────────────────────────────── */
+#battery {
+    display: none;
+}
+
+.battery-low { color: red; }
+.battery-medium { color: var(--accent-yellow); }
+.battery-high { color: #00cc00; }
+
+/* Battery Indicator Panel */
+#battery_indicator_panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2vw;
+    font-weight: bold;
+    gap: 10px;
+}
+
+#battery_indicator_panel .battery-icon {
+    width: 3vw;
+    height: 1.5vw;
+    border: 3px solid currentColor;
+    border-radius: 3px;
+    position: relative;
+    padding: 1px;
+}
+
+#battery_indicator_panel .battery-icon::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 0.8vw;
+    background: currentColor;
+    border-radius: 0 2px 2px 0;
+}
+
+#battery_indicator_panel .battery-fill {
+    height: 100%;
+    background: currentColor;
+    border-radius: 1px;
+    transition: width 0.3s ease;
+}
+
+#battery_indicator_panel .battery-text {
+    font-size: 1.8vw;
+}
+
+/* Battery Chart Panel */
+#battery_chart_panel {
+    display: none;
+}
+
+#battery_chart_panel canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Show/hide panels based on view */
+body.view-energy #battery_chart_panel { display: block !important; }
+body.view-energy #invest_panel { display: none !important; }
+body.view-invest #battery_chart_panel { display: none !important; }
+body.view-invest #invest_panel { display: block !important; }
+
+/* ─── Clock Panel ───────────────────────────────────────────── */
+#clock_panel {
+    left: 1vw;
+    top: 5vh;
+    min-width: 200px;
+}
+
+#clock_panel #clock {
+    text-align: center;
+    font-size: 18vw;
+    line-height: 1;
+}
+
+#clock_panel #clock_seconds {
+    text-align: center;
+    font-size: 4vw;
+    width: 100%;
+    position: absolute;
+    top:43%;
+    line-height: 1;
+}
+
+/* ─── Date Panel ───────────────────────────────────────────── */
+#date_panel {
+    left: 1vw;
+    top: 28vh;
+}
+
+#date_panel #day {
+    font-size: 8vw;
+    left: 0vw;
+    line-height: 1;
+}
+
+
+#date_panel #month {
+    font-size: 1.8vw;
+    line-height: 1.2;
+}
+
+/* ─── Moon Panel ───────────────────────────────────────────── */
+#moon_panel {
+    left: 1vw;
+    top: 42vh;
+}
+
+#moon_panel #moon_phase {
+    width: 11vh;
+    height: 11vh;
+    background-size: auto 11vh;
+    background-repeat: no-repeat;
+}
+
+
+
+#moon_panel {
+    position: absolute;
+    left: 1vw;
+    top: 35vh;
+    width: auto;
+    height: auto;
+    z-index: 25;
+}
+
+#date_panel{
+    position: absolute;
+    padding: 0;
+    top: 0vh;
+}
+ 
+#date_panel #day {
+    position: absolute;
+    font-size: 10vw; 
+    line-height: 12vh;   
+    width: 100%;
+    text-align: center;
+    top: 25%;
+}
+
+#date_panel #weekday {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    font-size: 5vw;
+    line-height: 3vh;   
+}
+
+#date_panel #month {
+    position: absolute;
+    width: 100%;
+    text-align: center;
+    top: 75%;
+    font-size: 3vw; 
+    line-height: 4vh;   
+    /* width: 100%; */
+    text-align: center;
+}
+
+#moon_panel #moon_phase {
+    width: 15vh;
+    height: 15vh;
+    background-size: auto 14vh;
+    background-repeat: no-repeat;
+}
+
+
+
+#moon_phase {
+    position: absolute;
+    left: 0vw;
+    top: 0vh;
+    width: 23vh;
+    height: 23vh;
+    background-size: auto 14vh;
+    background-repeat: no-repeat;
+    
+}
+
+#fact_pressure_mm,
+#forecast_1_pressure_mm,
+#fact_humidity,
+#forecast_1_humidity,
+#fact_wind_speed,
+#forecast_1_wind_speed, 
+#temp div{
+    position: absolute;
+    font-size: 8vw;
+    /* width: 8vw; */
+    /* text-align: right; */
+}
+
+#press_humidity_temp div {
+    border: 1px solid rgba(0, 100, 255, 0);
+}
+
+
+
+#press_humidity_temp {
+    /* position: absolute; */
+    /* right:  10vw; */
+    /* bottom: 0vh; */
+    /* text-align: center; */
+    /* width: 100%; */
+    
+}
+
+
+div[id*='fact_'] { top: 0vh; }
+div[id*='forecast_'] { bottom: 0vh !important; }
+
+#fact_humidity, #forecast_1_humidity {
+    color: var(--accent-blue);
+    left: 2%;
+}
+
+[id*=pressure_mm] {
+    left: 30%;
+    color: var(--accent-teal);
+}
+
+/* ─── Temperature ────────────────────────────────────────────── */
+#temp div{
+    /* position: absolute; */
+    right: 11%;
+    text-align: right;
+    color: var(--accent-orange);
+    width: 15vw;
+    
+    text-align: right;
+    position: absolute;
+}
+
+
+#fact_feels_like, #forecast_1_feels_like {
+    right: 2px !important;
+    padding: 2vh 0 0 0;
+    height: 10vh !important;
+    /* border: rgba(0, 255, 0, 1) 1px solid !important; */
+    /* height: 10vh; */
+    color: var(--accent-orange);
+    font-size: 4.5vw !important;
+}
+
+#forecast_1_feels_like {bottom: 6px !important;}
+
+
+
+/* ─── Precipitation & Wind ───────────────────────────────────── */
+[id*=prec_prob] {
+    position: absolute;
+    right: 0;
+    text-align: center;
+    color: var(--accent-cyan);
+    font-size: 8vw;
+    /* line-height: 8vh; */
+}
+
+[id*=prec_prob].v100 { font-size: 6vw; }
+#fact_prec_prob { top: 2vh; }
+
+[id*=wind_speed] {
+    position: absolute;
+    right: 23vw;
+    width: 5vw;
+    text-align: center;
+    color: var(--text-color);
+}
+
+
+[id*=_wind_dir_a] {
+    position: absolute;
+    width: 12vw;
+    height: 12vw;
+    background: url("/static/images/compass_a.png") no-repeat;
+    background-size: 12vw auto;
+    opacity: 0.9;
+    left: 0vw;
+}
+
+#fact_wind_dir_a {
+    top: -1vh !important;
+}
+div#forecast_1_wind_dir_a {
+    bottom: -5vh !important;
+}
+ 
+
+/* ─── Conditions & Sunrise/Sunset ────────────────────────────── */
+img[id*=condition] {
+    position: absolute;
+    right: 11vw;
+    width: 10vw;
+    opacity: 0.9;
+}
+
+#fact_condition { top: -1vh; }
+#forecast_1_condition { bottom:-12px !important; }
+
+#sunrise, #daylight, #sunset {
+    position: absolute;
+    font-size: 4vw;
+    top: 0vh;
+}
+
+#sunrise { left: 0%; }
+#daylight { left: 35%; }
+#sunset { left: 68%; }
+
+/* ─── Controls ───────────────────────────────────────────────── */
+div#browser_fullscreen, div#browser_reload {
+    position: absolute;
+    z-index: 100;
+    opacity: 0.00;
+    background: #FFF;
+    width: 25vw;
+    height: 30vh;
+    top: 7vh;
+    border-radius: 5vw;
+    cursor: pointer;
+    transition: opacity 0.2s ease, background 0.2s ease, border 0.2s ease, z-index 0s;
+}
+
+div#browser_fullscreen{left: 1vw;}
+div#browser_reload{left: 27vw;}
+
+
+
+/* Edit mode - hide behind panels */
+body.edit-mode div#browser_fullscreen,
+body.edit-mode div#browser_reload {
+    opacity: 0.3;
+    border: 2px dashed var(--accent-orange);
+    z-index: -1;
+}
+
+body.edit-mode div#browser_fullscreen:hover,
+body.edit-mode div#browser_reload:hover {
+    opacity: 0.6;
+    background: rgba(255, 78, 7, 0.2);
+}
+
+div#browser_fullscreen.panel-dragging,
+div#browser_reload.panel-dragging {
+    opacity: 0.3 !important;
+    background: transparent !important;
+    border: 2px dashed #ff4444 !important;
+    pointer-events: none;
+}
+
+/* ─── Console ────────────────────────────────────────────────── */
+#console {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 60vw;
+    height: 0vh;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    padding: 1px;
+    color: #0f0;
+    background: rgba(0, 0, 0, 0.1);
+    z-index: 500;
+    overflow: hidden;
+    border: 1px solid transparent;
+}
+
+#console div {
+    font-family: 'Courier New', monospace;
+    color: #0f0;
+    background: rgba(0, 0, 0, 0.7);
+}
+
+#console.fullscreen_on {
+    width: 95vw !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    z-index: 49 !important;
+}
+
+/* ─── Weather Chart ──────────────────────────────────────────── */
+
+#invest_panel {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0; /* Важно для flex-контейнеров */
+}
+
+canvas#weatherChart {
+    position: absolute;
+    /* right: 0vw;*/
+    top: 0vh; 
+    z-index: 20; /* Повышен приоритет */
+    width: 100% !important;
+    height: 97% !important; 
+    border: 1px solid rgba(0, 100, 255, 0.0); 
+}
+
+.weatherChart-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 98vw !important;
+    height: 98vh !important;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 500 !important;
+    border: none !important;
+}
+
+/* ─── Investment Chart ───────────────────────────────────────── */
+#volumeChart {
+    position: absolute;
+    top: 0vh;
+    right: 1vw;
+    width: 49vw !important;
+    height: 30vh !important;
+    z-index: 30; /* Повышен приоритет */
+}
+
+#volumeChart.fullscreen_on {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0, 0, 0, 0.9) !important;
+    z-index: 500 !important;
+    border: none !important;
+}
+
+.chart-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+    display: flex;
+    gap: 5px;
+}
+
+.chart-interval-btn {
+    background: var(--control-bg);
+    color: white;
+    border: 1px solid var(--control-border);
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.chart-interval-btn:hover {
+    background: #444;
+}
+
+.chart-interval-btn.active {
+    background: var(--control-active);
+    border-color: var(--control-active);
+}
+
+/* ─── Energy Display ─────────────────────────────────────────── */
+#energy_burn {
+    position: absolute;
+    width: 55vw;
+    height: 30vh;
+    bottom: 7vh;
+    left: 0;
+    opacity: 0.9;
+}
+
+.energyup {
+    background: rgba(40, 40, 40, 1);
+}
+
+/* ─── Z-INDEX ПРИОРИТЕТЫ ─────────────────────────────────────── */
+#battery { z-index: 30; }
+#clock { z-index: 25; }
+#weatherChart { z-index: 20; }
+#volumeChart { z-index: 30; }
+#placeholders { z-index: 10; left: 0px ;}
+
+
+
+
+/* Контейнер для кнопок переключения интервалов */
+.invest-interval-controls {
+    position: absolute;
+    left: 10px;
+    bottom: 10px;
+    z-index: 100;
+    display: flex;
+    gap: 5px;
+}
+
+/* Стили кнопок интервалов */
+.interval-btn {
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.interval-btn:hover {
+    background-color: #444;
+}
+
+.interval-btn.active {
+    background-color: #ff4e07;
+    border-color: #ff4e07;
+}
+
+#toggle-chart-btn {
+    position: fixed;
+    right: 15px;
+    bottom: 15px;
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    width: 50px;
+    text-align: center;
+    transition: all 0.2s ease;
+    z-index: 1000;
+}
+
+#mode_toggle {
+    position: absolute;
+    bottom: 1vh;
+    left: 1vw;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: 1px dashed #444;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 100;
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+}
+
+#mode_toggle:hover {
+    opacity: 0.8;
+    border-color: var(--accent-orange);
+}
+
+#mode_toggle.invest-mode {
+    border-color: var(--accent-green);
+    background: rgba(46, 204, 113, 0.2);
+}
+
+/* ─── Edit Mode & Resizable Panels ───────────────────────────────── */
+body.edit-mode .resizable-panel {
+    border: 1px dashed var(--accent-orange) !important;
+    cursor: move;
+}
+
+body.edit-mode .resize-handle {
+    display: block !important;
+}
+
+body:not(.edit-mode) .resize-handle {
+    display: none !important;
+}
+
+.resize-handle {
+    position: absolute;
+    background: var(--accent-orange);
+    opacity: 0.7;
+    z-index: 1000;
+    display: none;
+}
+
+.resize-handle-se {
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: se-resize;
+    border-radius: 0 0 4px 0;
+}
+
+.resize-handle-e {
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: e-resize;
+}
+
+.resize-handle-s {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 8px;
+    cursor: s-resize;
+}
+
+.resize-handle-w {
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: w-resize;
+}
+
+.resize-handle-n {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 8px;
+    cursor: n-resize;
+}
+
+/* Draggable panels */
+.draggable-panel {
+    position: absolute;
+    touch-action: none;
+}
+
+.draggable-panel.dragging {
+    opacity: 0.8;
+    z-index: 1000 !important;
+}
+
+/* Clock panel */
+#clock_panel {
+    position: absolute;
+    left: 1vw;
+    top: 10vh;
+    z-index: 20;
+}
+
+/* Date panel */
+#date_panel {
+    position: absolute;
+    left: 1vw;
+    top: 22vh;
+    z-index: 20;
+}
+
+/* Moon panel */
+#moon_panel {
+    position: absolute;
+    left: 1vw;
+    top: 2vh;
+    z-index: 20;
+}
+
+/* ─── Control Panel ─────────────────────────────────────────────── */
+.chart-control-panel {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    z-index: 200;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 5px;
+    align-items: center;
+    background: var(--control-bg);
+    padding: 5px;
+    border-radius: 8px;
+    border: 1px solid var(--control-border);
+    transition: all 0.3s ease;
+    max-width: 320px;
+    overflow: visible;
+}
+
+.chart-control-panel .panel-buttons,
+.chart-control-panel .interval-group {
+    pointer-events: auto !important;
+}
+
+.chart-control-panel button {
+    pointer-events: auto !important;
+}
+
+.chart-control-panel .panel-buttons {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    gap: 3px;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.toggle-btn-label {
+    position: relative;
+    display: inline-block;
+    width: 30px !important;
+    height: 14px !important;
+    margin: 0 2px;
+}
+
+.toggle-btn-label input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-btn-label .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #555;
+    transition: 0.2s;
+    border-radius: 14px;
+}
+
+.toggle-btn-label .slider:before {
+    position: absolute;
+    content: "";
+    height: 10px;
+    width: 10px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.2s;
+    border-radius: 50%;
+}
+
+.toggle-btn-label input:checked + .slider {
+    background-color: var(--accent-orange);
+}
+
+.toggle-btn-label input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+.chart-control-panel .interval-group {
+    display: inline-flex;
+    gap: 2px;
+    border-left: 1px solid var(--control-border);
+    padding-left: 5px;
+    white-space: nowrap;
+}
+
+.toggle-btn, .interval-btn, #edit_mode_btn, #reset_panels_btn, #export_panels_btn, #reload_browser_btn {
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 3px 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.toggle-btn:hover, .interval-btn:hover, #edit_mode_btn:hover, #reset_panels_btn:hover, #export_panels_btn:hover, #reload_browser_btn:hover {
+    background-color: #444;
+}
+
+.toggle-btn.active, .interval-btn.active, #edit_mode_btn.active {
+    background-color: var(--accent-orange);
+}
+
+/* ─── Panel Hide Button ───────────────────────────────── */
+.panel-hide-btn {
+    position: absolute;
+    top: 4px;
+    right: 28px;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 2px;
+    font-size: 10px;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s, visibility 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    box-sizing: border-box;
+}
+
+body.edit-mode .panel-hide-btn {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.panel-minimized .panel-hide-btn {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.panel-hide-btn:hover {
+    background: transparent;
+    border-color: rgba(255, 159, 67, 0.8);
+    color: rgba(255, 159, 67, 1);
+}
+
+.panel-hide-btn.panel-hidden {
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: absolute;
+    z-index: 1000;
+}
+
+/* ─── Panel Fullscreen Button ───────────────────────────────── */
+.panel-fullscreen-btn {
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    width: 20px;
+    height: 20px;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    padding: 2px 2px 2px 5px;
+    font-size: 10px;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.2s, visibility 0.2s;
+    /* justify-content: center; */
+    align-items: center;
+    z-index: 10;
+    box-sizing: border-box;
+}
+
+body.edit-mode .panel-fullscreen-btn {
+    visibility: visible;
+    opacity: 1;
+}
+
+.panel-minimized .panel-fullscreen-btn {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.panel-fullscreen-btn-chart {
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.panel-fullscreen-btn-chart:hover {
+    background: transparent !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Show button in edit-mode (override chart rules) */
+body.edit-mode .panel-fullscreen-btn {
+    visibility: visible;
+    opacity: 1;
+}
+
+.panel-fullscreen-btn:hover {
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+/* ─── Resize Handle ─────────────────────────────────────────── */
+.panel-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    cursor: se-resize;
+    z-index: 5;
+    display: none;
+}
+
+body.edit-mode .panel-resize-handle {
+    display: block;
+}
+
+.panel-resize-handle::before {
+    content: '';
+    position: absolute;
+    right: 3px;
+    bottom: 3px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--accent-orange);
+    border-bottom: 2px solid var(--accent-orange);
+    opacity: 0.6;
+}
+/* Ensure handles and fullscreen buttons sit above panel content */
+.panel-resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: se-resize;
+  z-index: 1000;
+}
+.panel-fullscreen-btn {
+  position: absolute;
+  z-index: 1000;
+  /* positioning will be handled by inline styles or script, but base on provideable space */
+  top: 4px;
+  right: 4px;
+}
+.panel-fullscreen-btn-panel-chart, .panel-fullscreen-btn-chart {
+  position: absolute;
+  z-index: 1000;
+}
+
+/* ─── Panels Modal ────────────────────────────────────────────────── */
+.panels-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+}
+
+.panels-modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-color, #1a1a2e);
+    border: 2px solid var(--accent-yellow, #ffd700);
+    border-radius: 12px;
+    padding: 20px;
+    min-width: 300px;
+    max-width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.panels-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--accent-yellow, #ffd700);
+}
+
+.panels-modal-header h3 {
+    margin: 0;
+    color: var(--accent-yellow, #ffd700);
+    font-size: 1.5rem;
+}
+
+.close-modal {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 2rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-modal:hover {
+    color: var(--accent-yellow, #ffd700);
+}
+
+.panel-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.panel-row:last-child {
+    border-bottom: none;
+}
+
+.panel-row span {
+    color: #fff;
+    font-size: 0.85rem;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 30px;
+    height: 14px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #555;
+    transition: 0.3s;
+    border-radius: 14px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 10px;
+    width: 10px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: var(--accent-yellow, #ffd700);
+}
+
+input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+/* Panel Settings Select */
+.panel-settings {
+    margin-left: 10px;
+}
+
+.panel-view-select {
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.panel-view-select:focus {
+    outline: none;
+    border-color: var(--accent-yellow, #ffd700);
+}
+
+/* Temperature range settings */
+.temp-range-settings {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.temp-range-display {
+    min-width: 80px;
+    color: #2cba99;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.dual-range-slider {
+    position: relative;
+    width: 100px;
+    height: 24px;
+    margin: 0 8px;
+}
+
+.dual-range-slider input[type="range"] {
+    position: absolute;
+    width: 100%;
+    height: 20px;
+    background: transparent;
+    pointer-events: none;
+    -webkit-appearance: none;
+    appearance: none;
+    top: 0;
+    z-index: 10;
+}
+
+.dual-range-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 20px;
+    background: #2cba99;
+    border-radius: 3px;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.dual-range-slider input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 20px;
+    background: #2cba99;
+    border-radius: 3px;
+    cursor: pointer;
+    pointer-events: auto;
+    border: none;
+}
+
+.range-track {
+    position: absolute;
+    top: 8px;
+    height: 4px;
+    background: #2cba99;
+    z-index: 1;
+}
+
+.dual-range-slider::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    width: 100%;
+    height: 4px;
+    background: #444;
+    border-radius: 2px;
+    z-index: 0;
+}
+
+.apply-temp-range {
+    background: #2cba99;
+    border: none;
+    border-radius: 4px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+.apply-temp-range:hover {
+    background: #3ddbb5;
+}
