@@ -93,7 +93,18 @@ def init_db():
     """)
     print("✅ Таблица 'battery_logs' создана или уже существует")
 
-    # === 3. Настройки по умолчанию ===
+    # === 3. Таблица для конфигов панелей по устройствам ===
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS panel_configs (
+            device_id TEXT PRIMARY KEY,
+            config_type TEXT NOT NULL,
+            config_json TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    print("✅ Таблица 'panel_configs' создана или уже существует")
+
+    # === 4. Настройки по умолчанию ===
     inserted = 0
     for key, value in DEFAULT_SETTINGS.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))

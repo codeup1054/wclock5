@@ -65,7 +65,7 @@ function toggleChartView() {
     }
 
     // ✅ Обновляем текст кнопки
-    updateToggleButtonText();
+    // updateToggleButtonText();
     
     // Sync toggle checkbox
     const $toggle = $('#toggle-chart-btn');
@@ -77,25 +77,25 @@ function toggleChartView() {
 /**
  * Обновляет текст кнопки переключения
  */
-function updateToggleButtonText() {
-    const $btn = $('#toggle-chart-btn');
-    let text = '█';
-    let align = currentView === 'energy' ? 'left' : 'right'; 
+// function updateToggleButtonText() {
+//     const $btn = $('#toggle-chart-btn');
+//     let text = '█';
+//     let align = currentView === 'energy' ? 'left' : 'right'; 
 
-    if ($btn.length === 0) {
-        const $container = $('#volumeChart').parent();
-        $('<button></button>')
-            .attr('id', 'toggle-chart-btn')
-            .addClass('toggle-btn')
-            .css('text-align', align)
-            .text(text)
-            .on('click', toggleChartView)
-            .appendTo($container);
-    } else {
-        $btn.css('text-align', align);
-        $btn.text(text);
-    }
-}
+//     if ($btn.length === 0) {
+//         const $container = $('#volumeChart').parent();
+//         $('<button></button>')
+//             .attr('id', 'toggle-chart-btn')
+//             .addClass('toggle-btn')
+//             .css('text-align', align)
+//             .text(text)
+//             .on('click', toggleChartView)
+//             .appendTo($container);
+//     } else {
+//         $btn.css('text-align', align);
+//         $btn.text(text);
+//     }
+// }
 
 /**
  * Переключает видимость модального окна со списком панелей

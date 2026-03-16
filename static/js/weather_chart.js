@@ -1,25 +1,39 @@
 function drawWeatherChart() {
-    const canvas = document.getElementById('weatherChart');
-    if (!canvas) return;
+    // Prevent concurrent calls
+    if (window._weatherChartDrawing) {
+        console.log('[WeatherChart] Draw already in progress, skipping');
+        return;
+    }
+    window._weatherChartDrawing = true;
     
-    // Destroy any existing Chart.js instance
+    const canvas = document.getElementById('weatherChart');
+    if (!canvas) {
+        window._weatherChartDrawing = false;
+        return;
+    }
+    
+    // Destroy any existing Chart.js instance - check by canvas AND by chart ID
     try {
-        const existingChart = Chart.getChart(canvas);
+        // First try to get chart by canvas
+        let existingChart = Chart.getChart(canvas);
         if (existingChart) {
             existingChart.destroy();
         }
-    } catch (e) {}
-    
-    if (window.weatherChart) {
-        try {
+        // Also try to get chart by ID (Chart.js registers charts with IDs)
+        if (window.weatherChart && typeof window.weatherChart.destroy === 'function') {
             window.weatherChart.destroy();
-        } catch (e) {}
-        window.weatherChart = null;
+        }
+    } catch (e) {
+        console.warn('[WeatherChart] Error destroying existing chart:', e);
     }
     
-    // Reset canvas dimensions
+    // Reset canvas dimensions and clear completely
     canvas.width = 0;
     canvas.height = 0;
+    canvas.width = canvas.offsetWidth * 2;  // DPR for proper sizing
+    canvas.height = canvas.offsetHeight * 2;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     const FONT_SIZE = 24;
     let tempRange = [-15, 25];
@@ -62,6 +76,7 @@ function drawWeatherChart() {
 
         if (!Array.isArray(data)) {
             console.warn('❗ Неверный формат данных');
+            window._weatherChartDrawing = false;
             return;
         }
 
@@ -89,8 +104,13 @@ function drawWeatherChart() {
             precipData.push(point.precip_prob ?? null);
             windSpeedData.push(point.wind_speed ?? null);
         });
-
+        
+        // Re-get canvas after data loaded (ensure it's still valid)
         const canvas = document.getElementById('weatherChart');
+        if (!canvas) {
+            window._weatherChartDrawing = false;
+            return;
+        }
         const ctx = canvas.getContext('2d');
         
         const container = canvas.parentElement;
@@ -200,6 +220,7 @@ function drawWeatherChart() {
 
         window.weatherChart = new Chart(ctx, {
             type: 'line',
+            id: 'weatherChart',
             data: {
                 labels: formattedLabels,
                 datasets: [
@@ -315,10 +336,11 @@ function drawWeatherChart() {
             plugins: [customXAxisPlugin]
         });
 
-
-
-
-    }).fail(() => { console.error('Не удалось загрузить данные погоды'); });
+        window._weatherChartDrawing = false;
+    }).fail(() => { 
+        console.error('Не удалось загрузить данные погоды'); 
+        window._weatherChartDrawing = false;
+    });
 }
 
 $(document).on('panelTempRangeChange', function(e) {

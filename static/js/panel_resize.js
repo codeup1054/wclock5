@@ -79,32 +79,28 @@
             return;
         }
         
-        // Если нет в localStorage - пробуем БД
+        // Если нет в localStorage - пробуем API с device_id
         const isDesktop = window.innerWidth >= 1024;
-        const dbConfigKey = isDesktop ? 'panel_config_desktop' : 'panel_config_tablet';
-        console.log('[EditMode] dbConfigKey:', dbConfigKey);
+        const configType = isDesktop ? 'desktop' : 'tablet';
+        const deviceId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : 'default';
+        console.log('[EditMode] deviceId:', deviceId, 'configType:', configType);
         
-        fetch('/api/settings')
-            .then(response => response.json())
-            .then(settings => {
-                console.log('[EditMode] DB settings:', settings);
-                if (settings[dbConfigKey]) {
-                    try {
-                        const dbConfig = JSON.parse(settings[dbConfigKey]);
-                        console.log('[EditMode] DB config found, applying:', dbConfig);
-                        applyConfigToPanels(dbConfig);
-                        // Also save to localStorage for quick access
-                        savePanelConfig(dbConfig);
-                        return;
-                    } catch (e) {
-                        console.warn('[PanelResize] Error parsing DB config:', e);
-                    }
+        fetch(`/api/panel_config/${deviceId}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Config not found');
                 }
-                console.log('[EditMode] No DB config, applying defaults');
-                applyDefaultPanelConfig();
+                return response.json();
             })
-            .catch(() => {
-                console.log('[EditMode] API error, applying defaults');
+            .then(data => {
+                console.log('[EditMode] DB config found:', data);
+                const dbConfig = data.config_json;
+                applyConfigToPanels(dbConfig);
+                // Also save to localStorage for quick access
+                savePanelConfig(dbConfig);
+            })
+            .catch(err => {
+                console.log('[EditMode] No DB config, applying defaults:', err.message);
                 applyDefaultPanelConfig();
             });
     }
@@ -123,7 +119,7 @@
             panel.style.height = pos.height || defaults.height || '';
             panel.style.right = pos.right || '';
             panel.style.bottom = pos.bottom || '';
-            normalizePanelPosition(panel);
+            // Don't normalize - keep exact saved dimensions
             
             const visible = pos.visible !== undefined ? pos.visible : (defaults.visible !== false);
             panel.style.display = visible ? '' : 'none';
@@ -449,18 +445,28 @@ function normalizePanelPosition(panel) {
             const panel = document.getElementById(id);
             if (!panel) return;
             
+            const isVisible = panel.style.display !== 'none';
+            
             config[id] = {
                 top: panel.style.top || '',
                 left: panel.style.left || '',
                 right: panel.style.right || '',
                 bottom: panel.style.bottom || '',
                 width: panel.style.width || '',
-                height: panel.style.height || ''
+                height: panel.style.height || '',
+                visible: isVisible
             };
         });
         
         console.log('[EditMode] Config to save:', config);
+        
+        // Save to localStorage
         savePanelConfig(config);
+        
+        // Save to database
+        if (typeof window.savePanelConfigToDb === 'function') {
+            window.savePanelConfigToDb();
+        }
     }
 
     // Toggle edit mode
@@ -768,32 +774,41 @@ const PANEL_CONFIG_TABLET = ${JSON.stringify(tabletConfig, null, 4)};
             const panel = document.getElementById(id);
             if (!panel) return;
             
+            const isVisible = panel.style.display !== 'none';
+            
             config[id] = {
                 top: panel.style.top || '',
                 left: panel.style.left || '',
                 right: panel.style.right || '',
                 bottom: panel.style.bottom || '',
                 width: panel.style.width || '',
-                height: panel.style.height || ''
+                height: panel.style.height || '',
+                visible: isVisible
             };
         });
 
         // Detect device type
         const isDesktop = window.innerWidth >= 1024;
-        const configKey = isDesktop ? 'panel_config_desktop' : 'panel_config_tablet';
+        const configType = isDesktop ? 'desktop' : 'tablet';
+        const deviceId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : 'default';
 
-        // Save to database
-        fetch('/api/settings', {
+        // Save to database with device_id
+        fetch(`/api/panel_config/${deviceId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ [configKey]: JSON.stringify(config) })
+            body: JSON.stringify({ 
+                config_type: configType,
+                config_json: config 
+            })
         })
         .then(response => response.json())
         .then(data => {
-            console.log(isDesktop ? 'Desktop config saved!' : 'Tablet config saved!');
+            console.log('Config saved to DB for device:', deviceId, 'type:', configType);
+            // Also save to localStorage
+            savePanelConfig(config);
         })
         .catch(err => {
-            console.error('Error saving config:', err);
+            console.error('Error saving config to DB:', err);
         });
     }
 

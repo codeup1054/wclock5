@@ -31,6 +31,14 @@ html, body {
     color: var(--text-color);
 }
 
+/* Tablet / touch - allow scrolling when panels go beyond screen */
+@media (pointer: coarse), (max-width: 1024px) {
+    html, body {
+        overflow: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
 #energy_save {
     position: fixed;
     inset: 0;
@@ -70,6 +78,27 @@ body.edit-mode .clock-panel {
 body.edit-mode .clock-panel:hover {
     border-color: rgba(255, 158, 67, 0.852);
     cursor: move;
+}
+
+/* Touch device / tablet - always show borders and handles in edit mode */
+@media (pointer: coarse), (max-width: 1024px) {
+    body.edit-mode .clock-panel {
+        border: 3px solid rgba(255, 158, 67, 0.6) !important;
+        cursor: move;
+    }
+    body.edit-mode .clock-panel:hover {
+        border-color: rgba(255, 158, 67, 1);
+    }
+    /* Show resize handles always on touch */
+    body.edit-mode .panel-resize-handle {
+        display: block;
+        opacity: 0.7;
+    }
+    /* Fullscreen button always visible */
+    body.edit-mode .panel-fullscreen-btn {
+        visibility: visible;
+        opacity: 1;
+    }
 }
 
 .clock-panel canvas {
@@ -216,15 +245,15 @@ body.view-invest #invest_panel { display: block !important; }
 
 /* ─── Clock Panel ───────────────────────────────────────────── */
 #clock_panel {
-    left: 1vw;
-    top: 5vh;
+    left: 0vw;
+    top: 0vh;
     min-width: 200px;
 }
 
 #clock_panel #clock {
-    text-align: center;
+    text-align: left;
     font-size: 24vh;
-    line-height: 1;
+    line-height: 20vh;
 }
 
 /* ─── Seconds Panel ──────────────────────────────────────────── */
@@ -929,7 +958,7 @@ body:not(.edit-mode) .resize-handle {
     transition: all 0.3s ease;
     max-width: 320px;
     overflow: visible;
-    opacity: 0.2;
+    opacity: 0.4;
 }
 
 .chart-control-panel:hover {
@@ -1107,11 +1136,13 @@ body.edit-mode .panel-fullscreen-btn {
 }
 
 .panel-fullscreen-btn-chart {
-    visibility: visible !important;
-    opacity: 1 !important;
-    background: transparent !important;
-    border-color: rgba(255, 255, 255, 0.3) !important;
-    color: rgba(255, 255, 255, 0.5) !important;
+    visibility: hidden;
+    opacity: 0;
+}
+
+.clock-panel:hover .panel-fullscreen-btn-chart {
+    visibility: visible;
+    opacity: 1;
 }
 
 .panel-fullscreen-btn-chart:hover {
@@ -1135,15 +1166,17 @@ body.edit-mode .panel-fullscreen-btn {
     position: absolute;
     z-index: 1000;
     display: none;
+    background: var(--accent-orange);
+    opacity: 0;
+    transition: opacity 0.2s;
 }
 
-body.edit-mode .panel-resize-handle {
+.clock-panel:hover .panel-resize-handle {
     display: block;
-    background: var(--accent-orange);
     opacity: 0.5;
 }
 
-body.edit-mode .panel-resize-handle:hover {
+.clock-panel:hover .panel-resize-handle:hover {
     opacity: 1;
 }
 
@@ -1158,6 +1191,29 @@ body.edit-mode .panel-resize-handle:hover {
 .panel-resize-s { bottom: 0; left: 3px; right: 3px; height: 3px; cursor: s-resize; }
 .panel-resize-e { top: 3px; bottom: 3px; right: 0; width: 3px; cursor: e-resize; }
 .panel-resize-w { top: 3px; bottom: 3px; left: 0; width: 3px; cursor: w-resize; }
+
+/* Touch device / tablet - thicker handles for finger dragging */
+@media (pointer: coarse), (max-width: 1024px) {
+    .panel-resize-nw, .panel-resize-ne, .panel-resize-sw, .panel-resize-se {
+        width: 12px;
+        height: 12px;
+    }
+    .panel-resize-n, .panel-resize-s {
+        height: 12px;
+        left: 12px !important;
+        right: 12px !important;
+    }
+    .panel-resize-e, .panel-resize-w {
+        width: 12px;
+        top: 12px !important;
+        bottom: 12px !important;
+    }
+    /* Always show handles in edit mode on touch */
+    body.edit-mode .panel-resize-handle {
+        display: block !important;
+        opacity: 0.8;
+    }
+}
 .panel-fullscreen-btn {
   position: absolute;
   z-index: 1000;

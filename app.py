@@ -5,6 +5,7 @@ SECRET_MODE_KEY = "INVEST_MODE"
 
 import os
 import sqlite3
+import json
 from flask import Flask, jsonify, render_template, request, make_response
 
 # === Инициализация БД ===
@@ -239,6 +240,57 @@ def api_settings():
         return jsonify({"status": "ok"})
     else:
         return jsonify(get_settings())
+
+
+# === API для конфигов панелей по device_id ===
+@app.route("/api/panel_config/<device_id>", methods=["GET"])
+def get_panel_config(device_id):
+    """Получить конфиг панелей для конкретного устройства"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT config_type, config_json, updated_at 
+        FROM panel_configs 
+        WHERE device_id = ?
+    """, (device_id,))
+    
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return jsonify({
+            "device_id": row["device_id"],
+            "config_type": row["config_type"],
+            "config_json": json.loads(row["config_json"]),
+            "updated_at": row["updated_at"]
+        })
+    else:
+        return jsonify({"error": "Config not found"}), 404
+
+
+@app.route("/api/panel_config/<device_id>", methods=["POST"])
+def save_panel_config(device_id):
+    """Сохранить конфиг панелей для конкретного устройства"""
+    data = request.get_json()
+    config_type = data.get("config_type", "desktop")  # desktop или tablet
+    config_json = data.get("config_json")
+    
+    if not config_json:
+        return jsonify({"error": "config_json required"}), 400
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        INSERT OR REPLACE INTO panel_configs (device_id, config_type, config_json, updated_at)
+        VALUES (?, ?, ?, datetime('now'))
+    """, (device_id, config_type, json.dumps(config_json)))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({"status": "ok", "device_id": device_id})
 
 
 
