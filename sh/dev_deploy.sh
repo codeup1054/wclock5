@@ -355,32 +355,28 @@ case $CHOICE in
 
         echo "Creating Nginx config..."
         ssh "$SSH_TARGET" "
-            DOMAIN='$DOMAIN'
-            PORT='$PORT'
-            REMOTE_PATH='$REMOTE_PATH'
-
-            # Create nginx config
-            cat > /etc/nginx/sites-available/\$DOMAIN << 'NGINX_EOF'
+            # Create nginx config using sed replacements
+            cat > /etc/nginx/sites-available/$DOMAIN << EOF
 server {
     listen 80;
-    server_name \$DOMAIN;
+    server_name $DOMAIN;
 
     location / {
-        proxy_pass http://localhost:\$PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass http://localhost:$PORT;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
     }
 
     location /static {
-        alias \$REMOTE_PATH/static;
+        alias $REMOTE_PATH/static;
     }
 }
-NGINX_EOF
+EOF
 
             # Enable site
-            ln -sf /etc/nginx/sites-available/\$DOMAIN /etc/nginx/sites-enabled/
+            ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
 
             # Remove default or conflicting
             rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
@@ -424,30 +420,26 @@ NGINX_EOF
         # Step 1: Setup Nginx
         echo "1/3 Setting up Nginx..."
         ssh "$SSH_TARGET" "
-            DOMAIN='$DOMAIN'
-            PORT='$PORT'
-            REMOTE_PATH='$REMOTE_PATH'
-
-            cat > /etc/nginx/sites-available/\$DOMAIN << 'NGINX_EOF'
+            cat > /etc/nginx/sites-available/$DOMAIN << EOF
 server {
     listen 80;
-    server_name \$DOMAIN;
+    server_name $DOMAIN;
 
     location / {
-        proxy_pass http://localhost:\$PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass http://localhost:$PORT;
+        proxy_set_header Host \\\$host;
+        proxy_set_header X-Real-IP \\\$remote_addr;
+        proxy_set_header X-Forwarded-For \\\$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \\\$scheme;
     }
 
     location /static {
-        alias \$REMOTE_PATH/static;
+        alias $REMOTE_PATH/static;
     }
 }
-NGINX_EOF
+EOF
 
-            ln -sf /etc/nginx/sites-available/\$DOMAIN /etc/nginx/sites-enabled/
+            ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
             rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
             nginx -t && systemctl reload nginx || echo 'Nginx config error!'
         "
