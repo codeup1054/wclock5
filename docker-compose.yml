@@ -1,10 +1,10 @@
 services:
   wclock:
     build: .
-    image: ${DOCKER_PREFIX:-wclock4}-app
-    container_name: ${DOCKER_PREFIX:-wclock4}-app
+    image: ${DOCKER_PREFIX:-wclock5}-app
+    container_name: ${DOCKER_PREFIX:-wclock5}-app
     ports:
-      - "${PORT:-10104}:5000"
+      - "${PORT:-10405}:5000"
     env_file:
       - .env
     environment:
@@ -22,8 +22,8 @@ services:
 
   weather-parser:
     build: .
-    image: ${DOCKER_PREFIX:-wclock4}-parser
-    container_name: ${DOCKER_PREFIX:-wclock4}-parser
+    image: ${DOCKER_PREFIX:-wclock5}-parser
+    container_name: ${DOCKER_PREFIX:-wclock5}-parser
     command: python parsers/mail.ru/mail_ru_weather_24hours.py
     env_file:
       - .env
@@ -36,8 +36,8 @@ services:
 
   invest-parser:
     build: .
-    image: ${DOCKER_PREFIX:-wclock4}-inv
-    container_name: ${DOCKER_PREFIX:-wclock4}-inv
+    image: ${DOCKER_PREFIX:-wclock5}-inv
+    container_name: ${DOCKER_PREFIX:-wclock5}-inv
     command: python parsers/invest/tinkoff_invest_daemon.py
     env_file:
       - .env
@@ -50,8 +50,8 @@ services:
 
   tickers-parser:
     build: .
-    image: ${DOCKER_PREFIX:-wclock4}-tickers
-    container_name: ${DOCKER_PREFIX:-wclock4}-tickers
+    image: ${DOCKER_PREFIX:-wclock5}-tickers
+    container_name: ${DOCKER_PREFIX:-wclock5}-tickers
     command: python parsers/invest/tracked_tickers_daemon.py
     env_file:
       - .env
