@@ -1,4 +1,4 @@
-// Auto-generated chart data - 2026-03-16T09:38:16.991094
+// Auto-generated chart data - 2026-03-16T09:39:18.402669
 // Do not edit manually
 
 window.investChartData = {
@@ -27390,6 +27390,14 @@ window.investChartData = {
     {
       "timestamp": "2026-03-16T09:38:16.150519+00:00",
       "value": 10481067.03
+    },
+    {
+      "timestamp": "2026-03-16T09:39:16.938600+00:00",
+      "value": 10481067.24
+    },
+    {
+      "timestamp": "2026-03-16T09:39:17.534879+00:00",
+      "value": 10481067.24
     }
   ],
   "hour": [
@@ -82116,6 +82124,14 @@ window.investChartData = {
     {
       "timestamp": "2026-03-16T09:38:16.150519+00:00",
       "value": 10481067.03
+    },
+    {
+      "timestamp": "2026-03-16T09:39:16.938600+00:00",
+      "value": 10481067.24
+    },
+    {
+      "timestamp": "2026-03-16T09:39:17.534879+00:00",
+      "value": 10481067.24
     }
   ],
   "day": [
@@ -224718,6 +224734,14 @@ window.investChartData = {
     {
       "timestamp": "2026-03-16T09:38:16.150519+00:00",
       "value": 10481067.03
+    },
+    {
+      "timestamp": "2026-03-16T09:39:16.938600+00:00",
+      "value": 10481067.24
+    },
+    {
+      "timestamp": "2026-03-16T09:39:17.534879+00:00",
+      "value": 10481067.24
     }
   ]
 };
