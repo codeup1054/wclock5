@@ -1,14 +1,26 @@
 function drawWeatherChart() {
-    // Check if chart already exists on canvas and destroy it
-    const existingChart = Chart.getChart('weatherChart');
-    if (existingChart) {
-        existingChart.destroy();
+    const canvas = document.getElementById('weatherChart');
+    if (!canvas) return;
+    
+    // Destroy any existing Chart.js instance
+    try {
+        const existingChart = Chart.getChart(canvas);
+        if (existingChart) {
+            existingChart.destroy();
+        }
+    } catch (e) {}
+    
+    if (window.weatherChart) {
+        try {
+            window.weatherChart.destroy();
+        } catch (e) {}
+        window.weatherChart = null;
     }
     
-    if (window.weatherChart && typeof window.weatherChart.destroy === 'function') {
-        window.weatherChart.destroy();
-    }
-
+    // Reset canvas dimensions
+    canvas.width = 0;
+    canvas.height = 0;
+    
     const FONT_SIZE = 24;
     let tempRange = [-15, 25];
     try {
@@ -318,5 +330,11 @@ $(document).on('panelTempRangeChange', function(e) {
 // Слушатель изменения диапазона температур
 $(document).on('weatherTempRangeChange', function(e, min, max) {
     console.log('[Weather] Диапазон изменён:', min, max);
+    drawWeatherChart();
+});
+
+// Слушатель ресайза панелей - перерисовать график с правильным DPI
+$(document).on('weatherChartResize', function() {
+    console.log('[Weather] Panel resized, redrawing chart');
     drawWeatherChart();
 });

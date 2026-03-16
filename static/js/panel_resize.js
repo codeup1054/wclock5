@@ -249,53 +249,6 @@ function normalizePanelPosition(panel) {
 
     // Initialize fullscreen button for a panel
     function initFullscreenButton(panel) {
-        // Initialize hide button first (left of fullscreen)
-        const hideBtn = document.createElement('div');
-        hideBtn.className = 'panel-hide-btn';
-        hideBtn.innerHTML = '👁';
-        hideBtn.title = 'Скрыть/показать панель';
-        
-        let btnRect = null;
-        
-        hideBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const isCollapsed = panel.classList.contains('panel-minimized');
-            
-            if (isCollapsed) {
-                // Restore panel
-                panel.classList.remove('panel-minimized');
-                panel.style.height = btnRect?.height || '';
-                panel.style.overflow = '';
-                hideBtn.classList.remove('panel-hidden');
-                hideBtn.style.top = '';
-                hideBtn.style.right = '';
-            } else {
-                // Save position before minimizing
-                btnRect = {
-                    top: panel.style.top || panel.offsetTop + 'px',
-                    left: panel.style.left || panel.offsetLeft + 'px',
-                    width: panel.style.width || panel.offsetWidth + 'px',
-                    height: panel.style.height || panel.offsetHeight + 'px'
-                };
-                panel.classList.add('panel-minimized');
-                panel.style.height = '32px';
-                panel.style.overflow = 'hidden';
-                hideBtn.classList.add('panel-hidden');
-                hideBtn.style.top = '4px';
-                hideBtn.style.right = '27px';
-            }
-            
-            // Save visibility state
-            try {
-                const config = JSON.parse(localStorage.getItem('wclock_panel_config') || '{}');
-                config[panel.id] = config[panel.id] || {};
-                config[panel.id].visible = isCollapsed;
-                localStorage.setItem('wclock_panel_config', JSON.stringify(config));
-            } catch(err) {}
-        });
-        
-        panel.appendChild(hideBtn);
-
         const btn = document.createElement('div');
         btn.className = 'panel-fullscreen-btn';
         
@@ -525,21 +478,73 @@ function normalizePanelPosition(panel) {
         }
         
         if (wasEdit && !isEdit) {
-            // Ask to save or cancel
-            console.log('[EditMode] Exiting edit mode, asking to save');
-            const save = confirm('Сохранить изменения панелей?');
-            if (save) {
-                console.log('[EditMode] User chose to save, calling saveCurrentConfig');
-                saveCurrentConfig();
-                console.log('[EditMode] Config saved');
-            } else {
-                // Reload to restore previous state
-                console.log('[EditMode] User chose to cancel, reloading');
-                location.reload();
-            }
+            // Show custom modal instead of confirm()
+            showSaveModal();
         }
         
         saveEditMode(isEdit);
+    }
+    
+    // Custom modal for save confirmation
+    function showSaveModal() {
+        const existing = document.getElementById('save-confirm-modal');
+        if (existing) existing.remove();
+        
+        const modal = document.createElement('div');
+        modal.id = 'save-confirm-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 20000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: #1a1a2e;
+            border: 2px solid #ffd700;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            color: #fff;
+        `;
+        
+        content.innerHTML = '<p style="margin-bottom:20px;font-size:16px;">Сохранить изменения панелей?</p>';
+        
+        const btnContainer = document.createElement('div');
+        btnContainer.style.cssText = 'display:flex;gap:10px;justify-content:center;';
+        
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Сохранить';
+        saveBtn.style.cssText = 'background:#2cba99;border:none;border-radius:4px;color:#fff;padding:8px 16px;cursor:pointer;font-size:14px;';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Отмена';
+        cancelBtn.style.cssText = 'background:#444;border:none;border-radius:4px;color:#fff;padding:8px 16px;cursor:pointer;font-size:14px;';
+        
+        saveBtn.onclick = function() {
+            console.log('[EditMode] User chose to save, calling saveCurrentConfig');
+            saveCurrentConfig();
+            modal.remove();
+        };
+        
+        cancelBtn.onclick = function() {
+            console.log('[EditMode] User chose to cancel, reloading');
+            modal.remove();
+            location.reload();
+        };
+        
+        btnContainer.appendChild(saveBtn);
+        btnContainer.appendChild(cancelBtn);
+        content.appendChild(btnContainer);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
     }
 
     // Reset panels to default positions
@@ -687,62 +692,15 @@ function normalizePanelPosition(panel) {
         });
     }
 
-    // Resize charts to fit panels (preserve DPR and content size with proportional scaling)
-    // Resize charts to fit panels with proper DPI scaling
-function resizeCharts() {
-    const weatherCanvas = document.getElementById('weatherChart');
-    const volumeCanvas = document.getElementById('volumeChart');
-    const dpr = window.devicePixelRatio || 1;
-    const CHART_RENDER_SCALE = 1.5;
-
-    function adjust(canvas, container) {
-        if (!canvas || !container) return;
-        const rect = container.getBoundingClientRect();
+    // Resize charts - trigger redraw for weather chart to fix DPI
+    function resizeCharts() {
+        // Trigger custom event for weather chart to redraw itself with proper DPI
+        if (typeof $ !== 'undefined') {
+            $(document).trigger('weatherChartResize');
+        }
         
-        // Scale controlled by per-panel data-chart-scale
-        let scale = 1;
-        if (container.dataset && container.dataset.chartScale) {
-            const s = parseFloat(container.dataset.chartScale);
-            if (Number.isFinite(s)) scale = s;
-        }
-        if (scale > 3) scale = 3;
-        if (scale < 0.5) scale = 0.5;
-        
-        const displayWidth = Math.max(1, Math.floor(rect.width * scale));
-        const displayHeight = Math.max(1, Math.floor(rect.height * scale));
-        const actualWidth = Math.floor(displayWidth * dpr * CHART_RENDER_SCALE);
-        const actualHeight = Math.floor(displayHeight * dpr * CHART_RENDER_SCALE);
-
-        canvas.style.width = displayWidth + 'px';
-        canvas.style.height = displayHeight + 'px';
-        canvas.width = actualWidth;
-        canvas.height = actualHeight;
-        
-        // Важно: обновите конфигурацию графика для правильного масштабирования
-        if (canvas.chartInstance) {
-            canvas.chartInstance.options.maintainAspectRatio = false;
-            canvas.chartInstance.options.scales.x.autoSkip = true;
-            canvas.chartInstance.options.scales.x.maxTicksLimit = 10;
-            canvas.chartInstance.options.scales.y.beginAtZero = false;
-            canvas.chartInstance.resize();
-        }
+        adjustTextSizesForPressPanel();
     }
-
-    if (weatherCanvas && weatherCanvas.parentElement) {
-        adjust(weatherCanvas, weatherCanvas.parentElement);
-        if (window.weatherChart && typeof window.weatherChart.resize === 'function') {
-            window.weatherChart.resize();
-        }
-    }
-    
-    if (volumeCanvas && volumeCanvas.parentElement) {
-        adjust(volumeCanvas, volumeCanvas.parentElement);
-        if (window.investChart && typeof window.investChart.resize === 'function') {
-            window.investChart.resize();
-        }
-    }
-    adjustTextSizesForPressPanel();
-}
 
     // Initialize on DOM ready
     function init() {
@@ -797,7 +755,7 @@ const PANEL_CONFIG_TABLET = ${JSON.stringify(tabletConfig, null, 4)};
         
         if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(output);
-            alert('Configs copied to clipboard! Save to panel_configs.js');
+            console.log('Configs copied to clipboard! Save to panel_configs.js');
         } else {
             console.log(output);
         }
@@ -832,11 +790,10 @@ const PANEL_CONFIG_TABLET = ${JSON.stringify(tabletConfig, null, 4)};
         })
         .then(response => response.json())
         .then(data => {
-            alert(isDesktop ? 'Desktop config saved!' : 'Tablet config saved!');
+            console.log(isDesktop ? 'Desktop config saved!' : 'Tablet config saved!');
         })
         .catch(err => {
             console.error('Error saving config:', err);
-            alert('Error saving config!');
         });
     }
 

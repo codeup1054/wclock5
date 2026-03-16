@@ -58,14 +58,6 @@ function createControlPanel() {
     });
   $panelButtons.append($editBtn);
 
-  const $resetBtn = $('<button id="reset_panels_btn" title="Сбросить панели">⌘</button>')
-    .on('click', function() {
-      if (typeof window.resetPanels === 'function') {
-        window.resetPanels();
-      }
-    });
-  $panelButtons.append($resetBtn);
-
   // const $settingsBtn = $('<button id="settings_btn" title="Настройки">⚙</button>')
   //   .on('click', function() {
   //     if (typeof window.togglePanelsModal === 'function') {
