@@ -1,11 +1,11 @@
 #!/bin/bash
 # Copy static files
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 source "$SCRIPT_DIR/sh/deploy.conf"
 
 SSH_TARGET="${SSH_USER}@${SSH_HOST}"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 
 echo "=== Copy Static Files ==="
 echo "Copying static files to server..."
