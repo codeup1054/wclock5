@@ -19,6 +19,7 @@ services:
       - ./parsers/mail.ru:/app/parsers/mail.ru
       - ./invest_portfolio.db:/app/invest_portfolio.db
       - ./odintsovo_weather.db:/app/odintsovo_weather.db
+      - ./cache:/app/cache
 
   weather-parser:
     build: .

@@ -698,14 +698,17 @@ function normalizePanelPosition(panel) {
         });
     }
 
-    // Resize charts - trigger redraw for weather chart to fix DPI
+    let _resizeRAF = null;
+
     function resizeCharts() {
-        // Trigger custom event for weather chart to redraw itself with proper DPI
-        if (typeof $ !== 'undefined') {
-            $(document).trigger('weatherChartResize');
-        }
-        
-        adjustTextSizesForPressPanel();
+        if (_resizeRAF) cancelAnimationFrame(_resizeRAF);
+        _resizeRAF = requestAnimationFrame(() => {
+            _resizeRAF = null;
+            if (typeof $ !== 'undefined') {
+                $(document).trigger('weatherChartResize');
+            }
+            adjustTextSizesForPressPanel();
+        });
     }
 
     // Initialize on DOM ready

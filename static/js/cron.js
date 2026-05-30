@@ -14,7 +14,7 @@
     const tasks = [];
 
     let masterInterval = null;
-    const UPDATE_INTERVAL = 120_000; // 1 минута
+    const UPDATE_INTERVAL = 120_000; // 2 минуты между циклами
 
     /**
      * Регистрирует новую задачу для периодического выполнения
@@ -61,7 +61,7 @@
             return;
         }
 
-        console.log('[Cron] Запуск оркестратора обновлений (каждые 60 сек)...');
+        console.log(`[Cron] Запуск оркестратора обновлений (каждые ${UPDATE_INTERVAL/1000} сек)...`);
         executeAllTasks(); // Первое обновление сразу
         masterInterval = setInterval(executeAllTasks, UPDATE_INTERVAL);
     }
@@ -86,20 +86,16 @@
             const savedView = localStorage.getItem('chartView');
             if (!savedView || savedView === 'invest') {
                 window.InvestPlot.update();
-            } else {
-                console.log('[Cron] ⏸️ График батареи активен, пропускаем обновление InvestPlot');
             }
-        } else {
-            console.warn('[Cron] InvestPlot не найден — пропуск');
         }
-    }, true);
+    });
 
-    // 2. Погода (пример: WeatherWidget)
     if (window.WeatherWidget && typeof window.WeatherWidget.update === 'function') {
-        registerTask('WeatherWidget', window.WeatherWidget.update, true);
-    } else {
-        // Можно оставить как заглушку или подключить позже
-        // registerTask('WeatherWidget', () => fetch('/api/weather').then(...), true);
+        registerTask('WeatherWidget', window.WeatherWidget.update);
+    }
+
+    if (window.InvestBanner && typeof window.InvestBanner.update === 'function') {
+        registerTask('InvestBanner', window.InvestBanner.update);
     }
 
     // 3. Другие виджеты можно добавить здесь или через внешний вызов
@@ -112,11 +108,6 @@
         getTaskCount: () => tasks.length
     };
 
-    // Автозапуск при загрузке (опционально)
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', start);
-    } else {
-        start();
-    }
+    // Запуск — вызывается из index.js после регистрации задач
 
 })(window);

@@ -265,7 +265,7 @@ body.view-invest #invest_panel { display: block !important; }
 
 #seconds_panel #clock_seconds {
     text-align: center;
-    font-size: 8vw;
+    font-size: 7vw;
     line-height: 1;
 }
 
@@ -276,9 +276,12 @@ body.view-invest #invest_panel { display: block !important; }
 }
 
 #date_panel #day {
-    font-size: 8vw;
-    left: 0vw;
-    line-height: 1;
+    position: absolute;
+    font-size: 10vw;
+    line-height: 12vh;
+    width: 100%;
+    text-align: center;
+    top: 5vw;
 }
 
 
@@ -310,21 +313,12 @@ body.view-invest #invest_panel { display: block !important; }
     top: 0vh;
 }
  
-#date_panel #day {
-    position: absolute;
-    font-size: 10vw; 
-    line-height: 12vh;   
-    width: 100%;
-    text-align: center;
-    top: 25%;
-}
-
 #date_panel #weekday {
     position: absolute;
     width: 100%;
     text-align: center;
     font-size: 5vw;
-    line-height: 3vh;   
+    line-height: 7vh;
 }
 
 #date_panel #month {

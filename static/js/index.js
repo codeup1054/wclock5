@@ -178,10 +178,21 @@ $(document).ready(function () {
     }
 
     // === FULLSCREEN & WAKE LOCK ===
+    let wakeLockTimer = null;
+
     async function requestWakeLock() {
         try {
             wakeLock = await navigator.wakeLock.request('screen');
             wakeLock.addEventListener('release', () => window.logg("🔓 WakeLock released"));
+            // Авто-освобождение через 5 минут для экономии батареи
+            clearTimeout(wakeLockTimer);
+            wakeLockTimer = setTimeout(async () => {
+                if (wakeLock) {
+                    try { await wakeLock.release(); } catch (e) { /* ignore */ }
+                    wakeLock = null;
+                    window.logg("🔒 WakeLock auto-released after 5min");
+                }
+            }, 300000);
         } catch (err) {
             window.logg("💥 WakeLock error: " + err.message);
         }
@@ -348,10 +359,9 @@ $(document).ready(function () {
 
     // Регистрация задач для cron.js
     if (typeof Cron !== 'undefined') {
-        Cron.registerTask('Weather', window.updateWeatherData, true);
-        // Регистрируем отправку данных батареи (независимо от видимости графика)
+        Cron.registerTask('Weather', window.updateWeatherData);
         if (typeof window.sendBatteryLevel === 'function') {
-            Cron.registerTask('Battery', window.sendBatteryLevel, true);
+            Cron.registerTask('Battery', window.sendBatteryLevel);
         }
         Cron.start();
     } else {

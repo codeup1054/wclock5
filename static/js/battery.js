@@ -168,6 +168,7 @@ function batteryLevel() {
                             responsive: true,
                             maintainAspectRatio: false,
                             animation: false,
+                            devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
                             plugins: {
                                 legend: { display: false },
                                 tooltip: { enabled: false },
@@ -202,7 +203,9 @@ function batteryLevel() {
 
                     // logg('📊 График батареи обновлён');
                 })
-                .fail(xhr => logg(`⚠️ Ошибка загрузки истории: ${xhr.responseText || xhr.statusText}`));
+                .fail(xhr => {
+                    console.warn(`⚠️ Ошибка загрузки истории: ${xhr.responseText || xhr.statusText}`);
+                });
     };
 
     // 🪫 Получаем уровень батареи для отрисовки графика
@@ -219,5 +222,5 @@ function batteryLevel() {
         renderChart(50);
     }
     
-    updateToggleButtonText();
+    if (typeof updateToggleButtonText === 'function') updateToggleButtonText();
 }

@@ -324,7 +324,7 @@ $(document).ready(function() {
     loadChartState();
     
     // Обновляем текст кнопки переключения
-    updateToggleButtonText();
+    if (typeof updateToggleButtonText === 'function') updateToggleButtonText();
 
     // Показываем/скрываем панель батареи в зависимости от режима
     if (currentView === 'energy') {

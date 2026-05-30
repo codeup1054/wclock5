@@ -5,7 +5,6 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 (function($) {
     'use strict';
 
-    let investBannerInterval = null;
     let tgoldData = null;
 
     const COLORS = {
@@ -160,10 +159,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === TGLD@ ===
         if (tgoldData) {
             const dayPct = (tgoldData.day_change_pct || 0).toFixed(2);
-            const weekPct = (tgoldData.week_change_pct || 0).toFixed(2);
+            const monthPct = (tgoldData.month_change_pct || 0).toFixed(2);
+            const weekRow = document.getElementById('tgold-week-change');
             const daySign = (tgoldData.day_change || 0) >= 0 ? '+' : '';
-            const weekSign = (tgoldData.week_change || 0) >= 0 ? '+' : '';
-            html += `<span class="tgold-data">TGLD: ${(tgoldData.current_price || 0).toFixed(2)}  Д: ${daySign}${dayPct}%  Н: ${weekSign}${weekPct}%</span>`;
+            const monthSign = (tgoldData.month_change || 0) >= 0 ? '+' : '';
+            html += `<span class="tgold-data">TGLD: ${(tgoldData.current_price || 0).toFixed(2)}  Д: ${daySign}${dayPct}%  М: ${monthSign}${monthPct}%</span>`;
         }
         html += `</div>`;
 
@@ -215,31 +215,21 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         
         loadTgoldData();
         updateInvestBanner();
-        
-        investBannerInterval = setInterval(function() {
-            loadTgoldData();
-            updateInvestBanner();
-        }, 120000);
+    }
 
-        $(window).on('beforeunload', () => {
-            if (investBannerInterval) {
-                clearInterval(investBannerInterval);
-                investBannerInterval = null;
-            }
-        });
+    // Принимает готовые данные (из invest_chart.js), без повторного fetch
+    function renderFromData(historyData, tgoldPrices) {
+        if (tgoldPrices && tgoldPrices.current_price) {
+            tgoldData = tgoldPrices;
+        }
+        renderBanner(historyData);
     }
 
     $(document).ready(init);
 
     window.InvestBanner = {
         update: updateInvestBanner,
-        loadTgold: loadTgoldData,
-        stop: () => {
-            if (investBannerInterval) {
-                clearInterval(investBannerInterval);
-                investBannerInterval = null;
-            }
-        }
+        renderFromData: renderFromData
     };
 
 })(jQuery);

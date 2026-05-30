@@ -18,20 +18,20 @@ console.log('[InvestPlot] 📄 Script loaded');
     'use strict';
 
     let investChart = null;
-    // Debounced resize timer for invest chart to avoid thrashing during panel resize
-    let _investChartResizeTimer = null;
     let isUpdating = false;
     let initAttempts = 0;
     let dailyGrowthMarks = [];
     let dailyBars = [];
     let resizeTimeout = null;
+    let updateTimeout = null;
     
     const MAX_INIT_ATTEMPTS = 15;
     const INIT_ATTEMPT_DELAY = 200;
     const CANVAS_CHECK_DELAY = 50;
     const RESIZE_DEBOUNCE_MS = 250;
     const RESIZE_THROTTLE_MS = 100;
-    const DPR_MULTIPLIER = 2; // Дополнительный множитель для чёткости
+    // Лимит DPR для снижения нагрузки на GPU (особенно на планшетах)
+    function getSafeDPR() { return Math.min(window.devicePixelRatio || 1, 1.5); }
 
     // === Утилиты производительности ===
     
@@ -312,24 +312,20 @@ console.log('[InvestPlot] 📄 Script loaded');
         if (!canvas || !container) return;
         
         const rect = container.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const renderScale = DPR_MULTIPLIER;
+        const dpr = getSafeDPR();
         
-        // CSS размеры (видимые)
         const cssWidth = Math.max(1, Math.floor(rect.width));
         const cssHeight = Math.max(1, Math.floor(rect.height));
         
-        // Реальные размеры буфера с учётом DPR
-        const bufferWidth = Math.floor(cssWidth * dpr * renderScale);
-        const bufferHeight = Math.floor(cssHeight * dpr * renderScale);
+        const bufferWidth = Math.floor(cssWidth * dpr);
+        const bufferHeight = Math.floor(cssHeight * dpr);
         
-        // Применяем размеры
         canvas.style.width = cssWidth + 'px';
         canvas.style.height = cssHeight + 'px';
         canvas.width = bufferWidth;
         canvas.height = bufferHeight;
         
-        return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr, renderScale };
+        return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr };
     }
 
     // === Создание графика ===
@@ -352,11 +348,13 @@ console.log('[InvestPlot] 📄 Script loaded');
                 return null;
             }
 
-            // Уничтожаем старый график если есть
+            // Zero canvas after destroy to free GPU memory
             const existingChart = Chart.getChart(canvas);
             if (existingChart) {
                 existingChart.destroy();
             }
+            canvas.width = 0;
+            canvas.height = 0;
 
             // Настраиваем canvas для High-DPI
             const container = canvas.parentElement;
@@ -402,7 +400,8 @@ console.log('[InvestPlot] 📄 Script loaded');
             const portfolioValues = portfolioDataset?.data || [];
             const validValues = portfolioValues.filter(v => v != null && v > 0);
             const portfolioMin = validValues.length > 0 ? Math.min(...validValues) : 0;
-            const portfolioMax = portfolioValues.length > 0 ? Math.max(...portfolioValues.filter(v => v != null)) : 0;
+            const validForMax = portfolioValues.filter(v => v != null);
+            const portfolioMax = validForMax.length > 0 ? Math.max(...validForMax) : 0;
             const portfolioRange = portfolioMax - portfolioMin;
             const portfolioPadding = portfolioRange > 0 ? portfolioRange * 0.1 : Math.max(portfolioMax * 0.1, 1000);
 
@@ -511,7 +510,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                     animation: false,
                     responsive: true,
                     maintainAspectRatio: false, // Ключевая настройка!
-                    devicePixelRatio: (window.devicePixelRatio || 1) * DPR_MULTIPLIER,
+                    devicePixelRatio: getSafeDPR(),
                     clip: false,
                     layout: {
                         padding: { top: 40, right: 10, bottom: 60, left: 10 }
@@ -589,6 +588,11 @@ console.log('[InvestPlot] 📄 Script loaded');
         }
         isUpdating = true;
 
+        const updateTimeoutId = setTimeout(function() {
+            isUpdating = false;
+            console.warn('[InvestPlot] ⚠️ Таймаут 30s, isUpdating сброшен');
+        }, 30000);
+
         const canvasCheck = checkCanvas();
         if (!canvasCheck.exists) {
             initAttempts++;
@@ -636,11 +640,8 @@ console.log('[InvestPlot] 📄 Script loaded');
                 console.log('[InvestPlot] 📊 Получены данные history:', Object.keys(rawData).length, 'записей');
                 if (!rawData || Object.keys(rawData).length === 0) {
                     console.warn('[InvestPlot] ⚠️ Нет данных для графика инвестиций');
-                    window.ChartBannerData = { capital: 0, assets: [], absChange: 0, pctChange: 0, absChangeWeek: 0, pctChangeWeek: 0 };
-                    if (typeof window.renderInvestBanner === 'function') {
-                        window.renderInvestBanner();
-                    }
                     isUpdating = false;
+                    clearTimeout(updateTimeoutId);
                     return;
                 }
 
@@ -693,9 +694,9 @@ console.log('[InvestPlot] 📄 Script loaded');
                     });
                 });
 
-                // === БАННЕРЫ ===
-                if (typeof window.updateInvestBannerData === 'function') {
-                    window.updateInvestBannerData(rawData);
+                // Передаём данные в баннер (без лишнего fetch)
+                if (typeof window.InvestBanner?.renderFromData === 'function') {
+                    window.InvestBanner.renderFromData(rawData);
                 }
 
                 // === АГРЕГАЦИЯ ===
@@ -774,10 +775,12 @@ console.log('[InvestPlot] 📄 Script loaded');
                 }
 
                 isUpdating = false;
+                clearTimeout(updateTimeoutId);
             })
             .fail(function(xhr, status, error) {
                 console.error('[InvestPlot] ❌ Ошибка загрузки /api/invest/history:', status, error, 'HTTP:', xhr.status);
                 isUpdating = false;
+                clearTimeout(updateTimeoutId);
             });
     }
 
@@ -809,33 +812,13 @@ console.log('[InvestPlot] 📄 Script loaded');
     // === Инициализация ===
 
     function init() {
-        console.log('[InvestPlot] 🧪 Инициализация модуля');
-        
-        const savedView = localStorage.getItem('chartView');
-        const shouldShowInvest = !savedView || savedView === 'invest';
-        if (!shouldShowInvest) {
-            console.log('[InvestPlot] ⏸️ График батареи выбран, пропускаем автоинициализацию');
-            window.InvestPlot.initialized = true;
-            return;
-        }
-        
-        const canvasCheck = checkCanvas();
-        console.log('[InvestPlot] Canvas exists:', canvasCheck.exists);
-        if (!canvasCheck.exists) {
-            console.log('[InvestPlot] ⏳ Ожидание элемента #investChart...');
-            setTimeout(updateInvestPlot, 100);
-        } else {
-            console.log('[InvestPlot] Canvas найден, вызываем updateInvestPlot');
-            updateInvestPlot();
-        }
-        
-        // Слушатель изменения размера окна
-        $(window).on('resize.investPlot', resizeCharts);
+        if (window.InvestPlot.initialized) return;
+        window.InvestPlot.initialized = true;
     }
 
     $(document).ready(function() {
         init();
-        window.InvestPlot.initialized = true;
+        $(window).on('resize.investPlot', resizeCharts);
     });
 
     $(document).on('panelViewChange', function(e, data) {
@@ -921,6 +904,10 @@ console.log('[InvestPlot] 📄 Script loaded');
                                 yAxisID: 'y_tgold'
                             };
                             
+                            if (!chart || !chart.canvas || !chart.canvas.isConnected) {
+                                console.warn('[InvestPlot] ⚠️ Chart canvas недоступен для добавления TGLD@');
+                                return;
+                            }
                             chart.data.datasets.push(tgoldDataset);
                             chart.update('none');
                             console.log('[InvestPlot] ✅ TGLD@ добавлен на график');
@@ -999,16 +986,7 @@ console.log('[InvestPlot] 📄 Script loaded');
         return { data: resultData };
     }
 
-// Экспорт функции ресайза для использования из panel_resize.js
+    // Экспорт функции ресайза для использования из panel_resize.js
     window.investPlotResize = resizeChartsThrottled;
-
-    // Debounced resize handler to align charts on panel resize
-    $(window).on('resize', function() {
-        if (_investChartResizeTimer) clearTimeout(_investChartResizeTimer);
-        _investChartResizeTimer = setTimeout(function() {
-            const canvas = document.getElementById('investChart');
-            if (investChart && canvas && typeof investChart.resize === 'function') investChart.resize();
-        }, RESIZE_DEBOUNCE_MS);
-    });
 
 })(jQuery);

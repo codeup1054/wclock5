@@ -1,9 +1,21 @@
+// Лимит DPR для планшетов (снижает нагрузку на GPU)
+function getSafeDPR() {
+    return Math.min(window.devicePixelRatio * 1.3 || 1, 2.0);
+}
+
+function destroyChartSafe(canvas) {
+    if (!canvas) return;
+    // Сначала обнуляем буфер, чтобы освободить GPU память
+    canvas.width = 0;
+    canvas.height = 0;
+    try {
+        const existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+    } catch (e) { /* ignore */ }
+}
+
 function drawWeatherChart() {
-    // Prevent concurrent calls
-    if (window._weatherChartDrawing) {
-        console.log('[WeatherChart] Draw already in progress, skipping');
-        return;
-    }
+    if (window._weatherChartDrawing) return;
     window._weatherChartDrawing = true;
     
     const canvas = document.getElementById('weatherChart');
@@ -12,28 +24,7 @@ function drawWeatherChart() {
         return;
     }
     
-    // Destroy any existing Chart.js instance - check by canvas AND by chart ID
-    try {
-        // First try to get chart by canvas
-        let existingChart = Chart.getChart(canvas);
-        if (existingChart) {
-            existingChart.destroy();
-        }
-        // Also try to get chart by ID (Chart.js registers charts with IDs)
-        if (window.weatherChart && typeof window.weatherChart.destroy === 'function') {
-            window.weatherChart.destroy();
-        }
-    } catch (e) {
-        console.warn('[WeatherChart] Error destroying existing chart:', e);
-    }
-    
-    // Reset canvas dimensions and clear completely
-    canvas.width = 0;
-    canvas.height = 0;
-    canvas.width = canvas.offsetWidth * 2;  // DPR for proper sizing
-    canvas.height = canvas.offsetHeight * 2;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    destroyChartSafe(canvas);
     
     const FONT_SIZE = 24;
     let tempRange = [-15, 25];
@@ -42,7 +33,6 @@ function drawWeatherChart() {
     } catch (e) {}
     const tempMin = tempRange[0];
     const tempMax = tempRange[1];
-    const DPR_MULTIPLIER = 2;
 
     const pressMin = 720 ;
     const pressMax = 770;
@@ -54,21 +44,20 @@ function drawWeatherChart() {
         if (!canvas || !container) return;
         
         const rect = container.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        const renderScale = DPR_MULTIPLIER;
+        const dpr = getSafeDPR();
         
         const cssWidth = Math.max(1, Math.floor(rect.width));
         const cssHeight = Math.max(1, Math.floor(rect.height));
         
-        const bufferWidth = Math.floor(cssWidth * dpr * renderScale);
-        const bufferHeight = Math.floor(cssHeight * dpr * renderScale);
+        const bufferWidth = Math.floor(cssWidth * dpr);
+        const bufferHeight = Math.floor(cssHeight * dpr);
         
         canvas.style.width = cssWidth + 'px';
         canvas.style.height = cssHeight + 'px';
         canvas.width = bufferWidth;
         canvas.height = bufferHeight;
         
-        return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr, renderScale };
+        return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr };
     }
 
     $.getJSON('api/charts_data', function(data) {
@@ -301,7 +290,7 @@ function drawWeatherChart() {
                 responsive: false,
                 maintainAspectRatio: false,
                 animation: false,
-                devicePixelRatio: (window.devicePixelRatio || 1) * DPR_MULTIPLIER,
+                devicePixelRatio: 1,
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: false }
@@ -355,8 +344,14 @@ $(document).on('weatherTempRangeChange', function(e, min, max) {
     drawWeatherChart();
 });
 
-// Слушатель ресайза панелей - перерисовать график с правильным DPI
+let _lastWeatherSize = { w: 0, h: 0 };
+
 $(document).on('weatherChartResize', function() {
-    console.log('[Weather] Panel resized, redrawing chart');
+    const canvas = document.getElementById('weatherChart');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.round(rect.width), h = Math.round(rect.height);
+    if (w === _lastWeatherSize.w && h === _lastWeatherSize.h) return;
+    _lastWeatherSize = { w, h };
     drawWeatherChart();
 });

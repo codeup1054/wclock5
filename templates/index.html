@@ -4,8 +4,17 @@
     <meta charset="UTF-8">
     <title>Weather Clock</title>
     
+    <script>
+    var DEBUG_LOG = localStorage.getItem('debug_log') === 'true' || window.location.search.includes('debug');
+    if (!DEBUG_LOG) {
+        var _origLog = console.log;
+        console.log = function(){};
+        console.debug = function(){};
+    }
+    </script>
+    
     <link rel="stylesheet" href="/static/css/wclock.css">
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
@@ -22,16 +31,15 @@
     <script src="/static/js/lib.js?v=3"></script>
     <script src="/static/js/control_panel.js"></script>
     <script src="/static/js/battery.js"></script>
-    <script src="/static/js/weather_chart.js?4"></script>
+    <script src="/static/js/weather_chart.js?5"></script>
     <script src="/static/js/panel_configs.js"></script>
     <script src="/static/js/panel_resize.js?v=4"></script>
 
     {% if show_invest %}
     <script>console.log('[Index] show_invest = true');</script>
-    <script src="/static/js/invest_banner.js?v=3"></script>
+    <script src="/static/js/invest_banner.js?v=4"></script>
     <script src="/static/js/chart_plugins.js"></script>
-    <script src="/static/js/invest_chart_data.js?v=1"></script>
-    <script src="/static/js/invest_chart.js?v=23"></script>
+    <script src="/static/js/invest_chart.js?v=24"></script>
     {% else %}
     <script>console.log('[Index] show_invest = false');</script>
     {% endif %}
