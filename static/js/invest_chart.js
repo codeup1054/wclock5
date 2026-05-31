@@ -1,18 +1,10 @@
 /**
- * invest_plot.js
- * Модуль для отображения графика динамики стоимости инвестиционного портфеля.
- * Использует Chart.js и API /api/invest/history.
- * Рисует график в canvas#investChart.
- * 
- * Особенности:
- * - Поддержка High-DPI дисплеев (Retina, 4K)
- * - Debounce/throttle для плавного ресайза
- * - Агрегация данных по интервалам (minute/hour/day)
- * - Метки экстремумов и суточного прироста
- * - Множественные оси Y для тикеров
+ * invest_chart.js
+ * Investment portfolio chart using Chart.js and /api/invest/history.
+ * High-DPI support, data aggregation, extrema labels, daily growth marks.
  */
 
-console.log('[InvestPlot] 📄 Script loaded');
+console.log('[InvestPlot] Script loaded');
 
 (function($) {
     'use strict';
@@ -30,127 +22,8 @@ console.log('[InvestPlot] 📄 Script loaded');
     const CANVAS_CHECK_DELAY = 50;
     const RESIZE_DEBOUNCE_MS = 250;
     const RESIZE_THROTTLE_MS = 100;
-    // Лимит DPR для снижения нагрузки на GPU (особенно на планшетах)
-    function getSafeDPR() { return Math.min(window.devicePixelRatio || 1, 1.5); }
 
-    // === Утилиты производительности ===
-    
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func.apply(this, args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-
-    function throttle(func, limit) {
-        let inThrottle = false;
-        return function(...args) {
-            if (!inThrottle) {
-                func.apply(this, args);
-                inThrottle = true;
-                setTimeout(() => { inThrottle = false; }, limit);
-            }
-        };
-    }
-
-    // === Проверка canvas ===
-
-    function checkCanvas() {
-        const canvas = document.getElementById('investChart') ;
-        if (!canvas || !canvas.isConnected || !document.body.contains(canvas)) {
-            return { exists: false, reason: 'Элемент не найден или не в DOM' };
-        }
-        const rect = canvas.getBoundingClientRect();
-        const isVisible = rect.width > 10 && rect.height > 10 &&
-                         rect.top < window.innerHeight &&
-                         rect.left < window.innerWidth;
-        if (!isVisible) {
-            return {
-                exists: true,
-                reason: `Невидимый (ширина: ${rect.width}, высота: ${rect.height})`,
-                rect: rect
-            };
-        }
-        return { exists: true, reason: 'OK', rect: rect };
-    }
-
-    // === Расчет прироста за сутки ===
-
-    function calculateDailyGrowthMarks(timestamps, values) {
-        const marks = [];
-        const localDayKey = (d) => {
-            const yyyy = d.getFullYear();
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-            const dd = String(d.getDate()).padStart(2, '0');
-            return `${yyyy}-${mm}-${dd}`;
-        };
-
-        const dailyData = {};
-        timestamps.forEach((tsAny, index) => {
-            const ts = tsAny instanceof Date ? tsAny : new Date(tsAny);
-            const dayKey = localDayKey(ts);
-            if (!dailyData[dayKey]) {
-                dailyData[dayKey] = { indices: [], timestamps: [], values: [] };
-            }
-            dailyData[dayKey].indices.push(index);
-            dailyData[dayKey].timestamps.push(ts);
-            dailyData[dayKey].values.push(values[index]);
-        });
-
-        const sortedDays = Object.keys(dailyData).sort();
-        const dailyMidnight = {};
-        sortedDays.forEach((dayKey) => {
-            const day = dailyData[dayKey];
-            if (!day?.timestamps?.length) return;
-            let idx = day.timestamps.findIndex(d => d.getHours() === 0 && d.getMinutes() === 0);
-            if (idx === -1) idx = 0;
-            dailyMidnight[dayKey] = {
-                index: day.indices[idx],
-                timestamp: day.timestamps[idx],
-                value: day.values[idx]
-            };
-        });
-
-        for (let i = 1; i < sortedDays.length; i++) {
-            const prevDay = sortedDays[i - 1];
-            const currDay = sortedDays[i];
-            const prev = dailyMidnight[prevDay];
-            const curr = dailyMidnight[currDay];
-            if (!prev || !curr) continue;
-
-            const prevValue = prev.value;
-            const currValue = curr.value;
-            const midnightIndex = curr.index;
-            const midnightTs = curr.timestamp;
-            const absGrowth = currValue - prevValue;
-            const pctGrowth = prevValue !== 0 ? (absGrowth / prevValue) * 100 : 0;
-            const timeLabel = midnightTs.toLocaleString('ru-RU', {
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            marks.push({
-                index: midnightIndex,
-                timestamp: midnightTs,
-                absGrowth: absGrowth,
-                pctGrowth: pctGrowth,
-                timeLabel: timeLabel,
-                prevValue: prevValue,
-                currValue: currValue
-            });
-        }
-
-        return marks;
-    }
-
-    // === Плагин для отображения прироста за день под осью X ===
+    // === Daily growth label plugin (below X axis) ===
     const dailyGrowthLabelsPlugin = {
         id: 'dailyGrowthLabels',
         afterDatasetsDraw(chart) {
@@ -189,146 +62,7 @@ console.log('[InvestPlot] 📄 Script loaded');
         }
     };
 
-    // === Агрегация данных ===
-
-    function aggregateData(timestamps, values, interval) {
-        console.log(`[InvestPlot] 📊 Агрегация данных по интервалу: ${interval}`);
-        const aggregated = {};
-
-        for (let i = 0; i < timestamps.length; i++) {
-            const ts = new Date(timestamps[i]);
-            const bucket = new Date(ts);
-            let key;
-
-            switch (interval) {
-                case 'minute':
-                    bucket.setSeconds(0, 0);
-                    key = String(bucket.getTime());
-                    break;
-                case 'hour':
-                    bucket.setMinutes(0, 0, 0);
-                    key = String(bucket.getTime());
-                    break;
-                case 'day':
-                    bucket.setHours(0, 0, 0, 0);
-                    key = String(bucket.getTime());
-                    break;
-                default:
-                    key = String(ts.getTime());
-            }
-
-            if (!aggregated[key]) {
-                aggregated[key] = { values: [], timestamp: bucket };
-            }
-            const numVal = Number(values[i]);
-            aggregated[key].values.push(isNaN(numVal) ? 0 : numVal);
-        }
-
-        const sortedKeys = Object.keys(aggregated).sort((a, b) => Number(a) - Number(b));
-        
-        const resultLabels = [];
-        const resultValues = [];
-        const resultTimestamps = [];
-
-        let lastValidValue = null;
-        let intervalMs = 3600000;
-        if (interval === 'minute') intervalMs = 60000;
-        if (interval === 'day') intervalMs = 86400000;
-
-        sortedKeys.forEach(key => {
-            const group = aggregated[key];
-            if (group.values.length === 0) return;
-            
-            let currentValue = group.values[group.values.length - 1];
-            
-            if (currentValue === null || currentValue === 0 || isNaN(currentValue)) {
-                if (lastValidValue !== null) {
-                    currentValue = lastValidValue;
-                }
-            } else {
-                lastValidValue = currentValue;
-            }
-            
-            if (resultTimestamps.length > 0) {
-                const prevTime = resultTimestamps[resultTimestamps.length - 1].getTime();
-                const currTime = group.timestamp.getTime();
-                const gap = currTime - prevTime;
-                
-                if (gap > intervalMs * 1.5) {
-                    const numGaps = Math.floor(gap / intervalMs);
-                    for (let g = 1; g < numGaps; g++) {
-                        const interpTime = new Date(prevTime + intervalMs * g);
-                        let labelFormat;
-                        if (interval === 'day') {
-                            labelFormat = { day: '2-digit' };
-                        } else if (interval === 'hour') {
-                            labelFormat = { day: '2-digit', hour: '2-digit' };
-                        } else {
-                            labelFormat = { day: '2-digit', hour: '2-digit', minute: '2-digit' };
-                        }
-                        resultLabels.push(interpTime.toLocaleString('ru-RU', labelFormat));
-                        resultValues.push(lastValidValue);
-                        resultTimestamps.push(interpTime);
-                    }
-                }
-            }
-            
-            let labelFormat;
-            if (interval === 'day') {
-                labelFormat = { day: '2-digit' };
-            } else if (interval === 'hour') {
-                labelFormat = { day: '2-digit', hour: '2-digit' };
-            } else {
-                labelFormat = { day: '2-digit', hour: '2-digit', minute: '2-digit' };
-            }
-            
-            resultLabels.push(group.timestamp.toLocaleString('ru-RU', labelFormat));
-            resultValues.push(currentValue);
-            resultTimestamps.push(group.timestamp);
-        });
-
-        console.log(`[InvestPlot] ✅ Данные агрегированы: ${resultLabels.length} точек`);
-        return { labels: resultLabels, values: resultValues, timestamps: resultTimestamps };
-    }
-
-    // === Валидация данных ===
-
-    function validateGraphData(data) {
-        if (!data || !data.labels || !data.values) {
-            return { valid: false, reason: 'Нет данных' };
-        }
-        if (data.labels.length === 0 || data.values.length === 0) {
-            return { valid: false, reason: 'Пустые данные' };
-        }
-        if (data.labels.length !== data.values.length) {
-            return { valid: false, reason: 'Несоответствие длины меток и значений' };
-        }
-        return { valid: true };
-    }
-
-    // === Настройка размера canvas для High-DPI ===
-
-    function setupCanvasForDPR(canvas, container) {
-        if (!canvas || !container) return;
-        
-        const rect = container.getBoundingClientRect();
-        const dpr = getSafeDPR();
-        
-        const cssWidth = Math.max(1, Math.floor(rect.width));
-        const cssHeight = Math.max(1, Math.floor(rect.height));
-        
-        const bufferWidth = Math.floor(cssWidth * dpr);
-        const bufferHeight = Math.floor(cssHeight * dpr);
-        
-        canvas.style.width = cssWidth + 'px';
-        canvas.style.height = cssHeight + 'px';
-        canvas.width = bufferWidth;
-        canvas.height = bufferHeight;
-        
-        return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr };
-    }
-
-    // === Создание графика ===
+    // === Chart creation ===
 
     function createChart(canvas, chartData, extrema) {
         const hasDatasets = Array.isArray(chartData.datasets);
@@ -337,14 +71,14 @@ console.log('[InvestPlot] 📄 Script loaded');
             chartData
         );
         if (!validation.valid) {
-            console.error(`[InvestPlot] ❌ Ошибка данных графика: ${validation.reason}`);
+            console.error('[InvestPlot] Chart data error:', validation.reason);
             return null;
         }
 
         try {
-            // Проверяем что canvas привязан к DOM
+            // Verify canvas is in DOM
             if (!canvas || !canvas.isConnected || !document.body.contains(canvas)) {
-                console.error('[InvestPlot] ❌ Canvas не найден в DOM');
+                console.error('[InvestPlot] Canvas not found in DOM');
                 return null;
             }
 
@@ -356,7 +90,7 @@ console.log('[InvestPlot] 📄 Script loaded');
             canvas.width = 0;
             canvas.height = 0;
 
-            // Настраиваем canvas для High-DPI
+            // Setup canvas for High-DPI
             const container = canvas.parentElement;
             
 
@@ -366,7 +100,7 @@ console.log('[InvestPlot] 📄 Script loaded');
             
             const plugins = [];
 
-            // Плагин для прироста за день под осью X (для всех интервалов)
+            // Plugin for daily growth below X axis (all intervals)
             if (currentInterval === 'day' || currentInterval === 'hour' || currentInterval === 'minute') {
                 plugins.push(dailyGrowthLabelsPlugin);
             }
@@ -379,7 +113,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                     );
                     if (extremaPlugin) plugins.push(extremaPlugin);
                 } catch (e) {
-                    console.error('[InvestPlot] ❌ Ошибка инициализации плагина экстремумов:', e);
+                    console.error('[InvestPlot] Extrema plugin init error:', e);
                 }
             }
 
@@ -391,11 +125,11 @@ console.log('[InvestPlot] 📄 Script loaded');
                     );
                     if (midnightPlugin) plugins.push(midnightPlugin);
                 } catch (e) {
-                    console.error('[InvestPlot] ❌ Ошибка инициализации плагина линий 00:00:', e);
+                    console.error('[InvestPlot] MidnightLines plugin init error:', e);
                 }
             }
 
-            // === РАСЧЕТ MIN/MAX для осей ===
+            // === MIN/MAX calculation for axes ===
             const portfolioDataset = chartData.datasets?.[0];
             const portfolioValues = portfolioDataset?.data || [];
             const validValues = portfolioValues.filter(v => v != null && v > 0);
@@ -405,7 +139,7 @@ console.log('[InvestPlot] 📄 Script loaded');
             const portfolioRange = portfolioMax - portfolioMin;
             const portfolioPadding = portfolioRange > 0 ? portfolioRange * 0.1 : Math.max(portfolioMax * 0.1, 1000);
 
-            // === НАСТРОЙКА ОСЕЙ ===
+            // === AXIS CONFIG ===
             const scales = {
                 x: {
                     stacked: false,
@@ -475,27 +209,6 @@ console.log('[InvestPlot] 📄 Script loaded');
                         padding: -10
                     }
                 },
-                // y_tgold_change: {
-                //     position: 'left',
-                //     beginAtZero: false,
-                //     ticks: {
-                //         display: true,
-                //         callback: (value) => (value >= 0 ? '+' : '') + value.toFixed(1) + '%',
-                //         font: { size: 11 },
-                //         color: '#FF6B6B',
-                //         autoSkip: true,
-                //         maxTicksLimit: 6
-                //     },
-                //     grid: {
-                //         display: false
-                //     },
-                //     title: {
-                //         display: true,
-                //         text: 'TGLD%',
-                //         color: '#FF6B6B',
-                //         font: { size: 12 }
-                //     }
-                // }
             };
 
             const config = {
@@ -510,7 +223,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                     animation: false,
                     responsive: true,
                     maintainAspectRatio: false, // Ключевая настройка!
-                    devicePixelRatio: getSafeDPR(),
+                    devicePixelRatio: getSafeDPR(1.5),
                     clip: false,
                     layout: {
                         padding: { top: 40, right: 10, bottom: 60, left: 10 }
@@ -564,54 +277,54 @@ console.log('[InvestPlot] 📄 Script loaded');
             };
 
             const chart = new Chart(ctx, config);
-            console.log(`[InvestPlot] ✅ График успешно создан (точек: ${chartData.labels.length})`);
+            console.log('[InvestPlot] Chart created (' + chartData.labels.length + ' points)');
             return chart;
         } catch (error) {
-            console.error('[InvestPlot] ❌ Ошибка создания графика:', error);
+            console.error('[InvestPlot] Chart creation error:', error);
             return null;
         }
     }
 
-    // === Обновление графика ===
+    // === Chart update flow ===
 
     function updateInvestPlot() {
         const savedView = localStorage.getItem('chartView');
         if (savedView === 'energy') {
-            console.log('[InvestPlot] ⏸️ График батареи активен, пропускаем обновление');
+            console.log('[InvestPlot] Battery chart active, skip update');
             return;
         }
 
-        console.log('[InvestPlot] 🔄 Обновление графика');
+        console.log('[InvestPlot] Updating chart');
         if (isUpdating) {
-            console.warn('[InvestPlot] ⚠️ Уже выполняется обновление, пропускаем');
+            console.warn('[InvestPlot] Update already in progress, skipping');
             return;
         }
         isUpdating = true;
 
         const updateTimeoutId = setTimeout(function() {
             isUpdating = false;
-            console.warn('[InvestPlot] ⚠️ Таймаут 30s, isUpdating сброшен');
+            console.warn('[InvestPlot] Timeout 30s, isUpdating reset');
         }, 30000);
 
         const canvasCheck = checkCanvas();
         if (!canvasCheck.exists) {
             initAttempts++;
             if (initAttempts > MAX_INIT_ATTEMPTS) {
-                console.error(`[InvestPlot] ❌ Canvas #investChart не найден после ${MAX_INIT_ATTEMPTS} попыток`);
+                console.error('[InvestPlot] Canvas #investChart not found after', MAX_INIT_ATTEMPTS, 'attempts');
                 isUpdating = false;
                 return;
             }
-            console.log(`[InvestPlot] ⏳ Ожидание элемента #investChart (${initAttempts}/${MAX_INIT_ATTEMPTS})...`);
+            console.log('[InvestPlot] Waiting for #investChart (' + initAttempts + '/' + MAX_INIT_ATTEMPTS + ')...');
             setTimeout(updateInvestPlot, INIT_ATTEMPT_DELAY);
             isUpdating = false;
             return;
         }
 
         if (canvasCheck.reason !== 'OK') {
-            console.warn(`[InvestPlot] ⚠️ Canvas проблема: ${canvasCheck.reason}`);
+            console.warn('[InvestPlot] Canvas issue:', canvasCheck.reason);
             initAttempts++;
             if (initAttempts > MAX_INIT_ATTEMPTS) {
-                console.error(`[InvestPlot] ❌ Проблема с canvas: ${canvasCheck.reason}`);
+                console.error('[InvestPlot] Canvas problem:', canvasCheck.reason);
                 isUpdating = false;
                 return;
             }
@@ -633,13 +346,13 @@ console.log('[InvestPlot] 📄 Script loaded');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         const currentInterval = window.currentInterval || 'hour';
-        console.log(`[InvestPlot] 📅 Текущий интервал: ${currentInterval}`);
+        console.log('[InvestPlot] Current interval:', currentInterval);
 
         $.getJSON(`/api/invest/history?interval=${currentInterval}`)
             .done(function(rawData) {
-                console.log('[InvestPlot] 📊 Получены данные history:', Object.keys(rawData).length, 'записей');
+                console.log('[InvestPlot] Got history data:', Object.keys(rawData).length, 'records');
                 if (!rawData || Object.keys(rawData).length === 0) {
-                    console.warn('[InvestPlot] ⚠️ Нет данных для графика инвестиций');
+                    console.warn('[InvestPlot] No data for investment chart');
                     isUpdating = false;
                     clearTimeout(updateTimeoutId);
                     return;
@@ -647,7 +360,7 @@ console.log('[InvestPlot] 📄 Script loaded');
 
                 const timestamps = Object.keys(rawData).sort();
 
-                // === ФОРМИРОВАНИЕ portfolioValues ===
+                // portfolio values
                 const portfolioValues = [];
                 let lastValidTotal = 0;
 
@@ -668,7 +381,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                     portfolioValues.push(total);
                 }
 
-                // === ДАННЫЕ ПО ТИКЕРАМ ===
+                // === TICKER DATA ===
                 const TRACKED_TICKERS = ['TGLD@'];
                 const tickerData = {};
                 TRACKED_TICKERS.forEach(ticker => tickerData[ticker] = []);
@@ -694,16 +407,16 @@ console.log('[InvestPlot] 📄 Script loaded');
                     });
                 });
 
-                // Передаём данные в баннер (без лишнего fetch)
+                // Pass data to banner (no extra fetch)
                 if (typeof window.InvestBanner?.renderFromData === 'function') {
                     window.InvestBanner.renderFromData(rawData);
                 }
 
-                // === АГРЕГАЦИЯ ===
+                // === AGGREGATION ===
                 const { labels, values: aggregatedPortfolio, timestamps: aggregatedTimestamps } = 
                     aggregateData(timestamps, portfolioValues, currentInterval);
 
-                // === МЕТКИ РОСТА и ПРИРОСТ ЗА ДЕНЬ ===
+                // === GROWTH MARKS ===
                 if (currentInterval === 'minute' || currentInterval === 'hour' || currentInterval === 'day') {
                     dailyGrowthMarks = calculateDailyGrowthMarks(aggregatedTimestamps, aggregatedPortfolio);
                     dailyBars = dailyGrowthMarks.map(m => ({
@@ -715,15 +428,15 @@ console.log('[InvestPlot] 📄 Script loaded');
                     dailyBars = [];
                 }
 
-                // === ЭКСТРЕМУМЫ ===
+                // === EXTREMA ===
                 const extrema = window.findDailyExtrema
                     ? window.findDailyExtrema(aggregatedPortfolio, aggregatedTimestamps)
                     : [];
 
-                // === ДАТАСЕТЫ ===
+                // === DATASETS ===
                 const datasets = [];
 
-                // Основной портфель (левая ось)
+                // Main portfolio (right axis)
                 datasets.push({
                     label: 'Стоимость портфеля, ₽',
                     data: aggregatedPortfolio,
@@ -738,7 +451,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                     yAxisID: 'y_portfolio'
                 });
 
-                // Отдельные тикеры
+                // Individual tickers
                 const TICKER_COLORS = {
                     'TGLD@': '#FFD700',
                 };
@@ -755,12 +468,12 @@ console.log('[InvestPlot] 📄 Script loaded');
                         pointHoverRadius: 4,
                         borderDash: [15, 5],
                         hidden: true,
-                        yAxisID: 'y_tgold'   // ← КРИТИЧНО
+                        yAxisID: 'y_tgold'
                     });
                 });
 
-                // === СОЗДАНИЕ ГРАФИКА ===
-                console.log('[InvestPlot] 📊 Создание графика, labels:', labels.length, 'datasets:', datasets.length);
+                // === CHART CREATION ===
+                console.log('[InvestPlot] Creating chart, labels:', labels.length, 'datasets:', datasets.length);
                 investChart = createChart(canvas, {
                     labels,
                     datasets,
@@ -768,9 +481,9 @@ console.log('[InvestPlot] 📄 Script loaded');
                 }, extrema);
 
                 if (!investChart) {
-                    console.error('[InvestPlot] ❌ Не удалось создать график');
+                    console.error('[InvestPlot] Failed to create chart');
                 } else {
-                    console.log('[InvestPlot] ✅ График создан, загрузка TGLD...');
+                    console.log('[InvestPlot] Chart created, loading TGLD...');
                     window.loadTgoldToChart(investChart, labels, aggregatedTimestamps);
                 }
 
@@ -778,13 +491,13 @@ console.log('[InvestPlot] 📄 Script loaded');
                 clearTimeout(updateTimeoutId);
             })
             .fail(function(xhr, status, error) {
-                console.error('[InvestPlot] ❌ Ошибка загрузки /api/invest/history:', status, error, 'HTTP:', xhr.status);
+                console.error('[InvestPlot] Error loading /api/invest/history:', status, error, 'HTTP:', xhr.status);
                 isUpdating = false;
                 clearTimeout(updateTimeoutId);
             });
     }
 
-    // === Публичный метод ресайза с debounce ===
+    // === Public resize method with debounce ===
 
     function resizeCharts() {
         if (resizeTimeout) {
@@ -801,15 +514,15 @@ console.log('[InvestPlot] 📄 Script loaded');
             investChart.resize();
             investChart.update('none');
             
-            console.log('[InvestPlot] 📐 График перерисован под новый размер');
+            console.log('[InvestPlot] Chart resized');
             resizeTimeout = null;
         }, RESIZE_DEBOUNCE_MS);
     }
 
-    // === Throttled версия для использования во время drag/resize ===
+    // === Throttled version for drag/resize ===
     const resizeChartsThrottled = throttle(resizeCharts, RESIZE_THROTTLE_MS);
 
-    // === Инициализация ===
+    // === Init ===
 
     function init() {
         if (window.InvestPlot.initialized) return;
@@ -828,10 +541,10 @@ console.log('[InvestPlot] 📄 Script loaded');
         }
     });
 
-    // === Публичный API ===
+    // === Public API ===
 
-    // Debug: добавить кнопку в консоль
-    console.log('[InvestPlot] Для обновления графика введите: InvestPlot.update()');
+    // Debug
+    console.log('[InvestPlot] For chart update type: InvestPlot.update()');
 
     window.InvestPlot = {
         update: function() {
@@ -846,7 +559,7 @@ console.log('[InvestPlot] 📄 Script loaded');
             if (canvas) {
                 const existing = Chart.getChart(canvas);
                 if (existing) {
-                    console.log('[InvestPlot] 🛑 График остановлен и уничтожен');
+                    console.log('[InvestPlot] Chart stopped and destroyed');
                     existing.destroy();
                 }
             }
@@ -865,24 +578,24 @@ console.log('[InvestPlot] 📄 Script loaded');
         resizeNow: resizeChartsThrottled
     };
 
-    console.log('[InvestPlot] ✅ Модуль загружен и готов к работе');
+    console.log('[InvestPlot] Module loaded');
 
-    // === ЗАГРУЗКА TGLD@ ПОСЛЕ СОЗДАНИЯ ГРАФИКА ===
+    // === Load TGLD@ after chart creation ===
     window.loadTgoldToChart = function(chart, portfolioLabels, portfolioTimestamps) {
-        console.log('[InvestPlot] 🔄 loadTgoldToChart вызвана, chart:', !!chart);
+        console.log('[InvestPlot] loadTgoldToChart called, chart:', !!chart);
         if (!chart) return;
         
         const interval = window.currentInterval || 'hour';
         
         $.getJSON(`/api/invest/tickers?interval=${interval}`)
             .done(function(tickersData) {
-                console.log('[InvestPlot] 📡 Данные получены:', tickersData);
+                console.log('[InvestPlot] Ticker data received:', tickersData);
                 try {
                     if (tickersData && tickersData['TGLD@']) {
                         const tgold = tickersData['TGLD@'];
-                        console.log('[InvestPlot] 💰 TGLD@ данные:', tgold);
+                        console.log('[InvestPlot] TGLD@ data:', tgold);
                         if (tgold.prices && tgold.prices.length > 0) {
-                            console.log('[InvestPlot] 📈 TGLD prices count:', tgold.prices.length);
+                            console.log('[InvestPlot] TGLD prices count:', tgold.prices.length);
                             
                             // Преобразуем цены в формат с датами
                             const tgoldPrices = tgold.prices.map(p => ({
@@ -890,7 +603,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                                 y: p.price
                             })).sort((a, b) => a.x - b.x);
                             
-                            // Агрегация по тому же принципу, что и для портфеля
+                            // Aggregate by same logic as portfolio
                             const aggregated = aggregateTgoldData(tgoldPrices, portfolioTimestamps, interval);
                             
                             const tgoldDataset = {
@@ -905,34 +618,34 @@ console.log('[InvestPlot] 📄 Script loaded');
                             };
                             
                             if (!chart || !chart.canvas || !chart.canvas.isConnected) {
-                                console.warn('[InvestPlot] ⚠️ Chart canvas недоступен для добавления TGLD@');
+                                console.warn('[InvestPlot] Chart canvas unavailable for TGLD@');
                                 return;
                             }
                             chart.data.datasets.push(tgoldDataset);
                             chart.update('none');
-                            console.log('[InvestPlot] ✅ TGLD@ добавлен на график');
+                            console.log('[InvestPlot] TGLD@ added to chart');
                         } else {
-                            console.log('[InvestPlot] ⚠️ Нет данных TGLD prices');
+                            console.log('[InvestPlot] No TGLD prices data');
                         }
                     } else {
-                        console.log('[InvestPlot] ⚠️ Нет данных TGLD@ в tickersData');
+                        console.log('[InvestPlot] No TGLD@ in tickersData');
                     }
                 } catch(e) {
-                    console.error('[InvestPlot] ❌ Ошибка обработки:', e);
+                    console.error('[InvestPlot] TGLD processing error:', e);
                 }
             })
             .fail(function(xhr, status, error) {
-                console.error('[InvestPlot] ❌ Ошибка загрузки /api/invest/tickers:', error, xhr.status);
+                console.error('[InvestPlot] Error loading /api/invest/tickers:', error, xhr.status);
             });
     };
     
-    // === Агрегация данных TGLD по timestamps портфеля ===
+    // === Aggregate TGLD data by portfolio timestamps ===
     function aggregateTgoldData(prices, portfolioTimestamps, interval) {
         if (!portfolioTimestamps || portfolioTimestamps.length === 0) {
             return { data: [] };
         }
         
-        // Создаем карту цены по времени
+        // Create price map by time
         const priceMap = {};
         prices.forEach(p => {
             const key = p.x.getTime();
@@ -941,7 +654,7 @@ console.log('[InvestPlot] 📄 Script loaded');
         
         const intervalMs = interval === 'minute' ? 60000 : interval === 'hour' ? 3600000 : 86400000;
         
-        // Находим ближайшую цену для каждого timestamp портфеля
+        // Find closest price for each portfolio timestamp
         const rawData = portfolioTimestamps.map(ts => {
             const tsTime = ts.getTime();
             
@@ -956,7 +669,7 @@ console.log('[InvestPlot] 📄 Script loaded');
                 }
             });
             
-            // Если ближайшая цена более чем на интервал назад - не используем
+            // If closest price is more than interval away - skip
             if (minDiff > intervalMs * 1.5) {
                 return null;
             }
@@ -964,7 +677,7 @@ console.log('[InvestPlot] 📄 Script loaded');
             return closestPrice;
         });
         
-        // Заполняем пропуски горизонтальной линией до следующего изменения
+        // Fill gaps with last known value
         const resultData = [];
         let lastValue = null;
         
@@ -972,13 +685,13 @@ console.log('[InvestPlot] 📄 Script loaded');
             const val = rawData[i];
             
             if (val !== null) {
-                // Если есть новое значение и оно отличается от последнего - обновляем
+                // New value and different from last - update
                 if (lastValue === null || val !== lastValue) {
                     lastValue = val;
                 }
                 resultData.push(lastValue);
             } else {
-                // Пропуск - заполняем последним известным значением
+                // Gap - fill with last known
                 resultData.push(lastValue);
             }
         }
@@ -986,7 +699,7 @@ console.log('[InvestPlot] 📄 Script loaded');
         return { data: resultData };
     }
 
-    // Экспорт функции ресайза для использования из panel_resize.js
+    // Export resize function for panel_resize.js
     window.investPlotResize = resizeChartsThrottled;
 
 })(jQuery);

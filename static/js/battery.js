@@ -1,45 +1,44 @@
 
-// js/battery.js
-
 /**
- * Отправляет уровень заряда батареи на сервер
- * Вызывается независимо от видимости графика
+ * Sends battery level to server
+ * Called independently of chart visibility
  */
 window.sendBatteryLevel = function sendBatteryLevel() {
+    const dfd = $.Deferred();
     const deviceId = getOrCreateDeviceId();
-    
-    // Получаем уровень батареи
-    if (navigator.getBattery) {
-        navigator.getBattery().then(battery => {
-            const level = Math.round(battery.level * 100);
-            $.ajax({
-                url: '/api/battery',
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ device_id_local: deviceId, value: level }),
-            })
-            .done(() => {
-                // logg(`🔋 Уровень ${level}% отправлен`);
-            })
-            .fail(xhr => {
-                console.warn(`⚠️ Ошибка отправки уровня батареи: ${xhr.responseText || xhr.statusText}`);
-            });
-        }).catch(err => {
-            console.warn("⚠️ navigator.getBattery недоступен:", err);
-        });
+
+    if (!navigator.getBattery) {
+        dfd.resolve();
+        return dfd.promise();
     }
+
+    navigator.getBattery().then(battery => {
+        const level = Math.round(battery.level * 100);
+        $.ajax({
+            url: '/api/battery',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ device_id_local: deviceId, value: level }),
+        }).done(() => dfd.resolve()).fail(xhr => {
+            console.warn('Battery send error:', xhr.responseText || xhr.statusText);
+            dfd.reject(xhr);
+        });
+    }).catch(err => {
+        console.warn('navigator.getBattery unavailable:', err);
+        dfd.resolve();
+    });
+
+    return dfd.promise();
 };
 
 /**
- * Отрисовывает график батареи
- * Вызывается только при переключении на график батареи
+ * Renders battery chart
+ * Called on switch to battery chart view
  */
 function batteryLevel() {
     const deviceId = getOrCreateDeviceId();
-    // const deviceId ='mozilla50linuxuandro_mgj59o8h';
-
-    const renderChart = (level) => {
-        // 🔥 Уничтожаем график инвестиций
+        const renderChart = (level) => {
+        // Stop invest chart
         if (window.InvestPlot && typeof window.InvestPlot.stop === 'function') {
             window.InvestPlot.stop();
         }
@@ -90,13 +89,7 @@ function batteryLevel() {
 
                     const extrema = findExtrema(values, labels);
 
-
-
-                    // Создаём массив для точек экстремумов
-                    const extremaPoints = Array(values.length).fill(null);
-                    const extremaColors = [];
-
-                    // Кастомный плагин для отрисовки меток экстремумов
+                    // Custom plugin for drawing extrema labels
                     const extremaPlugin = {
                         id: 'extremaLabels',
                         afterDatasetsDraw(chart, args, options) {
@@ -104,7 +97,7 @@ function batteryLevel() {
                             const xScale = scales.x;
                             const yScale = scales.y;
 
-                            // Получаем данные из первого датасета (основной график)
+                            // Get data from first dataset
                             const values = chart.data.datasets[0].data;
                             const extrema = findExtrema(values, chart.data.labels);
 
@@ -117,14 +110,11 @@ function batteryLevel() {
                                 const x = xScale.getPixelForValue(ext.index);
                                 const y = yScale.getPixelForValue(ext.value);
 
-                                // Смещаем текст немного вверх
                                 const offsetY = ext.type === 'max' ? 0 : 25;
 
-                                // Цвет: красный для максимума, зелёный для минимума
-                                ctx.fillStyle = ext.type === 'max' ? 'rgba(194, 161, 30, 1)' : 'rgba(194, 161, 30, 1)';
+                                ctx.fillStyle = 'rgba(194, 161, 30, 1)';
 
-                                // Текст: "87% ▲" или "42% ▼"
-                                const text = `${Math.round(ext.value)}`; // % ${ext.type === 'max' ? '▲' : '▼'
+                                const text = `${Math.round(ext.value)}`;
                                 ctx.fillText(text, x, y + offsetY);
                             });
 
@@ -132,13 +122,7 @@ function batteryLevel() {
                         }
                     };
 
-                    // extrema.forEach(ext => {
-                    //     extremaPoints[ext.index] = ext.value;
-                    //     extremaColors.push(ext.type === 'max' ? '#ff0000' : '#00ff00'); // красный — макс, зелёный — мин
-                    // });
-
-
-                    // Подготовим список плагинов (extrema + midnight если доступен)
+                    // Prepare plugin list (extrema + midnight if available)
                     const plugins = [extremaPlugin];
                     if (window.MidnightLinesPlugin) {
                         try {
@@ -168,7 +152,7 @@ function batteryLevel() {
                             responsive: true,
                             maintainAspectRatio: false,
                             animation: false,
-                            devicePixelRatio: Math.min(window.devicePixelRatio || 1, 1.5),
+                            devicePixelRatio: Math.min((window.devicePixelRatio || 1) * 2, 3.0),
                             plugins: {
                                 legend: { display: false },
                                 tooltip: { enabled: false },
@@ -201,26 +185,92 @@ function batteryLevel() {
                         }
                     });
 
-                    // logg('📊 График батареи обновлён');
                 })
                 .fail(xhr => {
                     console.warn(`⚠️ Ошибка загрузки истории: ${xhr.responseText || xhr.statusText}`);
                 });
     };
 
-    // 🪫 Получаем уровень батареи для отрисовки графика
+    // Get battery level for chart render
     if (navigator.getBattery) {
         navigator.getBattery().then(battery => {
             const level = Math.round(battery.level * 100);
             renderChart(level);
         }).catch(err => {
-            console.warn("⚠️ navigator.getBattery недоступен:", err);
-            renderChart(50); // fallback значение для отрисовки
+            console.warn("navigator.getBattery unavailable:", err);
+            renderChart(50);
         });
     } else {
-        // fallback
         renderChart(50);
     }
     
     if (typeof updateToggleButtonText === 'function') updateToggleButtonText();
 }
+
+window.initBatteryUI = function initBatteryUI() {
+    if (!navigator.getBattery) return;
+    navigator.getBattery().then(battery => {
+        const updateBatteryDiv = () => {
+            const level = Math.round(battery.level * 100);
+            const charging = battery.charging;
+            const text = (charging ? '+' : '') + level + '%';
+            
+            const $el = $('#battery');
+            const $panelEl = $('#battery_indicator_panel');
+            const $fill = $('#battery_fill');
+            const $text = $('#battery_text');
+            
+            $el.text(text);
+            $text.text(text);
+            $fill.css('width', level + '%');
+            
+            $panelEl.removeClass('battery-low battery-medium battery-high');
+            
+            if (level < 25) {
+                $el.addClass('battery-low');
+                $panelEl.addClass('battery-low');
+            }
+            else if (level < 55) {
+                $el.addClass('battery-medium');
+                $panelEl.addClass('battery-medium');
+            }
+            else {
+                $el.addClass('battery-high');
+                $panelEl.addClass('battery-high');
+            }
+        };
+        updateBatteryDiv();
+        battery.addEventListener('levelchange', updateBatteryDiv);
+        battery.addEventListener('chargingchange', updateBatteryDiv);
+    });
+};
+
+window.updateBatteryChart = function updateBatteryChart() {
+    if (!window.batteryChart) {
+        batteryLevel();
+        return;
+    }
+
+    const deviceId = getOrCreateDeviceId();
+    const currentInterval = window.currentInterval || 'hour';
+
+    $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}`)
+        .done(dataArray => {
+            const labels = [];
+            const values = [];
+
+            dataArray.reverse().forEach(e => {
+                const dt = new Date(e.datetime || e.timestamp);
+                labels.push(isNaN(dt) ? 'N/A' : dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                values.push(Number(e.battery_level ?? 0));
+            });
+
+            const chart = window.batteryChart;
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = values;
+            chart.update('none');
+        })
+        .fail(xhr => {
+            console.warn(`⚠️ Ошибка обновления графика батареи: ${xhr.responseText || xhr.statusText}`);
+        });
+};

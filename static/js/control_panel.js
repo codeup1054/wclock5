@@ -58,14 +58,6 @@ function createControlPanel() {
     });
   $panelButtons.append($editBtn);
 
-  // const $settingsBtn = $('<button id="settings_btn" title="Настройки">⚙</button>')
-  //   .on('click', function() {
-  //     if (typeof window.togglePanelsModal === 'function') {
-  //       window.togglePanelsModal();
-  //     }
-  //   });
-  // $panelButtons.append($settingsBtn);
-
   $panel.append($panelButtons);
 
   // Interval buttons

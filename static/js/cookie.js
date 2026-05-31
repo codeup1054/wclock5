@@ -5,18 +5,14 @@
  * @returns {string} device_id
  */
 function getOrCreateDeviceId() {
-    // Попытка получить из cookies
     let deviceId = getCookie("device_id");
 
     if (!deviceId) {
         deviceId = navigator.userAgent.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
-        deviceId += "_" + Date.now().toString(36); // добавляем уникальность
+        deviceId += "_" + Date.now().toString(36);
 
-        // Сохраняем в cookies на 10 лет
         setCookie("device_id", deviceId, 365 * 10);
-        logg(["🆕 Новый device_id сгенерирован и сохранён в cookies:", deviceId]);
-    } else {
-        // logg(["🔁 device_id загружен из cookies:", deviceId]);
+        log(["New device_id generated:", deviceId]);
     }
 
     return deviceId;

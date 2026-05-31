@@ -1,19 +1,3 @@
-// Лимит DPR для планшетов (снижает нагрузку на GPU)
-function getSafeDPR() {
-    return Math.min(window.devicePixelRatio * 1.3 || 1, 2.0);
-}
-
-function destroyChartSafe(canvas) {
-    if (!canvas) return;
-    // Сначала обнуляем буфер, чтобы освободить GPU память
-    canvas.width = 0;
-    canvas.height = 0;
-    try {
-        const existing = Chart.getChart(canvas);
-        if (existing) existing.destroy();
-    } catch (e) { /* ignore */ }
-}
-
 function drawWeatherChart() {
     if (window._weatherChartDrawing) return;
     window._weatherChartDrawing = true;
@@ -40,31 +24,10 @@ function drawWeatherChart() {
     const windMin = -2.27
     const windMax = 6
 
-    function setupCanvasForDPR(canvas, container) {
-        if (!canvas || !container) return;
-        
-        const rect = container.getBoundingClientRect();
-        const dpr = getSafeDPR();
-        
-        const cssWidth = Math.max(1, Math.floor(rect.width));
-        const cssHeight = Math.max(1, Math.floor(rect.height));
-        
-        const bufferWidth = Math.floor(cssWidth * dpr);
-        const bufferHeight = Math.floor(cssHeight * dpr);
-        
-        canvas.style.width = cssWidth + 'px';
-        canvas.style.height = cssHeight + 'px';
-        canvas.width = bufferWidth;
-        canvas.height = bufferHeight;
-        
-        return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr };
-    }
-
     $.getJSON('api/charts_data', function(data) {
-        // console.log('📊 Данные графика:', data);
 
         if (!Array.isArray(data)) {
-            console.warn('❗ Неверный формат данных');
+            console.warn('Invalid data format');
             window._weatherChartDrawing = false;
             return;
         }
@@ -113,9 +76,9 @@ function drawWeatherChart() {
         const prevDate = new Date(rawTimestamps[prevIndex]);
 
 
-        logg(['closestIndex:', closestIndex, 'prevIndex:', prevIndex, 'now:', (now-prevDate)/1000/120, 'prevDate:', prevDate ]);
+        log(['closestIndex:', closestIndex, 'prevIndex:', prevIndex, 'now:', (now-prevDate)/1000/120, 'prevDate:', prevDate ]);
 
-        // Плагин для линии "сейчас" и кастомных X-меток
+        // "now" line plugin
         const customXAxisPlugin = {
             id: 'customXAxisPlugin',
             afterDraw: (chart) => {
@@ -136,12 +99,12 @@ function drawWeatherChart() {
                 const ratio = (nowTime - tPrev) / (tNext - tPrev );
                 
 
-                // logg(['closestIndex:', closestIndex, 'prevIndex:', prevIndex, 'now:', (nowTime - prevDate) / 1000 / 120, 'prevDate:', prevDate]);
+                // log(['closestIndex:', closestIndex, 'prevIndex:', prevIndex, 'now:', (nowTime - prevDate) / 1000 / 120, 'prevDate:', prevDate]);
 
 
                 ctx.save();
                 
-                // --- горизонтальная линия температуры 0°C ---
+                // --- horizontal 0°C temp line ---
                 const yTemp0 = scales.y_temp.getPixelForValue(0);
                 ctx.strokeStyle = '#ff5900ff'; // цвет линии температуры
                 ctx.lineWidth = 5;
@@ -151,7 +114,7 @@ function drawWeatherChart() {
                 ctx.lineTo(chart.chartArea.right, yTemp0);
                 ctx.stroke();
 
-                // --- горизонтальная линия ветра 0 ---
+                // --- horizontal 0 wind line ---
                 const yWind0 = scales.y_wind.getPixelForValue(0);
                 ctx.strokeStyle = '#ffffffaa'; // цвет линии ветра
                 ctx.lineWidth = 4;
@@ -161,9 +124,7 @@ function drawWeatherChart() {
                 ctx.lineTo(chart.chartArea.right, yWind0);
                 ctx.stroke();
 
-                // --- вертикальная линия "сейчас" ---
-                // const xNow = scales.x.getPixelForTick(prevIndex)  + ratio * (scales.x.getPixelForTick(closestIndex) - scales.x.getPixelForTick(prevIndex));
-                
+                // --- vertical "now" line ---
                 const xNow = scales.x.getPixelForTick(closestIndex - 1 ) + ratio * (scales.x.getPixelForTick(closestIndex) - scales.x.getPixelForTick(prevIndex));
                 ctx.strokeStyle = '#ffc941ff';
                 ctx.lineWidth = 3;
@@ -173,7 +134,7 @@ function drawWeatherChart() {
                 ctx.lineTo(xNow, yWind0);
                 ctx.stroke();
 
-                // --- вертикальная линия через 5 шагов прогноза ---
+                // --- vertical forecast line (5 steps ahead) ---
                 const xForecast = scales.x.getPixelForTick(closestIndex + 5);
                 ctx.strokeStyle = '#ffc531ff';
                 ctx.lineWidth = 3;
@@ -186,7 +147,7 @@ function drawWeatherChart() {
 
 
                 
-                // --- X метки с поворотом 60° ---
+                // --- X labels with 60° rotation ---
                 const yTempMin = scales.y_temp.getPixelForValue(tempMin-0.5);
                 ctx.fillStyle = 'rgba(182, 238, 255, 0.9)';
                 ctx.font = `${FONT_SIZE}px sans-serif`;
@@ -299,7 +260,6 @@ function drawWeatherChart() {
                     x: {
                         position: 'top',
                         grid: { color: '#ffffff33', lineWidth: 1, drawOnChartArea: true, drawTicks: false },
-                        // ticks: { font: { size: FONT_SIZE }, maxRotation: 60, minRotation: 60, autoSkip: false }
                     },
                     y_temp: {
                         type: 'linear', display: true, position: 'left', min: tempMin, max: tempMax, offset: true,
@@ -327,7 +287,7 @@ function drawWeatherChart() {
 
         window._weatherChartDrawing = false;
     }).fail(() => { 
-        console.error('Не удалось загрузить данные погоды'); 
+        console.error('Failed to load weather data'); 
         window._weatherChartDrawing = false;
     });
 }
@@ -340,7 +300,7 @@ $(document).on('panelTempRangeChange', function(e) {
 
 // Слушатель изменения диапазона температур
 $(document).on('weatherTempRangeChange', function(e, min, max) {
-    console.log('[Weather] Диапазон изменён:', min, max);
+    console.log('[Weather] Temp range changed:', min, max);
     drawWeatherChart();
 });
 

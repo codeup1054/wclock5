@@ -86,65 +86,6 @@ const getYScale = (chart, datasetIndex=0) => {
 };
 
 /* -------------------------------------------------- */
-/* CHART BANNER                                       */
-/* -------------------------------------------------- */
-
-window.ChartBannerPlugin = {
-
-id: 'chartBanner',
-
-defaults: {
-enabled: true
-},
-
-afterDraw(chart) {
-
-    if (!this.options?.enabled) return;
-    if (!window.ChartBannerData) return;
-
-    const { ctx, chartArea } = chart;
-    const { capital, absChange, pctChange, updateTime } = window.ChartBannerData;
-
-    if (capital == null) return;
-
-    const right = chartArea.right;
-    const bottom = chartArea.bottom;
-
-    ctx.save();
-
-    ctx.textAlign = 'right';
-
-    ctx.font = "48px sans-serif";
-    ctx.fillStyle = "#ff4e07";
-    ctx.fillText(`₽${capital.toLocaleString('ru-RU')}`, right-20, bottom-80);
-
-    ctx.font = "bold 26px sans-serif";
-    ctx.fillStyle = absChange >= 0 ? "#2ecc71" : "#e74c3c";
-
-    ctx.fillText(
-        `${absChange >= 0 ? "+" : ""}${Math.abs(absChange).toLocaleString('ru-RU')} ${pctChange.toFixed(2)}%`,
-        right-20,
-        bottom-40
-    );
-
-    if (updateTime) {
-
-        ctx.font = "20px sans-serif";
-        ctx.fillStyle = "#888";
-
-        ctx.fillText(
-            "обновлено: " + updateTime.toLocaleTimeString("ru-RU"),
-            right-20,
-            chartArea.top-20
-        );
-    }
-
-    ctx.restore();
-}
-
-};
-
-/* -------------------------------------------------- */
 /* EXTREMA LABELS                                     */
 /* -------------------------------------------------- */
 

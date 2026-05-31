@@ -26,8 +26,6 @@ app = Flask(__name__,
             static_url_path="/static"
             )
 
-# app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-
 # ================================
 # Вспомогательные функции
 # ================================
@@ -164,8 +162,6 @@ def battery():
             device_id = data.get('device_id_local')
 
             battery_level = data.get('value')  # или 'battery_level' — смотрите, как отправляется
-
-            # timestamp = data.get('timestamp', datetime.now(timezone.utc).isoformat())
 
             if not (device_id and battery_level is not None):
                 return jsonify({'error': 'device_id_local and value required'}), 400
@@ -345,10 +341,13 @@ def cached_invest(endpoint, db_paths, params, generator):
     data = generator()
     
     # Write cache atomically
-    tmp = cache_file + ".tmp"
+    tmp = cache_file + "." + str(os.getpid()) + ".tmp"
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False)
-    os.replace(tmp, cache_file)
+    try:
+        os.replace(tmp, cache_file)
+    except FileNotFoundError:
+        pass  # another request already cached
     
     return data
 
@@ -363,34 +362,6 @@ def get_invest_db():
     conn = sqlite3.connect(INVEST_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
-
-# @app.route("/api/invest/portfolio")
-# def api_invest_portfolio():
-
-#     print(f"🔍 [DEBUG] INVEST_DB_PATH = {INVEST_DB_PATH}")
-#     print(f"📁 [DEBUG] Файл существует: {os.path.exists(INVEST_DB_PATH)}")
-
-#     conn = get_invest_db()
-#     cur = conn.cursor()
-#     cur.execute("""
-#         SELECT instrument_type, name, ticker, quantity, price, value
-#         FROM portfolio_positions
-#         WHERE timestamp = (SELECT MAX(timestamp) FROM portfolio_positions)
-#         ORDER BY value DESC
-#     """)
-#     rows = cur.fetchall()
-#     conn.close()
-
-#     positions = [
-#         {
-#             "type": row["instrument_type"],
-#             "name": row["name"] or row["ticker"],
-#             "quantity": round(row["quantity"], 4),
-#             "value": round(row["value"], 2)
-#         }
-#         for row in rows if row["value"] > 0
-#     ]
-#     return jsonify({"positions": positions})
 
 @app.route("/api/invest/history")
 def api_invest_history():
@@ -652,8 +623,6 @@ def index():
 
 if __name__ == "__main__":
     print("🚀 Запуск сервера Flask...")
-    # app.config['TEMPLATES_AUTO_RELOAD'] = True
-    
     PORT = int(os.environ.get("PORT", "5001")) 
     print(f"🌐 Порт: {PORT}")
     app.run(host="0.0.0.0", port=PORT, debug=True)

@@ -70,7 +70,7 @@
     function applyPanelConfig() {
         console.log('[EditMode] applyPanelConfig called');
         
-        // Сначала проверяем localStorage
+        // First check localStorage
         const localConfig = loadPanelConfig();
         console.log('[EditMode] localConfig:', localConfig);
         if (localConfig) {
@@ -79,7 +79,7 @@
             return;
         }
         
-        // Если нет в localStorage - пробуем API с device_id
+        // If not in localStorage, try API with device_id
         const isDesktop = window.innerWidth >= 1024;
         const configType = isDesktop ? 'desktop' : 'tablet';
         const deviceId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : 'default';
@@ -194,7 +194,7 @@ function normalizePanelPosition(panel) {
         panel.style.height = `${Math.round(height)}px`;
     }
 
-    // Adjust text sizes inside press_humidity_temp_panel to be proportional to panel size
+    // Adjust text sizes inside press_humidity_temp_panel to be proportional
     function adjustTextSizesForPressPanel(panel) {
         const p = panel || document.getElementById('press_humidity_temp_panel');
         if (!p) return;
@@ -254,7 +254,7 @@ function normalizePanelPosition(panel) {
         }
         
         btn.innerHTML = '⛶';
-        btn.title = 'На весь экран';
+        btn.title = 'Toggle fullscreen';
         
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -278,20 +278,6 @@ function normalizePanelPosition(panel) {
         let isResizing = false;
         let currentHandle = null;
         let startX, startY, startWidth, startHeight, startTop, startLeft;
-
-        function setButtonsDisabled(disabled) {
-            const fullscreen = document.getElementById('fullscreen');
-            const reload = document.getElementById('reload');
-            if (fullscreen) fullscreen.classList.toggle('panel-dragging', disabled);
-            if (reload) reload.classList.toggle('panel-dragging', disabled);
-        }
-
-        function getClientPos(e) {
-            if (e.touches && e.touches.length > 0) {
-                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
-            return { x: e.clientX, y: e.clientY };
-        }
 
         function onResizeStart(e) {
             if (!document.body.classList.contains('edit-mode')) return;
@@ -369,20 +355,6 @@ function normalizePanelPosition(panel) {
     function initDrag(panel) {
         let isDragging = false;
         let startX, startY, startTop, startLeft;
-
-        function setButtonsDisabled(disabled) {
-            const fullscreen = document.getElementById('fullscreen');
-            const reload = document.getElementById('reload');
-            if (fullscreen) fullscreen.classList.toggle('panel-dragging', disabled);
-            if (reload) reload.classList.toggle('panel-dragging', disabled);
-        }
-
-        function getClientPos(e) {
-            if (e.touches && e.touches.length > 0) {
-                return { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
-            return { x: e.clientX, y: e.clientY };
-        }
 
         function onDragStart(e) {
             if (!document.body.classList.contains('edit-mode')) return;
@@ -589,7 +561,7 @@ function normalizePanelPosition(panel) {
         }
     }
 
-    // Масштабирование содержимого панелей при ресайзе
+    // Content scaling for panels during resize
     const PANEL_CONTENT_SELECTORS = {
         'wind_cond_precip_panel': '#wind_cond_precip',
         'press_humidity_temp_panel': '#press_humidity_temp',
@@ -638,14 +610,11 @@ function normalizePanelPosition(panel) {
             if (!panel) return;
             
             panel.classList.add('clock-panel');
-            // Header removed: avoid adding header inside panels (keep content tight to top)
-            // Disable fullscreen on weather_panel click as a safety measure
             if (panel.id === 'weather_panel') {
                 panel.addEventListener('click', function(e) {
                     e.stopPropagation();
                 });
             }
-            // Ensure chart scale default per panel
             const defaultScale = DEFAULT_PANEL_CHART_SCALES[id] || 1;
             panel.dataset.chartScale = defaultScale;
             initFullscreenButton(panel);

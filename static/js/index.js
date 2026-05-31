@@ -1,36 +1,21 @@
 /**
- * index.js — основной модуль приложения Weather Clock
- * Инициализирует UI, часы, батарею, погоду и инвестиции.
+ * index.js — main app module
+ * Initializes UI, clock, weather, battery, invest panels.
  */
 
 $(document).ready(function () {
     'use strict';
 
-    // === ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ===
     let wakeLock = null;
 
-    // === УТИЛИТА ЛОГИРОВАНИЯ ===
-    window.logg = function (msg, console_log = true) {
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('log') !== '1') return;
-
-        const now = new Date().toLocaleTimeString();
-        if (console_log) console.log(`logg:`, msg);
-
-        const _msg = JSON.stringify(msg, null, 2);
-        $('#console').prepend(`<div>[${now}] ${_msg}</div>`);
-        const $consoleDivs = $('#console div');
-        if ($consoleDivs.length > 70) $consoleDivs.last().remove();
-    };
-
-    // === ЧАСЫ ===
+    // === CLOCK ===
     let clockTimer = null;
     let _prevClock = null, _prevDay = null, _prevMonth = null, _prevWeekday = null;
 
     function updateClock() {
-        const months = ["январь", "февраль", "март", "апрель", "май", "июнь",
-            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
-        const weekdays = ["вс", "пн", "вт", "ср", "чт", "пт", "сб"];
+        const months = ["january", "february", "march", "april", "may", "june",
+            "july", "august", "september", "october", "november", "december"];
+        const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
         const now = new Date();
 
         const hh = String(now.getHours()).padStart(2, '0');
@@ -86,11 +71,11 @@ $(document).ready(function () {
         };
     }
 
-    // === ПОГОДА ===
+    // === WEATHER ===
     window.updateWeatherData = function () {
         $.getJSON('/api/weather')
             .done(data => {
-                window.logg('🌦️ погода ' + data.fact.datetime.substring(11, 16));
+                log('weather ' + data.fact.datetime.substring(11, 16));
 
                 const fact = data.fact;
                 $('#fact_condition').attr('src', 'https://pogoda.mail.ru' + fact.icon_url);
@@ -139,13 +124,13 @@ $(document).ready(function () {
             .fail(() => console.error('Failed to load /api/weather'));
     };
 
-    // === БАТАРЕЯ ===
+    // === BATTERY ===
     function initBattery() {
         navigator.getBattery().then(battery => {
             const updateBatteryDiv = () => {
                 const level = Math.round(battery.level * 100);
                 const charging = battery.charging;
-                const text = `${charging ? '⚡' : ''}${level}%`;
+                const text = (charging ? '+' : '') + level + '%';
                 
                 const $el = $('#battery');
                 const $panelEl = $('#battery_indicator_panel');
@@ -177,24 +162,23 @@ $(document).ready(function () {
         });
     }
 
-    // === FULLSCREEN & WAKE LOCK ===
+    // === WAKE LOCK & FULLSCREEN ===
     let wakeLockTimer = null;
 
     async function requestWakeLock() {
         try {
             wakeLock = await navigator.wakeLock.request('screen');
-            wakeLock.addEventListener('release', () => window.logg("🔓 WakeLock released"));
-            // Авто-освобождение через 5 минут для экономии батареи
+            wakeLock.addEventListener('release', () => log("WakeLock released"));
             clearTimeout(wakeLockTimer);
             wakeLockTimer = setTimeout(async () => {
                 if (wakeLock) {
                     try { await wakeLock.release(); } catch (e) { /* ignore */ }
                     wakeLock = null;
-                    window.logg("🔒 WakeLock auto-released after 5min");
+                    log("WakeLock auto-released after 5min");
                 }
             }, 300000);
         } catch (err) {
-            window.logg("💥 WakeLock error: " + err.message);
+            log("WakeLock error: " + err.message);
         }
     }
 
@@ -219,42 +203,7 @@ $(document).ready(function () {
         $('#forecast_1_temperature').on('click', window.updateWeatherData);
         $('#volumeChart').on('click', () => $('body').toggleClass('invest-fullscreen'));
 
-        // Export current panel configuration to console for easy copy-paste into code
-        const exportBtnConsoleHook = function() {
-            const currentConfig = {};
-            // Collect current layout for all panels
-            const panelIds = [
-                'clock_panel','date_panel','moon_panel','weather_panel','battery_indicator_panel',
-                'press_humidity_temp_panel','wind_cond_precip_panel','sun_panel','invest_panel','chart_control_panel'
-            ];
-            panelIds.forEach(id => {
-                const panel = document.getElementById(id);
-                if (!panel) return;
-                const top = panel.style.top || '';
-                const left = panel.style.left || '';
-                const right = panel.style.right || '';
-                const bottom = panel.style.bottom || '';
-                const width = panel.style.width || '';
-                const height = panel.style.height || '';
-                currentConfig[id] = { top, left, right, bottom, width, height };
-            });
-            const json = JSON.stringify(currentConfig, null, 2);
-            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(json);
-            } else {
-                console.info(json);
-            }
-        };
-        // Attach to button if exists, otherwise expose globally for debugging
-        // const expBtn = document.getElementById('export_panels_btn');
-        // if (expBtn) {
-        //     expBtn.addEventListener('click', exportBtnConsoleHook);
-        // }
-        // else {
-        //     window.exportPanelsConfig = exportBtnConsoleHook;
-        // }
-
-        // Секретная кнопка переключения режимов
+        // Secret mode toggle
         initModeToggle();
 
         if (typeof updateToggleButtonText === 'function') updateToggleButtonText();
@@ -295,7 +244,7 @@ $(document).ready(function () {
         }
     }
 
-    // === ПЕРЕКЛЮЧЕНИЕ РЕЖИМА ===
+    // === MODE TOGGLE ===
     function initModeToggle() {
         const $btn = $('#mode_toggle');
         $btn.show();
@@ -348,7 +297,7 @@ $(document).ready(function () {
 
     // === ЗАПУСК ===
     startClock();
-    initBattery();
+    if (typeof initBatteryUI === 'function') initBatteryUI();
     initUI();
     requestWakeLock();
     
@@ -360,9 +309,6 @@ $(document).ready(function () {
     // Регистрация задач для cron.js
     if (typeof Cron !== 'undefined') {
         Cron.registerTask('Weather', window.updateWeatherData);
-        if (typeof window.sendBatteryLevel === 'function') {
-            Cron.registerTask('Battery', window.sendBatteryLevel);
-        }
         Cron.start();
     } else {
         // Fallback: если cron.js не загружен

@@ -1,11 +1,97 @@
-// static/js/lib.js
+// static/js/lib.js — shared utilities
 
-// Глобальное состояние
-let currentView = 'invest'; // ← по умолчанию инвестиции
+// Global state
+let currentView = 'invest';
 let currentInterval = 'hour';
 
-// Экспортируем в window для доступа из других модулей
 window.currentView = currentView;
+
+// --- DPR / Canvas helpers ---
+
+function getSafeDPR(maxDPI) {
+    return Math.min(window.devicePixelRatio || 1, maxDPI || 2.0);
+}
+
+function setupCanvasForDPR(canvas, container, maxDPI) {
+    if (!canvas || !container) return;
+    const rect = container.getBoundingClientRect();
+    const dpr = getSafeDPR(maxDPI);
+    const cssWidth = Math.max(1, Math.floor(rect.width));
+    const cssHeight = Math.max(1, Math.floor(rect.height));
+    const bufferWidth = Math.floor(cssWidth * dpr);
+    const bufferHeight = Math.floor(cssHeight * dpr);
+    canvas.style.width = cssWidth + 'px';
+    canvas.style.height = cssHeight + 'px';
+    canvas.width = bufferWidth;
+    canvas.height = bufferHeight;
+    return { cssWidth, cssHeight, bufferWidth, bufferHeight, dpr };
+}
+
+function destroyChartSafe(canvas) {
+    if (!canvas) return;
+    canvas.width = 0;
+    canvas.height = 0;
+    try {
+        const existing = Chart.getChart(canvas);
+        if (existing) existing.destroy();
+    } catch (e) { /* ignore */ }
+}
+
+// --- Touch / Mouse helpers ---
+
+function getClientPos(e) {
+    if (e.touches && e.touches.length > 0) {
+        return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+    return { x: e.clientX, y: e.clientY };
+}
+
+// --- Debounce / Throttle ---
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func.apply(this, args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+function throttle(func, limit) {
+    let inThrottle = false;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => { inThrottle = false; }, limit);
+        }
+    };
+}
+
+// --- Button disable helper (for drag/resize) ---
+
+function setButtonsDisabled(disabled) {
+    const fullscreen = document.getElementById('fullscreen');
+    const reload = document.getElementById('reload');
+    if (fullscreen) fullscreen.classList.toggle('panel-dragging', disabled);
+    if (reload) reload.classList.toggle('panel-dragging', disabled);
+}
+
+// --- Logger ---
+
+window.log = function (msg, consoleLog = true) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('log') !== '1') return;
+    const now = new Date().toLocaleTimeString();
+    if (consoleLog) console.log('log:', msg);
+    const _msg = JSON.stringify(msg, null, 2);
+    $('#console').prepend(`<div>[${now}] ${_msg}</div>`);
+    const $divs = $('#console div');
+    if ($divs.length > 70) $divs.last().remove();
+};
 
 /**
  * Сохраняет состояние в localStorage
@@ -64,38 +150,12 @@ function toggleChartView() {
         }
     }
 
-    // ✅ Обновляем текст кнопки
-    // updateToggleButtonText();
-    
     // Sync toggle checkbox
     const $toggle = $('#toggle-chart-btn');
     if ($toggle.length) {
         $toggle.prop('checked', currentView === 'energy');
     }
 }
-
-/**
- * Обновляет текст кнопки переключения
- */
-// function updateToggleButtonText() {
-//     const $btn = $('#toggle-chart-btn');
-//     let text = '█';
-//     let align = currentView === 'energy' ? 'left' : 'right'; 
-
-//     if ($btn.length === 0) {
-//         const $container = $('#volumeChart').parent();
-//         $('<button></button>')
-//             .attr('id', 'toggle-chart-btn')
-//             .addClass('toggle-btn')
-//             .css('text-align', align)
-//             .text(text)
-//             .on('click', toggleChartView)
-//             .appendTo($container);
-//     } else {
-//         $btn.css('text-align', align);
-//         $btn.text(text);
-//     }
-// }
 
 /**
  * Переключает видимость модального окна со списком панелей

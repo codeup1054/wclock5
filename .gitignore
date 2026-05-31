@@ -144,5 +144,10 @@ dmypy.json
 ehthumbs.db
 Thumbs.db
 
-# Database files
+# Project artifacts
+cache/
+*.log
+nul
+start_flask.bat
+ticker_raw.json
 *.db

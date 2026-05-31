@@ -98,6 +98,18 @@
         registerTask('InvestBanner', window.InvestBanner.update);
     }
 
+    // 2. График батареи: сначала отправка на сервер, потом обновление (только в режиме energy)
+    registerTask('Battery', function() {
+        const savedView = localStorage.getItem('chartView');
+        if (savedView === 'energy') {
+            window.sendBatteryLevel().done(function() {
+                if (typeof window.updateBatteryChart === 'function') {
+                    window.updateBatteryChart();
+                }
+            });
+        }
+    });
+
     // 3. Другие виджеты можно добавить здесь или через внешний вызов
 
     // === Экспорт в глобальную область ===
