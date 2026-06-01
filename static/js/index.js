@@ -163,24 +163,25 @@ $(document).ready(function () {
     }
 
     // === WAKE LOCK & FULLSCREEN ===
-    let wakeLockTimer = null;
 
     async function requestWakeLock() {
         try {
             wakeLock = await navigator.wakeLock.request('screen');
-            wakeLock.addEventListener('release', () => log("WakeLock released"));
-            clearTimeout(wakeLockTimer);
-            wakeLockTimer = setTimeout(async () => {
-                if (wakeLock) {
-                    try { await wakeLock.release(); } catch (e) { /* ignore */ }
-                    wakeLock = null;
-                    log("WakeLock auto-released after 5min");
-                }
-            }, 300000);
+            wakeLock.addEventListener('release', () => {
+                log("WakeLock released, re-acquiring...");
+                requestWakeLock();
+            });
         } catch (err) {
             log("WakeLock error: " + err.message);
         }
     }
+
+    // Re-acquire wake lock on visibility change (screen on after sleep)
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && !wakeLock) {
+            requestWakeLock();
+        }
+    });
 
     function toggleFullscreen() {
         if (!document.fullscreenElement) {

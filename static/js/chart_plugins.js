@@ -97,7 +97,8 @@ id: "extremaLabels",
 
 afterDatasetsDraw(chart) {
 
-    if (!extremaData?.length) return;
+    const data = extremaData ?? chart?._extrema;
+    if (!data?.length) return;
 
     const { ctx, scales } = chart;
 
@@ -113,7 +114,7 @@ afterDatasetsDraw(chart) {
     // Поворачиваем текст на 90 градусов
     ctx.translate(0, 0);
     
-    for (let ext of extremaData) {
+    for (let ext of data) {
 
         const x = xScale.getPixelForValue(ext.index);
         const y = yScale.getPixelForValue(ext.value);
@@ -158,7 +159,8 @@ id: "midnightLines",
 
 afterDatasetsDraw(chart) {
 
-    if (!timestamps?.length) return;
+    const ts = timestamps ?? chart?._midnightTimestamps;
+    if (!ts?.length) return;
 
     const { ctx, chartArea, scales } = chart;
 
@@ -171,15 +173,15 @@ afterDatasetsDraw(chart) {
 
     let prevDay = null;
 
-    for (let i=0;i<timestamps.length;i++) {
+    for (let i=0;i<ts.length;i++) {
 
-        const d = new Date(timestamps[i]);
+        const d = new Date(ts[i]);
         const key = localDayKey(d);
 
         if (prevDay && prevDay !== key) {
 
             const midnight = getLocalMidnight(d);
-            const x = getXForTime(timestamps, xScale, midnight, i);
+            const x = getXForTime(ts, xScale, midnight, i);
 
             // Воскресенье (day of week = 0) - светлее
             const isSunday = d.getDay() === 0 || d.getDay() === 6;

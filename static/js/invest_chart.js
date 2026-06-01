@@ -27,9 +27,9 @@ console.log('[InvestPlot] Script loaded');
     const dailyGrowthLabelsPlugin = {
         id: 'dailyGrowthLabels',
         afterDatasetsDraw(chart) {
+            const bars = chart._dailyBars;
+            if (!bars || !bars.length) return;
             const { ctx, chartArea } = chart;
-            
-            if (!dailyBars.length) return;
             
             const xScale = chart.scales.x;
             if (!xScale) return;
@@ -38,10 +38,9 @@ console.log('[InvestPlot] Script loaded');
             ctx.font = '12px sans-serif';
             
             const chartWidth = chartArea.right - chartArea.left;
-            const labelSpacing = chartWidth / dailyBars.length;
+            const labelSpacing = chartWidth / bars.length;
             
-            dailyBars.forEach((bar, index) => {
-                // Находим примерную позицию X
+            bars.forEach((bar, index) => {
                 const x = chartArea.left + (index + 0.5) * labelSpacing;
                 const y = bar.isPositive ?  chartArea.bottom + 20 : chartArea.bottom + 23;
                 
@@ -105,10 +104,10 @@ console.log('[InvestPlot] Script loaded');
                 plugins.push(dailyGrowthLabelsPlugin);
             }
 
-            if (extrema.length > 0 && window.ExtremaPlugin) {
+            if (window.ExtremaPlugin) {
                 try {
                     const extremaPlugin = window.initChartPlugin(
-                        window.ExtremaPlugin(extrema),
+                        window.ExtremaPlugin(null),
                         { enabled: true }
                     );
                     if (extremaPlugin) plugins.push(extremaPlugin);
@@ -117,10 +116,10 @@ console.log('[InvestPlot] Script loaded');
                 }
             }
 
-            if (chartData.timestamps && chartData.timestamps.length > 0 && window.MidnightLinesPlugin) {
+            if (window.MidnightLinesPlugin) {
                 try {
                     const midnightPlugin = window.initChartPlugin(
-                        window.MidnightLinesPlugin(chartData.timestamps),
+                        window.MidnightLinesPlugin(null),
                         { enabled: true }
                     );
                     if (midnightPlugin) plugins.push(midnightPlugin);
@@ -277,6 +276,9 @@ console.log('[InvestPlot] Script loaded');
             };
 
             const chart = new Chart(ctx, config);
+            chart._extrema = extrema;
+            chart._midnightTimestamps = chartData.timestamps;
+            chart._currentInterval = currentInterval;
             console.log('[InvestPlot] Chart created (' + chartData.labels.length + ' points)');
             return chart;
         } catch (error) {
@@ -472,19 +474,33 @@ console.log('[InvestPlot] Script loaded');
                     });
                 });
 
-                // === CHART CREATION ===
-                console.log('[InvestPlot] Creating chart, labels:', labels.length, 'datasets:', datasets.length);
-                investChart = createChart(canvas, {
-                    labels,
-                    datasets,
-                    timestamps: aggregatedTimestamps
-                }, extrema);
-
-                if (!investChart) {
-                    console.error('[InvestPlot] Failed to create chart');
-                } else {
-                    console.log('[InvestPlot] Chart created, loading TGLD...');
+                // === CHART CREATION / UPDATE ===
+                if (investChart && investChart._currentInterval === currentInterval) {
+                    investChart._dailyBars = dailyBars;
+                    investChart._extrema = extrema;
+                    investChart._midnightTimestamps = aggregatedTimestamps;
+                    investChart.data.labels = labels;
+                    investChart.data.datasets[0].data = aggregatedPortfolio;
+                    while (investChart.data.datasets.length > 1) {
+                        investChart.data.datasets.pop();
+                    }
+                    investChart.update('none');
+                    console.log('[InvestPlot] Chart updated (' + labels.length + ' points)');
                     window.loadTgoldToChart(investChart, labels, aggregatedTimestamps);
+                } else {
+                    console.log('[InvestPlot] Creating chart, labels:', labels.length, 'datasets:', datasets.length);
+                    investChart = createChart(canvas, {
+                        labels,
+                        datasets,
+                        timestamps: aggregatedTimestamps
+                    }, extrema);
+
+                    if (!investChart) {
+                        console.error('[InvestPlot] Failed to create chart');
+                    } else {
+                        console.log('[InvestPlot] Chart created, loading TGLD...');
+                        window.loadTgoldToChart(investChart, labels, aggregatedTimestamps);
+                    }
                 }
 
                 isUpdating = false;
@@ -621,9 +637,14 @@ console.log('[InvestPlot] Script loaded');
                                 console.warn('[InvestPlot] Chart canvas unavailable for TGLD@');
                                 return;
                             }
-                            chart.data.datasets.push(tgoldDataset);
+                            const existingTgoldIdx = chart.data.datasets.findIndex(ds => ds.label === 'TGLD@');
+                            if (existingTgoldIdx >= 0) {
+                                chart.data.datasets[existingTgoldIdx].data = tgoldDataset.data;
+                            } else {
+                                chart.data.datasets.push(tgoldDataset);
+                            }
                             chart.update('none');
-                            console.log('[InvestPlot] TGLD@ added to chart');
+                            console.log('[InvestPlot] TGLD@', existingTgoldIdx >= 0 ? 'updated' : 'added', 'to chart');
                         } else {
                             console.log('[InvestPlot] No TGLD prices data');
                         }
