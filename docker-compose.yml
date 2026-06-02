@@ -13,6 +13,7 @@ services:
     networks:
       - wclock-net
     volumes:
+      - ./app.py:/app/app.py
       - ./templates:/app/templates
       - ./static:/app/static
       - ./parsers/invest:/app/parsers/invest
@@ -20,6 +21,7 @@ services:
       - ./invest_portfolio.db:/app/invest_portfolio.db
       - ./odintsovo_weather.db:/app/odintsovo_weather.db
       - ./cache:/app/cache
+      - ./logs:/app/logs
 
   weather-parser:
     build: .

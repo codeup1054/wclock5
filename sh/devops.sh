@@ -84,6 +84,26 @@ deploy_static() {
 }
 
 # ============================================================
+# 4. LOGS — просмотр client логов
+# ============================================================
+show_logs() {
+    local date="${1:-$(date +%Y%m%d)}"
+    local file="client_${date}.log"
+    echo -e "${CYAN}Лог за ${date}:${NC}"
+    echo ""
+    if ssh_cmd "test -f ${REMOTE_PATH}/logs/${file}"; then
+        ssh_cmd "cat ${REMOTE_PATH}/logs/${file}"
+    else
+        warn "Файл ${file} не найден на сервере"
+        echo ""
+        info "Доступные логи:"
+        ssh_cmd "ls -la ${REMOTE_PATH}/logs/ 2>/dev/null" || echo "  (нет файлов)"
+    fi
+}
+
+show_logs_today() { show_logs; }
+
+# ============================================================
 # HELP / SHORT STATUS
 # ============================================================
 short_status() {
@@ -108,6 +128,8 @@ show_menu() {
     echo " 2) 📦  Build & Deploy & Run  REMOTE"
     echo " 3) ⚡  Deploy STATIC (css/js/html только)"
     echo "─────────────────────────────"
+    echo " l) 📋  Logs — показать client log за сегодня"
+    echo " L) 📋  Logs — показать client log за указанную дату"
     echo " s) 📊  Status — проверить local + remote"
     echo " 0) ❌  Выход"
     echo ""
@@ -116,14 +138,16 @@ show_menu() {
 while true; do
     # В неинтерактивном режиме — сразу exit
     if [ $# -gt 0 ]; then
-        case "${1:-}" in
-            1|local)       local_run; exit 0 ;;
-            2|remote)      remote_deploy; exit 0 ;;
-            3|static)      deploy_static; exit 0 ;;
-            s|status)      short_status; exit 0 ;;
-            help|--help)   echo "Команды: local / remote / static / status"; exit 0 ;;
-            *)             err "Неизвестно: $1"; exit 1 ;;
-        esac
+    case "${1:-}" in
+        1|local)       local_run; exit 0 ;;
+        2|remote)      remote_deploy; exit 0 ;;
+        3|static)      deploy_static; exit 0 ;;
+        l|logs)        show_logs_today; exit 0 ;;
+        L|logs-date)   show_logs "${2:-}"; exit 0 ;;
+        s|status)      short_status; exit 0 ;;
+        help|--help)   echo "Команды: local / remote / static / logs / status"; exit 0 ;;
+        *)             err "Неизвестно: $1"; exit 1 ;;
+    esac
     fi
 
     clear
@@ -134,6 +158,8 @@ while true; do
         1|l|local)  local_run ;;
         2|r|remote) remote_deploy ;;
         3|s|static) deploy_static ;;
+        l|logs)     show_logs_today ;;
+        L)          read -rp "Дата (ГГГГММДД): " d; show_logs "$d" ;;
         s|status)   short_status ;;
         0|q|exit)   echo -e "${GREEN}Пока${NC}"; exit 0 ;;
         *)          err "Неверный выбор"; sleep 1 ;;
