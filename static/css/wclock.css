@@ -1443,3 +1443,23 @@ input:checked + .slider:before {
 .apply-temp-range:hover {
     background: #3ddbb5;
 }
+
+#mem-info {
+    position: fixed;
+    bottom: 2px;
+    left: 4px;
+    font-size: 10px;
+    font-family: monospace;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(0, 0, 0, 0.6);
+    padding: 2px 6px;
+    border-radius: 3px;
+    pointer-events: none;
+    z-index: 9999;
+    white-space: pre;
+    line-height: 1.3;
+}
+#mem-info.visible {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.8);
+}

@@ -615,6 +615,39 @@ def index():
     return render_template("index.html", show_invest=show_invest, PAGE_REВOAD_MIN=int(get_settings().get("PAGE_RELOAD_MIN", 4320)))
 
 
+# === API логов клиента ===
+
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+
+@app.route("/api/log", methods=["POST"])
+def api_log():
+    try:
+        data = request.get_json(silent=True)
+        if not data:
+            return jsonify({"ok": False}), 400
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        session_id = data.get("session", "?")
+        events = data.get("events", [])
+        context = data.get("context", {})
+
+        # Один файл на день
+        log_file = os.path.join(LOG_DIR, f"client_{datetime.now().strftime('%Y%m%d')}.log")
+
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"\n--- [{now}] session={session_id} ---\n")
+            if context:
+                f.write(f"  ctx: {json.dumps(context, ensure_ascii=False)}\n")
+            for ev in events:
+                f.write(f"  {ev.get('t', '?')} — {ev.get('m', '?')}\n")
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"[Log] Error: {e}")
+        return jsonify({"ok": False}), 500
+
+
 
 
 # ================================

@@ -181,6 +181,11 @@ $(document).ready(function () {
         if (!document.hidden && !wakeLock) {
             requestWakeLock();
         }
+        window._pageHidden = document.hidden;
+        pageLog('visibility: ' + (document.hidden ? 'hidden' : 'visible'));
+        if (!document.hidden && typeof window.updateWeatherData === 'function') {
+            window.updateWeatherData();
+        }
     });
 
     function toggleFullscreen() {
@@ -321,4 +326,193 @@ $(document).ready(function () {
             })
             .fail(() => setInterval(window.updateWeatherData, 1800000)); // 30 мин
     }
+
+    // === ПАМЯТЬ, ЛОГИРОВАНИЕ ЗАКРЫТИЯ, АВТОПЕРЕЗАГРУЗКА ===
+
+    const PAGE_LOAD_TIME = Date.now();
+    const RELOAD_INTERVAL = 15 * 60 * 1000; // 15 минут
+    const MEM_CHECK_INTERVAL = 10 * 1000;   // 10 сек
+    const CRITICAL_MEM_RATIO = 0.85;         // 85% от лимита — перезагрузка
+    const FLUSH_INTERVAL = 30_000;           // сброс лога на сервер каждые 30 сек
+
+    // --- Логирование жизненного цикла страницы с отправкой на сервер ---
+
+    const _sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    let _logBuffer = [];
+    let _flushTimer = null;
+
+    function _getContext() {
+        const mem = performance.memory;
+        const charts = [];
+        if (window.weatherChart) charts.push('W');
+        if (window.InvestPlot?.getChart?.()) charts.push('I');
+        if (window.batteryChart) charts.push('B');
+        return {
+            mem_used: mem ? mem.usedJSHeapSize : null,
+            mem_limit: mem ? mem.jsHeapSizeLimit : null,
+            mem_total: mem ? mem.totalJSHeapSize : null,
+            charts: charts.join(','),
+            uptime_ms: Date.now() - PAGE_LOAD_TIME,
+            hidden: document.hidden,
+            wake_lock: !!window._wakeLockActive,
+            url: location.href
+        };
+    }
+
+    function pageLog(msg) {
+        const entry = { t: new Date().toISOString(), m: msg };
+        // В localStorage на случай если sendBeacon не сработает
+        try {
+            let log = JSON.parse(localStorage.getItem('wclock_page_log') || '[]');
+            log.push(entry);
+            if (log.length > 100) log = log.slice(-100);
+            localStorage.setItem('wclock_page_log', JSON.stringify(log));
+        } catch(e) {}
+        // В буфер для отправки на сервер
+        _logBuffer.push(entry);
+    }
+
+    // Фактическая отправка на сервер
+    function _flushLog(context) {
+        if (_logBuffer.length === 0) return;
+        const events = _logBuffer.splice(0);
+        const payload = JSON.stringify({ session: _sessionId, events, context: context || _getContext() });
+        // sendBeacon надёжнее для beforeunload, fetch с keepalive — запасной вариант
+        try {
+            navigator.sendBeacon('/api/log', payload);
+        } catch(e) {
+            try { fetch('/api/log', { method: 'POST', body: payload, keepalive: true }); } catch(e2) {}
+        }
+    }
+
+    // Периодический сброс
+    function _startFlushTimer() {
+        if (_flushTimer) clearInterval(_flushTimer);
+        _flushTimer = setInterval(() => _flushLog(), FLUSH_INTERVAL);
+    }
+
+    // Вывести лог предыдущей сессии из localStorage
+    try {
+        const prevLog = JSON.parse(localStorage.getItem('wclock_page_log') || '[]');
+        if (prevLog.length > 0) {
+            console.log('[SessionLog] Previous session events (' + prevLog.length + '):');
+            prevLog.slice(-20).forEach(e => console.log('  ' + e.t + ' — ' + e.m));
+        }
+    } catch(e) {}
+
+    pageLog('session_start');
+    _startFlushTimer();
+
+    // События жизненного цикла — отправляем с контекстом немедленно
+    window.addEventListener('beforeunload', () => {
+        pageLog('beforeunload');
+        _flushLog();
+    });
+    window.addEventListener('pagehide', () => {
+        pageLog('pagehide');
+        _flushLog();
+    });
+    document.addEventListener('visibilitychange', () => {
+        pageLog('visibility: ' + (document.hidden ? 'hidden' : 'visible'));
+        if (!document.hidden && typeof window.updateWeatherData === 'function') {
+            window.updateWeatherData();
+        }
+        // При скрытии страницы — тоже сбрасываем лог (на случай убийства процесса)
+        if (document.hidden) _flushLog();
+    });
+
+    // --- Индикатор памяти ---
+
+    const $memInfo = $('#mem-info');
+    let memVisible = localStorage.getItem('wclock_mem_visible') === '1';
+
+    function fmtMB(bytes) {
+        if (!bytes) return '?';
+        return (bytes / (1024 * 1024)).toFixed(0);
+    }
+
+    function updateMemInfo() {
+        const mem = performance.memory;
+        const heapUsed = mem ? fmtMB(mem.usedJSHeapSize) : '?';
+        const heapTotal = mem ? fmtMB(mem.jsHeapSizeLimit) : '?';
+        const heapLimit = mem ? fmtMB(mem.totalJSHeapSize) : '?';
+
+        const charts = document.querySelectorAll('canvas').length;
+        const chartInst = [];
+        if (window.weatherChart) chartInst.push('W');
+        if (window.InvestPlot?.getChart?.()) chartInst.push('I');
+        if (window.batteryChart) chartInst.push('B');
+
+        const uptime = Math.floor((Date.now() - PAGE_LOAD_TIME) / 60000);
+        const nextReload = Math.max(0, Math.ceil((RELOAD_INTERVAL - (Date.now() - PAGE_LOAD_TIME)) / 60000));
+
+        $memInfo.text(
+            'Mem: ' + heapUsed + '/' + heapTotal + ' MB (lim:' + heapLimit + ')\n' +
+            'Charts: ' + chartInst.join('') + ' | Up: ' + uptime + 'm | Reload: ' + nextReload + 'm'
+        );
+        $memInfo.toggleClass('visible', memVisible);
+
+        // Критический уровень памяти — принудительная перезагрузка
+        if (mem && mem.usedJSHeapSize > mem.jsHeapSizeLimit * CRITICAL_MEM_RATIO) {
+            pageLog('critical_mem: ' + fmtMB(mem.usedJSHeapSize) + '/' + fmtMB(mem.jsHeapSizeLimit) + ' MB — reloading');
+            _flushLog();
+            $memInfo.css('color', '#ff4444');
+            setTimeout(() => location.reload(), 3000);
+        }
+    }
+
+    // Включить/выключить индикатор тройным кликом по часам
+    $('#clock').on('click', function() {
+        let count = parseInt($(this).data('mem-click') || '0') + 1;
+        $(this).data('mem-click', count);
+        if (count >= 3) {
+            $(this).data('mem-click', 0);
+            memVisible = !memVisible;
+            localStorage.setItem('wclock_mem_visible', memVisible ? '1' : '0');
+            $memInfo.toggleClass('visible', memVisible);
+        }
+        setTimeout(() => { if ($(this).data('mem-click') == count) $(this).data('mem-click', 0); }, 1000);
+    });
+
+    setInterval(updateMemInfo, MEM_CHECK_INTERVAL);
+    updateMemInfo();
+
+    // --- Автоперезагрузка ---
+
+    function scheduleReload() {
+        const remaining = RELOAD_INTERVAL - (Date.now() - PAGE_LOAD_TIME);
+        if (remaining <= 0) {
+            pageLog('auto_reload_15min');
+            location.reload();
+            return;
+        }
+        setTimeout(() => {
+            // Перезагружаем только если страница видима (чтобы не сбить пользователя)
+            if (!document.hidden) {
+                pageLog('auto_reload_15min');
+                location.reload();
+            } else {
+                // Если скрыта — ждём ещё 30 сек и пробуем снова
+                pageLog('auto_reload_deferred (hidden)');
+                scheduleReload();
+            }
+        }, Math.min(remaining, 30000));
+    }
+    scheduleReload();
+
+    // --- Уменьшаем частоту обновления графиков, когда страница скрыта ---
+    window._pageHidden = false;
+
+    // --- Подсчёт количества Chart.js инстансов (для отладки утечек) ---
+    window._logChartCount = function() {
+        // Chart.js хранит глобальный реестр в Chart.instances (v3) или через Chart.getChart (v4)
+        let count = 0;
+        document.querySelectorAll('canvas').forEach(c => {
+            if (Chart.getChart(c)) count++;
+        });
+        pageLog('chart_instances: ' + count);
+        return count;
+    };
+    // Проверять раз в минуту
+    setInterval(window._logChartCount, 60 * 1000);
 });
