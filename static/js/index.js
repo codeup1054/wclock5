@@ -194,6 +194,14 @@ $(document).ready(function () {
         } else document.exitFullscreen();
     }
 
+    // Авто-fullscreen на планшете (touch-устройства)
+    function autoFullscreen() {
+        // pointer:coarse — touch-only (планшеты/телефоны), НЕ мышь
+        if (matchMedia('(pointer: coarse)').matches && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().then(requestWakeLock).catch(() => {});
+        }
+    }
+
     // === ИНИЦИАЛИЗАЦИЯ ===
     function initUI() {
         $('#browser_reload').on('click', () => location.reload());
@@ -306,6 +314,7 @@ $(document).ready(function () {
     if (typeof initBatteryUI === 'function') initBatteryUI();
     initUI();
     requestWakeLock();
+    autoFullscreen();
     
     // Инициализация перетаскивания и изменения размеров панелей
     if (typeof PanelResize !== 'undefined') {
