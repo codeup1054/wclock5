@@ -7,6 +7,7 @@ import os
 import sqlite3
 import json
 import time
+import traceback
 from datetime import datetime
 from flask import Flask, jsonify, render_template, request, make_response
 
@@ -25,6 +26,17 @@ app = Flask(__name__,
             static_folder="static",  
             static_url_path="/static"
             )
+
+# Авто cache-busting: no-cache для статики
+@app.after_request
+def add_no_cache(response):
+    if request.path.startswith('/static/'):
+        response.cache_control.no_cache = True
+        response.cache_control.no_store = True
+        response.cache_control.must_revalidate = True
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 # ================================
 # Вспомогательные функции
@@ -188,13 +200,14 @@ def battery():
         else:  # GET
             device_id = request.args.get('device_id_local')
             interval = request.args.get('interval', 'hour')
+            period_param = request.args.get('period')
             
             period_map = {
                 'day': '-56 day',
                 'hour': '-14 day',
                 'minute': '-2 day'
             }
-            period = period_map.get(interval, '-14 day')
+            period = period_param if period_param else period_map.get(interval, '-14 day')
             
             limit_map = {
                 'day': 5000,
@@ -291,6 +304,37 @@ def save_panel_config(device_id):
     return jsonify({"status": "ok", "device_id": device_id})
 
 
+@app.route("/api/user_settings/<device_id>", methods=["GET"])
+def get_user_settings(device_id):
+    """Получить все настройки пользователя для device_id"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT key, value FROM user_settings WHERE device_id = ?", (device_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    settings = {row["key"]: row["value"] for row in rows}
+    return jsonify(settings)
+
+
+@app.route("/api/user_settings/<device_id>", methods=["POST"])
+def save_user_settings(device_id):
+    """Сохранить настройки пользователя для device_id"""
+    data = request.get_json()
+    if not data or "settings" not in data:
+        return jsonify({"error": "settings object required"}), 400
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    for key, value in data["settings"].items():
+        cursor.execute("""
+            INSERT OR REPLACE INTO user_settings (device_id, key, value, updated_at)
+            VALUES (?, ?, ?, ?)
+        """, (device_id, key, str(value), now))
+    conn.commit()
+    conn.close()
+    return jsonify({"status": "ok"})
+
+
 
 
 
@@ -334,11 +378,21 @@ def cached_invest(endpoint, db_paths, params, generator):
     
     # If cache exists and is newer than all DBs → serve cache
     if os.path.exists(cache_file) and os.path.getmtime(cache_file) >= db_mtime:
-        with open(cache_file, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            try:
+                os.remove(cache_file)
+            except OSError:
+                pass
     
     # Generate fresh data
     data = generator()
+    
+    # Don't cache error responses
+    if isinstance(data, dict) and data.get("_error"):
+        return data
     
     # Write cache atomically
     tmp = cache_file + "." + str(os.getpid()) + ".tmp"
@@ -346,7 +400,7 @@ def cached_invest(endpoint, db_paths, params, generator):
         json.dump(data, f, ensure_ascii=False)
     try:
         os.replace(tmp, cache_file)
-    except FileNotFoundError:
+    except (FileNotFoundError, OSError):
         pass  # another request already cached
     
     return data
@@ -361,6 +415,7 @@ def get_invest_db():
         raise FileNotFoundError("Invest DB not found")
     conn = sqlite3.connect(INVEST_DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 @app.route("/api/invest/history")
@@ -370,70 +425,107 @@ def api_invest_history():
     bucket_size = {'minute': 600, 'hour': 3600, 'day': 86400}.get(interval, 3600)
 
     def generate():
-        conn = get_invest_db()
-        cur = conn.cursor()
+        if not os.path.exists(INVEST_DB_PATH):
+            return {"_error": "Invest DB not found", "_error_code": 404}
+        try:
+            conn = get_invest_db()
+            cur = conn.cursor()
 
-        cur.execute("""
-            SELECT timestamp, SUM(value) AS total, MAX(value) AS max_pos
-            FROM portfolio_positions
-            WHERE timestamp >= datetime('now', ?)
-            GROUP BY timestamp
-            ORDER BY timestamp ASC
-        """, (period,))
-        rows = cur.fetchall()
-
-        if not rows:
+            # Сырые данные за последние 3 дня
             cur.execute("""
                 SELECT timestamp, SUM(value) AS total, MAX(value) AS max_pos
                 FROM portfolio_positions
+                WHERE timestamp >= datetime('now', '-3 day')
                 GROUP BY timestamp
                 ORDER BY timestamp ASC
             """)
-            rows = cur.fetchall()
+            raw_rows = cur.fetchall()
 
-        if not rows:
+            # Часовые свечи за запрошенный период
+            cur.execute("""
+                SELECT timestamp, close AS total, close AS max_pos
+                FROM portfolio_hourly
+                WHERE timestamp >= datetime('now', ?)
+                ORDER BY timestamp ASC
+            """, (period,))
+            hourly_rows = cur.fetchall()
+
+            # Если нет ни сырых, ни часовых — пробуем все сырые (обратная совместимость)
+            if not raw_rows and not hourly_rows:
+                cur.execute("""
+                    SELECT timestamp, SUM(value) AS total, MAX(value) AS max_pos
+                    FROM portfolio_positions
+                    GROUP BY timestamp
+                    ORDER BY timestamp ASC
+                """)
+                raw_rows = cur.fetchall()
+
+            if not raw_rows and not hourly_rows:
+                conn.close()
+                return {}
+
+            # Объединяем и сортируем
+            all_ts = {}
+            for row in raw_rows:
+                ts = row["timestamp"]
+                total = row["total"]
+                if total is None:
+                    continue
+                all_ts[ts] = round(total, 2)
+            for row in hourly_rows:
+                ts = row["timestamp"]
+                total = row["total"]
+                if total is None:
+                    continue
+                if ts not in all_ts:
+                    all_ts[ts] = round(total, 2)
+
+            aggregated = {}
+            latest_ts = None
+
+            for ts in sorted(all_ts.keys()):
+                total = all_ts[ts]
+                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                bucket_epoch = int(dt.timestamp() / bucket_size) * bucket_size
+                aggregated[str(bucket_epoch)] = (ts, total)
+                if latest_ts is None or ts > latest_ts:
+                    latest_ts = ts
+
+            # Последние позиции — всегда из portfolio_positions
+            cur.execute("""
+                SELECT instrument_type, name, ticker, quantity, value
+                FROM portfolio_positions
+                WHERE timestamp = ?
+                ORDER BY value DESC
+            """, (latest_ts,))
+            latest_positions = [
+                {
+                    "type": r["instrument_type"] or "Other",
+                    "name": r["name"] or r["ticker"] or "Unknown",
+                    "quantity": round(r["quantity"], 4),
+                    "value": round(r["value"], 2),
+                }
+                for r in cur.fetchall()
+            ]
+
             conn.close()
-            return {}
 
-        aggregated = {}
-        latest_ts = None
+            result = {}
+            for bucket_key in sorted(aggregated.keys()):
+                ts, total = aggregated[bucket_key]
+                result[ts] = [{"type": "total", "name": "Портфель", "value": total}]
+            if latest_ts:
+                result[latest_ts] = latest_positions
+            return result
 
-        for row in rows:
-            ts = row["timestamp"]
-            total = round(row["total"], 2)
-            dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-            bucket_epoch = int(dt.timestamp() / bucket_size) * bucket_size
-            aggregated[str(bucket_epoch)] = (ts, total)
-            if latest_ts is None or ts > latest_ts:
-                latest_ts = ts
-
-        cur.execute("""
-            SELECT instrument_type, name, ticker, quantity, value
-            FROM portfolio_positions
-            WHERE timestamp = ?
-            ORDER BY value DESC
-        """, (latest_ts,))
-        latest_positions = [
-            {
-                "type": r["instrument_type"] or "Other",
-                "name": r["name"] or r["ticker"] or "Unknown",
-                "quantity": round(r["quantity"], 4),
-                "value": round(r["value"], 2),
-            }
-            for r in cur.fetchall()
-        ]
-
-        conn.close()
-
-        result = {}
-        for bucket_key in sorted(aggregated.keys()):
-            ts, total = aggregated[bucket_key]
-            result[ts] = [{"type": "total", "name": "Портфель", "value": total}]
-        if latest_ts:
-            result[latest_ts] = latest_positions
-        return result
+        except Exception as e:
+            print(f"[ERROR] /api/invest/history generate(): {e}")
+            traceback.print_exc()
+            return {"_error": str(e), "_error_code": 500}
 
     data = cached_invest("history", INVEST_DB_PATH, {"interval": interval, "period": period}, generate)
+    if isinstance(data, dict) and data.get("_error"):
+        return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
     return jsonify(data)
 
 
@@ -615,41 +707,11 @@ def index():
     return render_template("index.html", show_invest=show_invest, PAGE_REВOAD_MIN=int(get_settings().get("PAGE_RELOAD_MIN", 4320)))
 
 
-# === API логов клиента ===
-
-LOG_DIR = os.path.join(BASE_DIR, "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
-
-@app.route("/api/log", methods=["POST"])
-def api_log():
-    try:
-        data = request.get_json(silent=True)
-        if not data:
-            return jsonify({"ok": False}), 400
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        session_id = data.get("session", "?")
-        events = data.get("events", [])
-        context = data.get("context", {})
-
-        # Один файл на день
-        log_file = os.path.join(LOG_DIR, f"client_{datetime.now().strftime('%Y%m%d')}.log")
-
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"\n--- [{now}] session={session_id} ---\n")
-            if context:
-                f.write(f"  ctx: {json.dumps(context, ensure_ascii=False)}\n")
-            for ev in events:
-                f.write(f"  {ev.get('t', '?')} — {ev.get('m', '?')}\n")
-
-        return jsonify({"ok": True})
-    except Exception as e:
-        print(f"[Log] Error: {e}")
-        return jsonify({"ok": False}), 500
 
 
 
-
+# ================================
+# Запуск
 # ================================
 # Запуск
 # ================================
@@ -658,4 +720,4 @@ if __name__ == "__main__":
     print("🚀 Запуск сервера Flask...")
     PORT = int(os.environ.get("PORT", "5001")) 
     print(f"🌐 Порт: {PORT}")
-    app.run(host="0.0.0.0", port=PORT, debug=True)
+    app.run(host="0.0.0.0", port=PORT, debug=False)

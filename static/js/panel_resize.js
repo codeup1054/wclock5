@@ -575,10 +575,19 @@ function normalizePanelPosition(panel) {
         'wind_cond_precip_panel': { width: 457, height: 179 },
         'press_humidity_temp_panel': { width: 469, height: 172 },
         'sun_panel': { width: 492, height: 58 },
-        'clock_panel': { width: 445, height: 167 }
+        'clock_panel': { width: 445, height: 167 },
+        'moon_panel': { width: 200, height: 200 }
     };
     
     function initContentScaling(panel) {
+        if (panel.id === 'clock_panel') {
+            const observer = new ResizeObserver(() => {
+                adjustClockFontSize();
+            });
+            observer.observe(panel);
+            return;
+        }
+
         const contentSelector = PANEL_CONTENT_SELECTORS[panel.id];
         if (!contentSelector) return;
         
@@ -667,6 +676,18 @@ function normalizePanelPosition(panel) {
         });
     }
 
+    function adjustClockFontSize() {
+        const panel = document.getElementById('clock_panel');
+        if (!panel) return;
+        const clock = document.getElementById('clock');
+        if (!clock) return;
+        const w = panel.clientWidth;
+        const h = panel.clientHeight;
+        if (w < 10 || h < 10) return;
+        const fontSize = Math.max(12, Math.min(w * 0.85, h * 0.85));
+        clock.style.fontSize = fontSize + 'px';
+    }
+
     let _resizeRAF = null;
 
     function resizeCharts() {
@@ -677,6 +698,7 @@ function normalizePanelPosition(panel) {
                 $(document).trigger('weatherChartResize');
             }
             adjustTextSizesForPressPanel();
+            adjustClockFontSize();
         });
     }
 

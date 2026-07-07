@@ -68,6 +68,14 @@ const PANEL_CONFIG_DESKTOP = {
         "width": "492px",
         "height": "58px"
     },
+    "seconds_panel": {
+        "top": "5px",
+        "left": "390px",
+        "right": "",
+        "bottom": "",
+        "width": "73px",
+        "height": "75px"
+    },
     "clock_panel": {
         "top": "44px",
         "left": "5px",
@@ -89,8 +97,8 @@ const PANEL_CONFIG_DESKTOP = {
         "left": "504px",
         "right": "",
         "bottom": "",
-        "width": "98px",
-        "height": "99px"
+        "width": "200px",
+        "height": "200px"
     },
     "chart_control_panel": {
         "top": "633px",
@@ -104,96 +112,112 @@ const PANEL_CONFIG_DESKTOP = {
 
 const PANEL_CONFIG_TABLET = {
     "invest_panel": {
-        "top": "360px",
-        "left": "27px",
-        "right": "",
-        "bottom": "",
-        "width": "550px",
-        "height": "450px"
-    },
-    "invest_panel_banner": {
-        "top": "191px",
+        "top": "233px",
         "left": "5px",
         "right": "",
         "bottom": "",
-        "width": "314px",
-        "height": "400px"
+        "width": "550px",
+        "height": "371px"
     },
-    "weather_panel": {
-        "top": "193px",
-        "left": "579px",
+    "invest_panel_banner": {
+        "top": "161px",
+        "left": "5px",
         "right": "",
         "bottom": "",
-        "width": "333px",
-        "height": "212px"
+        "width": "318px",
+        "height": "348px"
+    },
+    "weather_panel": {
+        "top": "142px",
+        "left": "570px",
+        "right": "",
+        "bottom": "",
+        "width": "398px",
+        "height": "316px"
     },
     "battery_indicator_panel": {
-        "top": "5px",
-        "left": "907px",
+        "top": "70px",
+        "left": "847px",
         "right": "",
         "bottom": "",
         "width": "109px",
-        "height": "27px"
+        "height": "61px"
     },
     "battery_chart_panel": {
-        "top": "270px",
-        "left": "27px",
+        "top": "429px",
+        "left": "5px",
         "right": "",
         "bottom": "",
         "width": "370px",
-        "height": "290px"
+        "height": "175px"
     },
     "press_humidity_temp_panel": {
-        "top": "508px",
+        "top": "439px",
         "left": "580px",
         "right": "",
         "bottom": "",
-        "width": "328px",
-        "height": "120px"
+        "width": "390px",
+        "height": "165px"
     },
     "wind_cond_precip_panel": {
-        "top": "8px",
-        "left": "597px",
+        "top": "5px",
+        "left": "514px",
         "right": "",
         "bottom": "",
-        "width": "320px",
-        "height": "125px"
+        "width": "456px",
+        "height": "166px"
     },
     "sun_panel": {
-        "top": "5px",
+        "top": "10px",
         "left": "6px",
         "right": "",
         "bottom": "",
-        "width": "344px",
-        "height": "41px"
+        "width": "388px",
+        "height": "56px"
+    },
+    "seconds_panel": {
+        "top": "10px",
+        "left": "310px",
+        "right": "",
+        "bottom": "",
+        "width": "73px",
+        "height": "58px"
     },
     "clock_panel": {
-        "top": "44px",
-        "left": "0px",
+        "top": "41px",
+        "left": "5px",
         "right": "",
         "bottom": "",
         "width": "500px",
-        "height": "350px"
+        "height": "337px"
+    },
+    "seconds_panel": {
+        "top": "165px",
+        "left": "362px",
+        "right": "",
+        "bottom": "",
+        "width": "100px",
+        "height": "88px"
     },
     "date_panel": {
-        "top": "0px",
-        "left": "447px",
+        "top": "5px",
+        "left": "277px",
         "right": "",
         "bottom": "",
-        "width": "117px",
-        "height": "120px"
+        "width": "365px",
+        "height": "180px"
     },
     "moon_panel": {
-        "top": "11px",
-        "left": "504px",
+        "top": "166px",
+        "left": "431px",
         "right": "",
         "bottom": "",
-        "width": "69px",
-        "height": "69px"
+        "width": "200px",
+        "height": "200px"
     },
     "chart_control_panel": {
-        "top": "633px",
-        "left": "27px",
+        "top": "69px",
+        "left": "593px",
         "right": "",
         "bottom": "",
         "width": "250px",

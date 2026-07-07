@@ -4,6 +4,46 @@
 let currentView = 'invest';
 let currentInterval = 'hour';
 
+// Настройки в cookie (на случай если localStorage не сохраняется на планшете)
+function getSetting(name, def) {
+    var val = getCookie(name);
+    return val !== null ? val : def;
+}
+function setSetting(name, value, days) {
+    setCookie(name, value, days || 365);
+}
+
+// Сохранение/загрузка настроек на сервер (по device_id)
+function saveSettingsToServer(settingsObj) {
+    var deviceId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : '';
+    if (!deviceId) return;
+    try {
+        fetch('/api/user_settings/' + encodeURIComponent(deviceId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: settingsObj })
+        }).catch(function(err) {
+            console.warn('saveSettingsToServer error:', err);
+        });
+    } catch(e) {
+        console.warn('saveSettingsToServer error:', e);
+    }
+}
+
+function loadSettingsFromServer(callback) {
+    var deviceId = typeof getOrCreateDeviceId === 'function' ? getOrCreateDeviceId() : '';
+    if (!deviceId) { if (callback) callback({}); return; }
+    fetch('/api/user_settings/' + encodeURIComponent(deviceId))
+        .then(function(r) { return r.json(); })
+        .then(function(settings) {
+            if (callback) callback(settings);
+        })
+        .catch(function(err) {
+            console.warn('loadSettingsFromServer error:', err);
+            if (callback) callback({});
+        });
+}
+
 window.currentView = currentView;
 
 // --- DPR / Canvas helpers ---
@@ -94,24 +134,24 @@ window.log = function (msg, consoleLog = true) {
 };
 
 /**
- * Сохраняет состояние в localStorage
+ * Сохраняет состояние в cookie
  */
 function saveChartState() {
     try {
-        localStorage.setItem('chartView', currentView);
-        localStorage.setItem('chartInterval', currentInterval);
+        setSetting('chartView', currentView);
+        setSetting('chartInterval', currentInterval);
     } catch (e) {
         console.warn('Не удалось сохранить состояние:', e);
     }
 }
 
 /**
- * Загружает состояние из localStorage
+ * Загружает состояние из cookie
  */
 function loadChartState() {
     try {
-        const savedView = localStorage.getItem('chartView');
-        const savedInterval = localStorage.getItem('chartInterval');
+        const savedView = getSetting('chartView');
+        const savedInterval = getSetting('chartInterval');
         if (savedView === 'invest' || savedView === 'energy') {
             currentView = savedView;
             window.currentView = currentView; // Обновляем глобальную переменную
@@ -123,37 +163,6 @@ function loadChartState() {
         window.currentInterval = currentInterval;
     } catch (e) {
         console.warn('Не удалось загрузить состояние:', e);
-    }
-}
-
-/**
- * Переключает между графиками
- */
-function toggleChartView() {
-    if (currentView === 'energy') {
-        currentView = 'invest';
-        window.currentView = currentView;
-        saveChartState();
-        $('#battery_chart_panel').hide();
-        $('#invest_panel').show();
-        if (typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
-            window.InvestPlot.update();
-        }
-    } else {
-        currentView = 'energy';
-        window.currentView = currentView;
-        saveChartState();
-        $('#battery_chart_panel').show();
-        $('#invest_panel').hide();
-        if (typeof batteryLevel === 'function') {
-            batteryLevel();
-        }
-    }
-
-    // Sync toggle checkbox
-    const $toggle = $('#toggle-chart-btn');
-    if ($toggle.length) {
-        $toggle.prop('checked', currentView === 'energy');
     }
 }
 
@@ -182,7 +191,7 @@ window.togglePanelsModal = togglePanelsModal;
  * Создает настройки температуры (двойной слайдер)
  */
 function createTempRangeSettings() {
-    const saved = JSON.parse(localStorage.getItem('weather_panel_range') || '[-15, 25]');
+    const saved = JSON.parse(getSetting('weather_panel_range') || '[-15, 25]');
     const $div = $('<div class="panel-settings temp-range-settings"></div>');
     
     const $valuesDisplay = $('<div class="temp-range-display">' + saved[0] + '°C ... ' + saved[1] + '°C</div>');
@@ -219,7 +228,7 @@ function createTempRangeSettings() {
     $applyBtn.on('click', function() {
         const min = parseInt($minSlider.val());
         const max = parseInt($maxSlider.val());
-        localStorage.setItem('weather_panel_range', JSON.stringify([min, max]));
+        setSetting('weather_panel_range', JSON.stringify([min, max]));
         $(document).trigger('weatherTempRangeChange', [min, max]);
         
         const $label = $('[data-panel-label="weather_panel"]');
@@ -248,6 +257,7 @@ function createPanelsModal() {
         'battery_indicator_panel': 'Батарея (индикатор)',
         'battery_chart_panel': 'Батарея (график)',
         'invest_panel': 'Инвестиции',
+        'invest_banner': 'Инвестиции (баннер)',
         'chart_control_panel': 'Панель управления'
     };
     
@@ -273,7 +283,7 @@ function createPanelsModal() {
         
         let labelText = panelNames[panelId];
         if (panelId === 'weather_panel') {
-            const saved = JSON.parse(localStorage.getItem('weather_panel_range') || '[-15, 25]');
+    const saved = JSON.parse(getSetting('weather_panel_range') || '[-15, 25]');
             labelText = 'Погода';
         }
         
@@ -282,20 +292,38 @@ function createPanelsModal() {
         const $checkbox = $('<input type="checkbox">').attr('data-panel', panelId);
         
         const panel = document.getElementById(panelId);
-        const isVisible = panel && panel.style.display !== 'none';
+        const isVisible = panel && panel.style.display !== 'none' && getComputedStyle(panel).display !== 'none';
         $checkbox.prop('checked', isVisible);
         
         $checkbox.on('change', function() {
             const p = document.getElementById(panelId);
             if (p) {
-                p.style.display = this.checked ? '' : 'none';
+                const display = panelId === 'invest_banner' ? 'flex' : 'block';
+                p.style.display = this.checked ? display : 'none';
             }
-            // Save visibility state
+            if (this.checked) {
+                if (panelId === 'battery_chart_panel' && typeof batteryLevel === 'function') {
+                    var bp = document.getElementById('battery_chart_panel');
+                    var cv = document.getElementById('volumeChart');
+                    console.warn('[BatteryChart] включён', {
+                        panel: bp ? { top: bp.style.top, left: bp.style.left, w: bp.offsetWidth, h: bp.offsetHeight } : null,
+                        canvas: cv ? { w: cv.offsetWidth, h: cv.offsetHeight, dpr: window.devicePixelRatio } : null,
+                        interval: window.currentInterval || 'hour'
+                    });
+                    setTimeout(batteryLevel, 500);
+                }
+                if (panelId === 'invest_panel' && typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
+                    window.InvestPlot.update();
+                }
+            }
+            // Save visibility state to cookie
             try {
-                const config = JSON.parse(localStorage.getItem('wclock_panel_config') || '{}');
+                const config = JSON.parse(getSetting('wclock_panel_config') || '{}');
                 config[panelId] = config[panelId] || {};
                 config[panelId].visible = this.checked;
-                localStorage.setItem('wclock_panel_config', JSON.stringify(config));
+                setSetting('wclock_panel_config', JSON.stringify(config));
+                // Also save to server
+                saveSettingsToServer({ wclock_panel_config: JSON.stringify(config) });
             } catch(e) {}
         });
         
@@ -311,6 +339,84 @@ function createPanelsModal() {
             if (panelSettings[panelId] === 'tempRange') {
                 $settings.append(createTempRangeSettings());
             } else {
+                // Для инвестиций — чекбоксы вместо select
+            if (panelId === 'invest_panel') {
+                var $timeLabel = $('<label class="extrema-toggle"><input type="checkbox" id="invest_time"> время</label>');
+                var timeEnabled = getSetting('invest_panel_time', '1') !== '0';
+                $timeLabel.find('input').prop('checked', timeEnabled);
+                $timeLabel.find('input').on('change', function() {
+                    setSetting('invest_panel_time', this.checked ? '1' : '0');
+                    saveSettingsToServer({ invest_panel_time: this.checked ? '1' : '0' });
+                    $(document).trigger('panelViewChange', { panel: panelId, view: 'mode' });
+                });
+                $settings.append($timeLabel);
+
+                var $changeLabel = $('<label class="extrema-toggle"><input type="checkbox" id="invest_change"> изменения размера портфеля</label>');
+                var changeEnabled = getSetting('invest_panel_change', '1') !== '0';
+                $changeLabel.find('input').prop('checked', changeEnabled);
+                $changeLabel.find('input').on('change', function() {
+                    setSetting('invest_panel_change', this.checked ? '1' : '0');
+                    saveSettingsToServer({ invest_panel_change: this.checked ? '1' : '0' });
+                    $(document).trigger('panelViewChange', { panel: panelId, view: 'mode' });
+                });
+                $settings.append($changeLabel);
+
+                // Экстремумы
+                var $extremaLabel = $('<label class="extrema-toggle"><input type="checkbox" id="extrema-toggle"> Экстремумы</label>');
+                var extremaEnabled = getSetting('invest_panel_extrema', '0') !== '0';
+                $extremaLabel.find('input').prop('checked', extremaEnabled);
+                $extremaLabel.find('input').on('change', function() {
+                    setSetting('invest_panel_extrema', this.checked ? '1' : '0');
+                    saveSettingsToServer({ invest_panel_extrema: this.checked ? '1' : '0' });
+                    $(document).trigger('panelViewChange', { panel: panelId, view: 'extrema' });
+                });
+                $settings.append($extremaLabel);
+
+                // Interval period
+                var $periodLabel = $('<label class="extrema-toggle" style="margin-top:8px">Период: </label>');
+                var $periodSelect = $('<select class="panel-view-select" style="margin-left:4px"></select>');
+                var periodOpts = [
+                    { value: '-90 day', label: '3 месяца' },
+                    { value: '-35 day', label: '5 недель' },
+                    { value: '-7 day', label: '1 неделя' },
+                    { value: '-1 day', label: '1 день' }
+                ];
+                periodOpts.forEach(function(opt) {
+                    $periodSelect.append($('<option></option>').attr('value', opt.value).text(opt.label));
+                });
+                var savedPeriod = getSetting('invest_panel_period', '-35 day');
+                $periodSelect.val(savedPeriod);
+                $periodSelect.on('change', function() {
+                    setSetting('invest_panel_period', this.value);
+                    saveSettingsToServer({ invest_panel_period: this.value });
+                    $(document).trigger('panelViewChange', { panel: 'invest_panel', view: 'period' });
+                });
+                $periodLabel.append($periodSelect);
+                $settings.append($periodLabel);
+            } else if (panelId === 'battery_chart_panel') {
+                var $batPeriodLabel = $('<label class="extrema-toggle" style="margin-top:8px">Период: </label>');
+                var $batPeriodSelect = $('<select class="panel-view-select" style="margin-left:4px"></select>');
+                var batPeriodOpts = [
+                    { value: '-1 day', label: '1 день' },
+                    { value: '-7 day', label: '1 неделя' },
+                    { value: '-35 day', label: '5 недель' },
+                    { value: '-90 day', label: '3 месяца' }
+                ];
+                batPeriodOpts.forEach(function(opt) {
+                    $batPeriodSelect.append($('<option></option>').attr('value', opt.value).text(opt.label));
+                });
+                var savedBatPeriod = getSetting('battery_chart_period', '-7 day');
+                $batPeriodSelect.val(savedBatPeriod);
+                $batPeriodSelect.on('change', function() {
+                    setSetting('battery_chart_period', this.value);
+                    saveSettingsToServer({ battery_chart_period: this.value });
+                    if (typeof window.updateBatteryChart === 'function') {
+                        window.updateBatteryChart();
+                    }
+                });
+                $batPeriodLabel.append($batPeriodSelect);
+                $settings.append($batPeriodLabel);
+            } else {
                 // Стандартный select для других панелей
                 const $select = $('<select class="panel-view-select"></select>').attr('data-panel', panelId);
                 
@@ -320,16 +426,17 @@ function createPanelsModal() {
             });
             
             // Загружаем сохраненное значение
-            const savedValue = localStorage.getItem(panelId + '_view') || 'percent';
+            const savedValue = getSetting(panelId + '_view', 'percent');
             $select.val(savedValue);
             
             $select.on('change', function() {
-                localStorage.setItem(panelId + '_view', this.value);
-                // Оповещаем об изменении
+                setSetting(panelId + '_view', this.value);
                 $(document).trigger('panelViewChange', { panel: panelId, view: this.value });
             });
             
             $settings.append($select);
+            }
+
             } // end else
             
             $row.append($settings);
@@ -339,6 +446,19 @@ function createPanelsModal() {
         $content.append($row);
     });
     
+    // Глобальная настройка DPI для графиков
+    var $dpiRow = $('<div class="panel-row"><span>DPI графиков</span></div>');
+    var $dpiSlider = $('<input type="range" min="1" max="6" step="0.5" value="' + (getSetting('chart_dpi', '2')) + '" style="width:80px">');
+    var $dpiVal = $('<span style="min-width:24px;text-align:center;color:#ffd700">' + $dpiSlider.val() + '</span>');
+    $dpiSlider.on('input', function() {
+        $dpiVal.text(this.value);
+        setSetting('chart_dpi', this.value);
+        saveSettingsToServer({ chart_dpi: this.value });
+        $(document).trigger('dpiChange', { dpi: parseFloat(this.value) });
+    });
+    $dpiRow.append($dpiSlider, $dpiVal);
+    $content.append($dpiRow);
+
     $modal.append($content);
     $('body').append($modal);
     
@@ -383,17 +503,35 @@ $(document).ready(function() {
     // Загружаем сохраненное состояние
     loadChartState();
     
-    // Обновляем текст кнопки переключения
-    if (typeof updateToggleButtonText === 'function') updateToggleButtonText();
+    // Применяем сохранённую видимость панелей (из модалки ☰)
+    try {
+        var savedConfig = JSON.parse(getSetting('wclock_panel_config') || '{}');
+        Object.keys(savedConfig).forEach(function(panelId) {
+            var p = document.getElementById(panelId);
+            if (!p || !savedConfig[panelId]) return;
+            p.style.display = savedConfig[panelId].visible ? '' : 'none';
+        });
+    } catch(e) {}
 
-    // Показываем/скрываем панель батареи в зависимости от режима
-    if (currentView === 'energy') {
-        $('#battery_chart_panel').show();
-        $('#invest_panel').hide();
-    } else {
-        $('#battery_chart_panel').hide();
-        $('#invest_panel').show();
-    }
+    // Догружаем настройки с сервера (перезаписывают cookie)
+    loadSettingsFromServer(function(serverSettings) {
+        if (serverSettings.wclock_panel_config) {
+            try {
+                var serverConfig = JSON.parse(serverSettings.wclock_panel_config);
+                Object.keys(serverConfig).forEach(function(panelId) {
+                    var p = document.getElementById(panelId);
+                    if (!p || !serverConfig[panelId]) return;
+                    p.style.display = serverConfig[panelId].visible ? '' : 'none';
+                });
+            } catch(e) {}
+        }
+        // Применяем остальные настройки с сервера (перезаписывают cookie)
+        ['chart_dpi', 'invest_panel_extrema'].forEach(function(key) {
+            if (serverSettings[key] !== undefined) {
+                setSetting(key, serverSettings[key]);
+            }
+        });
+    });
 
     // Рисуем график в зависимости от сохраненного состояния
     if (currentView === 'energy') {
@@ -404,6 +542,12 @@ $(document).ready(function() {
         if (typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
             window.InvestPlot.update();
         }
+    }
+
+    // Если панель батареи видна — рисуем график
+    var $batteryPanel = document.getElementById('battery_chart_panel');
+    if ($batteryPanel && $batteryPanel.style.display !== 'none' && typeof batteryLevel === 'function') {
+        setTimeout(batteryLevel, 500);
     }
 });
 

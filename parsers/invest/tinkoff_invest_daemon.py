@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 import signal
 from pathlib import Path
 from dotenv import load_dotenv
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from invest_db import aggregate_old_data
 
 # Загружаем .env из корневой директории проекта
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -58,6 +60,7 @@ def init_db():
     os.makedirs(db_dir, exist_ok=True)  
     
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA busy_timeout = 5000")
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -82,6 +85,18 @@ def init_db():
     ''')
 
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS portfolio_hourly (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL UNIQUE,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            volume INTEGER DEFAULT 0
+        )
+    ''')
+
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -92,6 +107,10 @@ def init_db():
     default_interval = UPDATE_INTERVAL_SEC
     cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", 
                    ("INVEST_UPDATE_INTERVAL", str(default_interval)))
+
+    # Индексы для ускорения запросов
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_positions_timestamp ON portfolio_positions(timestamp)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_history_timestamp ON portfolio_history(timestamp)")
 
     conn.commit()
     conn.close()
@@ -106,6 +125,7 @@ def money_to_float(m):
 # --- Чтение интервала из БД ---
 def get_invest_interval():
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA busy_timeout = 5000")
     cursor = conn.cursor()
     cursor.execute("SELECT value FROM settings WHERE key = 'INVEST_UPDATE_INTERVAL'")
     row = cursor.fetchone()
@@ -160,11 +180,12 @@ def save_to_sqlite(positions):
     timestamp = datetime.now(timezone.utc).isoformat()
 
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA busy_timeout = 5000")
     cursor = conn.cursor()
 
-    # Удаляем данные старше 30 дней
-    cursor.execute("DELETE FROM portfolio_history WHERE timestamp < datetime('now', '-30 days')")
-    cursor.execute("DELETE FROM portfolio_positions WHERE timestamp < datetime('now', '-30 days')")
+    # Удаляем данные старше 4 месяцев
+    cursor.execute("DELETE FROM portfolio_history WHERE timestamp < datetime('now', '-120 days')")
+    cursor.execute("DELETE FROM portfolio_positions WHERE timestamp < datetime('now', '-120 days')")
 
     for p in positions:
         qty = money_to_float(p.get("quantity"))
@@ -203,6 +224,7 @@ def generate_chart_data():
     output_file = static_dir / "invest_chart_data.js"
     
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA busy_timeout = 5000")
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     
@@ -262,7 +284,9 @@ def main():
     # Инициализация БД
     init_db()
 
+    iteration = 0
     while not shutdown:
+        iteration += 1
         try:
             interval = get_invest_interval()
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -276,6 +300,10 @@ def main():
             generate_chart_data()
 
             print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
+
+            # Агрегация старых данных: каждый 10-й цикл (~каждые 10 мин)
+            if iteration % 10 == 0:
+                aggregate_old_data()
 
         except Exception as e:
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

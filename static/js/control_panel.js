@@ -19,20 +19,6 @@ function createControlPanel() {
   const $panel = $('<div class="chart-control-panel"></div>');
   console.log('[ControlPanel] created $panel:', $panel.length);
 
-  // Toggle chart view button (slider style)
-  const $toggleBtn = $('<label class="switch toggle-btn-label"><input type="checkbox" id="toggle-chart-btn"><span class="slider"></span></label>')
-    .on('change click touchend', function(e) {
-      if (e.type === 'touchend') {
-        e.preventDefault();
-        const checkbox = this.querySelector('input');
-        checkbox.checked = !checkbox.checked;
-      }
-      if (typeof toggleChartView === 'function') {
-        toggleChartView();
-      }
-    });
-  $panel.append($toggleBtn);
-
   // Panels list button
   const $panelsBtn = $('<button id="panels-list-btn" class="toggle-btn" title="Показать/скрыть панели">☰</button>')
     .on('click', togglePanelsModal);
@@ -92,13 +78,9 @@ function createControlPanel() {
   $panel.append($intervalGroup);
 
   // Restore saved interval
-  const savedInterval = localStorage.getItem('chartInterval') || 'hour';
+  const savedInterval = getSetting('chartInterval', 'hour');
   $panel.find(`[data-interval="${savedInterval}"]`).addClass('active');
   window.currentInterval = savedInterval;
-
-  // Sync toggle with currentView
-  const $toggleCheckbox = $panel.find('#toggle-chart-btn');
-  $toggleCheckbox.prop('checked', currentView === 'energy');
 
   panelHook.appendChild($panel[0]);
   console.log('[ControlPanel] appended, children:', panelHook.children.length);

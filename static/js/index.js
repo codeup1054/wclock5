@@ -78,7 +78,7 @@ $(document).ready(function () {
                 log('weather ' + data.fact.datetime.substring(11, 16));
 
                 const fact = data.fact;
-                $('#fact_condition').attr('src', 'https://pogoda.mail.ru' + fact.icon_url);
+                $('#fact_condition').attr('src', function(_, cur) { var s = 'https://pogoda.mail.ru' + fact.icon_url; return cur !== s ? s : cur; });
                 $('#fact_temperature').text(fact.temperature);
                 $('#fact_feels_like').text(fact.feels_like);
                 $('#fact_humidity').text(fact.humidity);
@@ -96,7 +96,7 @@ $(document).ready(function () {
                 $('#fact_wind_dir_a').css({ transform: 'rotate(' + windDeg + 'deg)' });
 
                 const forecast = data.forecast_summary.parts[0];
-                $('#forecast_1_condition').attr('src', 'https://pogoda.mail.ru' + forecast.icon_url_day);
+                $('#forecast_1_condition').attr('src', function(_, cur) { var s = 'https://pogoda.mail.ru' + forecast.icon_url_day; return cur !== s ? s : cur; });
                 $('#forecast_1_temperature').text(forecast.temperature);
                 $('#forecast_1_feels_like').text(forecast.feels_like);
                 $('#forecast_1_humidity').text(forecast.humidity);
@@ -182,7 +182,6 @@ $(document).ready(function () {
             requestWakeLock();
         }
         window._pageHidden = document.hidden;
-        pageLog('visibility: ' + (document.hidden ? 'hidden' : 'visible'));
         if (!document.hidden && typeof window.updateWeatherData === 'function') {
             window.updateWeatherData();
         }
@@ -190,8 +189,14 @@ $(document).ready(function () {
 
     function toggleFullscreen() {
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().then(requestWakeLock);
-        } else document.exitFullscreen();
+            document.documentElement.requestFullscreen().then(function() {
+                requestWakeLock();
+                $('#browser_fullscreen').attr('aria-label', 'exit_fullscreen');
+            });
+        } else {
+            document.exitFullscreen();
+            $('#browser_fullscreen').attr('aria-label', 'fullscreen_browser');
+        }
     }
 
     // Авто-fullscreen на планшете (touch-устройства)
@@ -324,6 +329,9 @@ $(document).ready(function () {
     // Регистрация задач для cron.js
     if (typeof Cron !== 'undefined') {
         Cron.registerTask('Weather', window.updateWeatherData);
+        if (typeof drawWeatherChart === 'function') {
+            Cron.registerTask('WeatherChart', drawWeatherChart);
+        }
         Cron.start();
     } else {
         // Fallback: если cron.js не загружен
@@ -336,98 +344,15 @@ $(document).ready(function () {
             .fail(() => setInterval(window.updateWeatherData, 1800000)); // 30 мин
     }
 
-    // === ПАМЯТЬ, ЛОГИРОВАНИЕ ЗАКРЫТИЯ, АВТОПЕРЕЗАГРУЗКА ===
-
+    // === ПАМЯТЬ, АВТОПЕРЕЗАГРУЗКА ===
     const PAGE_LOAD_TIME = Date.now();
-    const RELOAD_INTERVAL = 15 * 60 * 1000; // 15 минут
     const MEM_CHECK_INTERVAL = 10 * 1000;   // 10 сек
     const CRITICAL_MEM_RATIO = 0.85;         // 85% от лимита — перезагрузка
-    const FLUSH_INTERVAL = 30_000;           // сброс лога на сервер каждые 30 сек
 
-    // --- Логирование жизненного цикла страницы с отправкой на сервер ---
-
-    const _sessionId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-    let _logBuffer = [];
-    let _flushTimer = null;
-
-    function _getContext() {
-        const mem = performance.memory;
-        const charts = [];
-        if (window.weatherChart) charts.push('W');
-        if (window.InvestPlot?.getChart?.()) charts.push('I');
-        if (window.batteryChart) charts.push('B');
-        return {
-            mem_used: mem ? mem.usedJSHeapSize : null,
-            mem_limit: mem ? mem.jsHeapSizeLimit : null,
-            mem_total: mem ? mem.totalJSHeapSize : null,
-            charts: charts.join(','),
-            uptime_ms: Date.now() - PAGE_LOAD_TIME,
-            hidden: document.hidden,
-            wake_lock: !!window._wakeLockActive,
-            url: location.href
-        };
-    }
-
-    function pageLog(msg) {
-        const entry = { t: new Date().toISOString(), m: msg };
-        // В localStorage на случай если sendBeacon не сработает
-        try {
-            let log = JSON.parse(localStorage.getItem('wclock_page_log') || '[]');
-            log.push(entry);
-            if (log.length > 100) log = log.slice(-100);
-            localStorage.setItem('wclock_page_log', JSON.stringify(log));
-        } catch(e) {}
-        // В буфер для отправки на сервер
-        _logBuffer.push(entry);
-    }
-
-    // Фактическая отправка на сервер
-    function _flushLog(context) {
-        if (_logBuffer.length === 0) return;
-        const events = _logBuffer.splice(0);
-        const payload = JSON.stringify({ session: _sessionId, events, context: context || _getContext() });
-        // sendBeacon надёжнее для beforeunload, fetch с keepalive — запасной вариант
-        try {
-            navigator.sendBeacon('/api/log', payload);
-        } catch(e) {
-            try { fetch('/api/log', { method: 'POST', body: payload, keepalive: true }); } catch(e2) {}
-        }
-    }
-
-    // Периодический сброс
-    function _startFlushTimer() {
-        if (_flushTimer) clearInterval(_flushTimer);
-        _flushTimer = setInterval(() => _flushLog(), FLUSH_INTERVAL);
-    }
-
-    // Вывести лог предыдущей сессии из localStorage
-    try {
-        const prevLog = JSON.parse(localStorage.getItem('wclock_page_log') || '[]');
-        if (prevLog.length > 0) {
-            console.log('[SessionLog] Previous session events (' + prevLog.length + '):');
-            prevLog.slice(-20).forEach(e => console.log('  ' + e.t + ' — ' + e.m));
-        }
-    } catch(e) {}
-
-    pageLog('session_start');
-    _startFlushTimer();
-
-    // События жизненного цикла — отправляем с контекстом немедленно
-    window.addEventListener('beforeunload', () => {
-        pageLog('beforeunload');
-        _flushLog();
-    });
-    window.addEventListener('pagehide', () => {
-        pageLog('pagehide');
-        _flushLog();
-    });
     document.addEventListener('visibilitychange', () => {
-        pageLog('visibility: ' + (document.hidden ? 'hidden' : 'visible'));
         if (!document.hidden && typeof window.updateWeatherData === 'function') {
             window.updateWeatherData();
         }
-        // При скрытии страницы — тоже сбрасываем лог (на случай убийства процесса)
-        if (document.hidden) _flushLog();
     });
 
     // --- Индикатор памяти ---
@@ -453,18 +378,15 @@ $(document).ready(function () {
         if (window.batteryChart) chartInst.push('B');
 
         const uptime = Math.floor((Date.now() - PAGE_LOAD_TIME) / 60000);
-        const nextReload = Math.max(0, Math.ceil((RELOAD_INTERVAL - (Date.now() - PAGE_LOAD_TIME)) / 60000));
 
         $memInfo.text(
             'Mem: ' + heapUsed + '/' + heapTotal + ' MB (lim:' + heapLimit + ')\n' +
-            'Charts: ' + chartInst.join('') + ' | Up: ' + uptime + 'm | Reload: ' + nextReload + 'm'
+            'Charts: ' + chartInst.join('') + ' | Up: ' + uptime + 'm'
         );
         $memInfo.toggleClass('visible', memVisible);
 
         // Критический уровень памяти — принудительная перезагрузка
         if (mem && mem.usedJSHeapSize > mem.jsHeapSizeLimit * CRITICAL_MEM_RATIO) {
-            pageLog('critical_mem: ' + fmtMB(mem.usedJSHeapSize) + '/' + fmtMB(mem.jsHeapSizeLimit) + ' MB — reloading');
-            _flushLog();
             $memInfo.css('color', '#ff4444');
             setTimeout(() => location.reload(), 3000);
         }
@@ -486,42 +408,7 @@ $(document).ready(function () {
     setInterval(updateMemInfo, MEM_CHECK_INTERVAL);
     updateMemInfo();
 
-    // --- Автоперезагрузка ---
-
-    function scheduleReload() {
-        const remaining = RELOAD_INTERVAL - (Date.now() - PAGE_LOAD_TIME);
-        if (remaining <= 0) {
-            pageLog('auto_reload_15min');
-            location.reload();
-            return;
-        }
-        setTimeout(() => {
-            // Перезагружаем только если страница видима (чтобы не сбить пользователя)
-            if (!document.hidden) {
-                pageLog('auto_reload_15min');
-                location.reload();
-            } else {
-                // Если скрыта — ждём ещё 30 сек и пробуем снова
-                pageLog('auto_reload_deferred (hidden)');
-                scheduleReload();
-            }
-        }, Math.min(remaining, 30000));
-    }
-    scheduleReload();
-
     // --- Уменьшаем частоту обновления графиков, когда страница скрыта ---
     window._pageHidden = false;
 
-    // --- Подсчёт количества Chart.js инстансов (для отладки утечек) ---
-    window._logChartCount = function() {
-        // Chart.js хранит глобальный реестр в Chart.instances (v3) или через Chart.getChart (v4)
-        let count = 0;
-        document.querySelectorAll('canvas').forEach(c => {
-            if (Chart.getChart(c)) count++;
-        });
-        pageLog('chart_instances: ' + count);
-        return count;
-    };
-    // Проверять раз в минуту
-    setInterval(window._logChartCount, 60 * 1000);
 });

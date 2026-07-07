@@ -92,8 +92,8 @@ function calculateDailyGrowthMarks(timestamps, values) {
     return marks;
 }
 
-function aggregateData(timestamps, values, interval) {
-    console.log('[InvestPlot] Aggregating data by interval:', interval);
+function aggregateData(timestamps, values, interval, labelMode) {
+    console.log('[InvestPlot] Aggregating data by interval:', interval, 'labelMode:', labelMode);
     const aggregated = {};
 
     for (let i = 0; i < timestamps.length; i++) {
@@ -127,7 +127,6 @@ function aggregateData(timestamps, values, interval) {
 
     const sortedKeys = Object.keys(aggregated).sort((a, b) => Number(a) - Number(b));
     
-    const resultLabels = [];
     const resultValues = [];
     const resultTimestamps = [];
 
@@ -159,37 +158,53 @@ function aggregateData(timestamps, values, interval) {
                 const numGaps = Math.floor(gap / intervalMs);
                 for (let g = 1; g < numGaps; g++) {
                     const interpTime = new Date(prevTime + intervalMs * g);
-                    let labelFormat;
-                    if (interval === 'day') {
-                        labelFormat = { day: '2-digit' };
-                    } else if (interval === 'hour') {
-                        labelFormat = { day: '2-digit', hour: '2-digit' };
-                    } else {
-                        labelFormat = { day: '2-digit', hour: '2-digit', minute: '2-digit' };
-                    }
-                    resultLabels.push(interpTime.toLocaleString('ru-RU', labelFormat));
                     resultValues.push(lastValidValue);
                     resultTimestamps.push(interpTime);
                 }
             }
         }
         
-        let labelFormat;
-        if (interval === 'day') {
-            labelFormat = { day: '2-digit' };
-        } else if (interval === 'hour') {
-            labelFormat = { day: '2-digit', hour: '2-digit' };
-        } else {
-            labelFormat = { day: '2-digit', hour: '2-digit', minute: '2-digit' };
-        }
-        
-        resultLabels.push(group.timestamp.toLocaleString('ru-RU', labelFormat));
         resultValues.push(currentValue);
         resultTimestamps.push(group.timestamp);
     });
 
+    // Build labels based on mode
+    const timeLabels = resultTimestamps.map(d => {
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        return hh + ':' + mm;
+    });
+    const changeLabels = buildGrowthLabels(resultValues);
+
+    var resultLabels;
+    if (labelMode === 'both') {
+        resultLabels = timeLabels.map((t, i) => t + '||' + changeLabels[i]);
+    } else if (labelMode === 'change') {
+        resultLabels = changeLabels;
+    } else {
+        resultLabels = timeLabels;
+    }
+
     console.log('[InvestPlot] Aggregated:', resultLabels.length, 'points');
     return { labels: resultLabels, values: resultValues, timestamps: resultTimestamps };
+}
+
+function buildGrowthLabels(values) {
+    const labels = [];
+    let firstValid = null;
+    for (let i = 0; i < values.length; i++) {
+        if (firstValid === null && values[i] != null && values[i] > 0) {
+            firstValid = values[i];
+        }
+        if (firstValid !== null && firstValid > 0 && values[i] != null) {
+            const growth = ((values[i] - firstValid) / firstValid) * 100;
+            const sign = growth >= 0 ? '+' : '';
+            labels.push(sign + growth.toFixed(2));
+        } else {
+            labels.push('');
+        }
+    }
+    return labels;
 }
 
 function validateGraphData(data) {

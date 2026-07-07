@@ -21,8 +21,8 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "parsers", "mail.ru", "odintso
 
 # Стартовые интервалы (в секундах)
 DEFAULT_SETTINGS = {
-    'MAIL_RU_INTERVAL':       60 * 30,        # 30 минут — парсинг mail.ru
-    'REFRESH_DATA_INTERVAL':  60 * 30,        # 30 минут — обновление данных на фронтенде
+    'MAIL_RU_INTERVAL':       120,            # 120 секунд — парсинг mail.ru
+    'REFRESH_DATA_INTERVAL':  120,            # 120 секунд — обновление данных на фронтенде
     'BATTERY_SET_INTERVAL':   60 * 10,        # 10 минут — отправка уровня батареи
     'RELOAD_PAGE_INTERVAL':   3600 * 24 * 3,  # 3 дня — полная перезагрузка страницы
 }
@@ -104,16 +104,36 @@ def init_db():
     """)
     print("✅ Таблица 'panel_configs' создана или уже существует")
 
+    # === 5. Таблица для пользовательских настроек (сохраняются по device_id) ===
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            device_id TEXT NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (device_id, key)
+        )
+    """)
+    print("✅ Таблица 'user_settings' создана или уже существует")
+
     # === 4. Настройки по умолчанию ===
     inserted = 0
+    updated = 0
     for key, value in DEFAULT_SETTINGS.items():
         cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
         if cursor.rowcount > 0:
             inserted += 1
+        else:
+            # Обновляем существующие настройки
+            cursor.execute("UPDATE settings SET value = ? WHERE key = ? AND value != ?", (str(value), key, str(value)))
+            if cursor.rowcount > 0:
+                updated += 1
 
     if inserted:
         print(f"✅ Добавлено {inserted} настроек")
-    else:
+    if updated:
+        print(f"🔄 Обновлено {updated} настроек (новые интервалы)")
+    if not inserted and not updated:
         print("ℹ️ Настройки уже существуют")
 
     # === 4. Миграция: удаление устаревших полей + добавление новых ===

@@ -146,7 +146,7 @@ def save_prices(last_prices):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-90 days')")
+    cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-120 days')")
 
     for item in last_prices:
         figi = item["figi"]

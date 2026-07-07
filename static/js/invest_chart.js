@@ -23,6 +23,7 @@ console.log('[InvestPlot] Script loaded');
     const RESIZE_DEBOUNCE_MS = 250;
     const RESIZE_THROTTLE_MS = 100;
 
+    // === X-axis labels plugin (handles mode-based rendering) ===
     // === Daily growth label plugin (below X axis) ===
     const dailyGrowthLabelsPlugin = {
         id: 'dailyGrowthLabels',
@@ -63,7 +64,7 @@ console.log('[InvestPlot] Script loaded');
 
     // === Chart creation ===
 
-    function createChart(canvas, chartData, extrema) {
+    function createChart(canvas, chartData, extrema, labelMode) {
         const hasDatasets = Array.isArray(chartData.datasets);
         const validation = validateGraphData(hasDatasets ?
             { labels: chartData.labels, values: chartData.datasets[0]?.data } :
@@ -104,7 +105,7 @@ console.log('[InvestPlot] Script loaded');
                 plugins.push(dailyGrowthLabelsPlugin);
             }
 
-            if (window.ExtremaPlugin) {
+            if (window.ExtremaPlugin && getSetting('invest_panel_extrema', '0') !== '0') {
                 try {
                     const extremaPlugin = window.initChartPlugin(
                         window.ExtremaPlugin(null),
@@ -143,11 +144,18 @@ console.log('[InvestPlot] Script loaded');
                 x: {
                     stacked: false,
                     ticks: {
-                        display: false,
+                        display: true,
                         maxRotation: 0,
                         minRotation: 0,
                         autoSkip: true,
-                        maxTicksLimit: 0
+                        maxTicksLimit: 24,
+                        font: { size: 10 },
+                        color: '#ffd900',
+                        callback: function(val, idx, ticks) {
+                            var labels = this.chart.data.labels;
+                            var label = (labels && labels[val] != null) ? String(labels[val]) : String(val);
+                            return label.includes('||') ? label.split('||') : label;
+                        }
                     },
                     grid: {
                         display: false
@@ -156,11 +164,11 @@ console.log('[InvestPlot] Script loaded');
                 y_portfolio: {
                     position: 'right',
                     stacked: false,
-                    beginAtZero: true,
                     min: Math.max(0, portfolioMin - portfolioPadding),
-                    max: Math.max(portfolioMax * 0.85, portfolioMax - portfolioPadding),
+                    max: Math.max(portfolioMax + portfolioPadding, portfolioMin + 100),
                     display: true,
                     ticks: {
+                        beginAtZero: false,
                         display: true,
                         callback: (value) => {
                             if (value >= 1e6) return '' + (value / 1e6).toFixed(2) + '';
@@ -187,7 +195,6 @@ console.log('[InvestPlot] Script loaded');
                 y_tgold: {
                     position: 'left',
                     stacked: false,
-                    beginAtZero: false,
                     ticks: {
                         display: true,
                         callback: (value) => value.toFixed(2),
@@ -221,8 +228,8 @@ console.log('[InvestPlot] Script loaded');
                 options: {
                     animation: false,
                     responsive: true,
-                    maintainAspectRatio: false, // Ключевая настройка!
-                    devicePixelRatio: getSafeDPR(1.5),
+                    maintainAspectRatio: false,
+                    devicePixelRatio: Math.min(parseFloat(getSetting('chart_dpi', '2')) || 2, 6.0) * (window.devicePixelRatio || 1),
                     clip: false,
                     layout: {
                         padding: { top: 40, right: 10, bottom: 60, left: 10 }
@@ -240,7 +247,7 @@ console.log('[InvestPlot] Script loaded');
                             mode: 'index',
                             intersect: false,
                             callbacks: {
-                                title: (items) => items[0]?.label || '',
+                                title: (items) => (items[0]?.label || '').replace(/\|\|/g, ' '),
                                 label: (ctx) => {
                                     const value = Number(ctx.parsed?.y);
                                     const dataset = ctx.dataset;
@@ -279,6 +286,7 @@ console.log('[InvestPlot] Script loaded');
             chart._extrema = extrema;
             chart._midnightTimestamps = chartData.timestamps;
             chart._currentInterval = currentInterval;
+            chart._labelMode = labelMode;
             console.log('[InvestPlot] Chart created (' + chartData.labels.length + ' points)');
             return chart;
         } catch (error) {
@@ -290,7 +298,7 @@ console.log('[InvestPlot] Script loaded');
     // === Chart update flow ===
 
     function updateInvestPlot() {
-        const savedView = localStorage.getItem('chartView');
+        const savedView = getSetting('chartView');
         if (savedView === 'energy') {
             console.log('[InvestPlot] Battery chart active, skip update');
             return;
@@ -337,20 +345,14 @@ console.log('[InvestPlot] Script loaded');
 
         initAttempts = 0;
         const canvas = document.getElementById('investChart');
-        
-        // Очищаем контекст перед рендером
-        
         const container = canvas.parentElement;
-        
-        setupCanvasForDPR(canvas, container);
-
         const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         const currentInterval = window.currentInterval || 'hour';
         console.log('[InvestPlot] Current interval:', currentInterval);
 
-        $.getJSON(`/api/invest/history?interval=${currentInterval}`)
+        var period = getSetting('invest_panel_period', '-35 day');
+        $.getJSON(`/api/invest/history?interval=${currentInterval}&period=${encodeURIComponent(period)}`)
             .done(function(rawData) {
                 console.log('[InvestPlot] Got history data:', Object.keys(rawData).length, 'records');
                 if (!rawData || Object.keys(rawData).length === 0) {
@@ -382,6 +384,8 @@ console.log('[InvestPlot] Script loaded');
 
                     portfolioValues.push(total);
                 }
+
+                showDataFreshness(timestamps);
 
                 // === TICKER DATA ===
                 const TRACKED_TICKERS = ['TGLD@'];
@@ -415,8 +419,11 @@ console.log('[InvestPlot] Script loaded');
                 }
 
                 // === AGGREGATION ===
+                const showTime = getSetting('invest_panel_time', '1') !== '0';
+                const showChange = getSetting('invest_panel_change', '1') !== '0';
+                const labelMode = showTime && showChange ? 'both' : showChange ? 'change' : 'time';
                 const { labels, values: aggregatedPortfolio, timestamps: aggregatedTimestamps } = 
-                    aggregateData(timestamps, portfolioValues, currentInterval);
+                    aggregateData(timestamps, portfolioValues, currentInterval, labelMode);
 
                 // === GROWTH MARKS ===
                 if (currentInterval === 'minute' || currentInterval === 'hour' || currentInterval === 'day') {
@@ -431,9 +438,10 @@ console.log('[InvestPlot] Script loaded');
                 }
 
                 // === EXTREMA ===
-                const extrema = window.findDailyExtrema
-                    ? window.findDailyExtrema(aggregatedPortfolio, aggregatedTimestamps)
-                    : [];
+                var extrema = [];
+                if (getSetting('invest_panel_extrema', '0') !== '0' && window.findDailyExtrema) {
+                    extrema = window.findDailyExtrema(aggregatedPortfolio, aggregatedTimestamps);
+                }
 
                 // === DATASETS ===
                 const datasets = [];
@@ -479,11 +487,14 @@ console.log('[InvestPlot] Script loaded');
                     investChart._dailyBars = dailyBars;
                     investChart._extrema = extrema;
                     investChart._midnightTimestamps = aggregatedTimestamps;
+                    investChart._labelMode = labelMode;
                     investChart.data.labels = labels;
                     investChart.data.datasets[0].data = aggregatedPortfolio;
                     while (investChart.data.datasets.length > 1) {
                         investChart.data.datasets.pop();
                     }
+                    setupCanvasForDPR(canvas, container);
+                    investChart.resize();
                     investChart.update('none');
                     console.log('[InvestPlot] Chart updated (' + labels.length + ' points)');
                     window.loadTgoldToChart(investChart, labels, aggregatedTimestamps);
@@ -493,7 +504,7 @@ console.log('[InvestPlot] Script loaded');
                         labels,
                         datasets,
                         timestamps: aggregatedTimestamps
-                    }, extrema);
+                    }, extrema, labelMode);
 
                     if (!investChart) {
                         console.error('[InvestPlot] Failed to create chart');
@@ -552,9 +563,22 @@ console.log('[InvestPlot] Script loaded');
 
     $(document).on('panelViewChange', function(e, data) {
         if (data.panel === 'invest_panel') {
-            localStorage.setItem('invest_panel_view', data.view);
+            if (data.view === 'extrema' || data.view === 'period') {
+                if (investChart) {
+                    investChart.destroy();
+                    investChart = null;
+                }
+            }
             updateInvestPlot();
         }
+    });
+
+    $(document).on('dpiChange', function() {
+        if (investChart) {
+            investChart.destroy();
+            investChart = null;
+        }
+        updateInvestPlot();
     });
 
     // === Public API ===
@@ -603,7 +627,8 @@ console.log('[InvestPlot] Script loaded');
         
         const interval = window.currentInterval || 'hour';
         
-        $.getJSON(`/api/invest/tickers?interval=${interval}`)
+        var tPeriod = getSetting('invest_panel_period', '-35 day');
+        $.getJSON(`/api/invest/tickers?interval=${interval}&period=${encodeURIComponent(tPeriod)}`)
             .done(function(tickersData) {
                 console.log('[InvestPlot] Ticker data received:', tickersData);
                 try {
@@ -643,6 +668,7 @@ console.log('[InvestPlot] Script loaded');
                             } else {
                                 chart.data.datasets.push(tgoldDataset);
                             }
+                            chart.resize();
                             chart.update('none');
                             console.log('[InvestPlot] TGLD@', existingTgoldIdx >= 0 ? 'updated' : 'added', 'to chart');
                         } else {
@@ -666,55 +692,37 @@ console.log('[InvestPlot] Script loaded');
             return { data: [] };
         }
         
-        // Create price map by time
-        const priceMap = {};
-        prices.forEach(p => {
-            const key = p.x.getTime();
-            priceMap[key] = p.y;
-        });
-        
         const intervalMs = interval === 'minute' ? 60000 : interval === 'hour' ? 3600000 : 86400000;
         
-        // Find closest price for each portfolio timestamp
-        const rawData = portfolioTimestamps.map(ts => {
-            const tsTime = ts.getTime();
-            
-            let closestPrice = null;
-            let minDiff = Infinity;
-            
-            prices.forEach(p => {
-                const diff = Math.abs(p.x.getTime() - tsTime);
-                if (diff < minDiff) {
-                    minDiff = diff;
-                    closestPrice = p.y;
-                }
-            });
-            
-            // If closest price is more than interval away - skip
-            if (minDiff > intervalMs * 1.5) {
-                return null;
-            }
-            
-            return closestPrice;
-        });
-        
-        // Fill gaps with last known value
+        // For each portfolio timestamp (bucket start), find the latest TGLD price
+        // within its interval bucket [bucketStart, bucketStart + intervalMs).
+        // This ensures hourly buckets show the actual price within that hour,
+        // not a price from the previous hour that happens to be closer by time.
         const resultData = [];
-        let lastValue = null;
+        let priceIdx = 0;
+        let lastValidPrice = null;
         
-        for (let i = 0; i < rawData.length; i++) {
-            const val = rawData[i];
+        for (let i = 0; i < portfolioTimestamps.length; i++) {
+            const bucketStart = portfolioTimestamps[i].getTime();
+            const bucketEnd = bucketStart + intervalMs;
             
-            if (val !== null) {
-                // New value and different from last - update
-                if (lastValue === null || val !== lastValue) {
-                    lastValue = val;
-                }
-                resultData.push(lastValue);
-            } else {
-                // Gap - fill with last known
-                resultData.push(lastValue);
+            // Skip TGLD prices before this bucket
+            while (priceIdx < prices.length && prices[priceIdx].x.getTime() < bucketStart) {
+                priceIdx++;
             }
+            
+            // Find the latest TGLD price within this bucket
+            let priceInBucket = null;
+            let j = priceIdx;
+            while (j < prices.length && prices[j].x.getTime() < bucketEnd) {
+                priceInBucket = prices[j].y;
+                j++;
+            }
+            
+            if (priceInBucket !== null) {
+                lastValidPrice = priceInBucket;
+            }
+            resultData.push(lastValidPrice);
         }
         
         return { data: resultData };
@@ -722,5 +730,45 @@ console.log('[InvestPlot] Script loaded');
 
     // Export resize function for panel_resize.js
     window.investPlotResize = resizeChartsThrottled;
+
+    // === Data freshness indicator ===
+
+    function showDataFreshness(rawTimestamps) {
+        if (!rawTimestamps || rawTimestamps.length === 0) return;
+        var panel = document.getElementById('invest_panel');
+        if (!panel) return;
+        var el = document.getElementById('invest_freshness');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'invest_freshness';
+            el.style.cssText = 'position:absolute;top:2px;right:4px;font-size:11px;color:#888;z-index:15;font-family:helvetica,arial,sans-serif;pointer-events:none;';
+            panel.appendChild(el);
+        }
+        var latestRaw = rawTimestamps[rawTimestamps.length - 1];
+        var latestDt;
+        var num = Number(latestRaw);
+        if (!isNaN(num) && num > 1e10) {
+            latestDt = new Date(num * 1000);
+        } else if (!isNaN(num)) {
+            latestDt = new Date(num);
+        } else {
+            latestDt = new Date(latestRaw);
+        }
+        if (!latestDt || isNaN(latestDt.getTime())) return;
+        var ageMs = Date.now() - latestDt.getTime();
+        var ageMin = Math.floor(ageMs / 60000);
+        var maxAgeMin = currentInterval === 'minute' ? 3 : currentInterval === 'day' ? 120 : 10;
+
+        var timeStr = latestDt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        if (ageMin > maxAgeMin) {
+            el.innerHTML = '⚠ ' + timeStr + ' (' + ageMin + 'мин)';
+            el.style.color = '#f44336';
+            el.style.fontWeight = 'bold';
+        } else {
+            el.innerHTML = '✓ ' + timeStr;
+            el.style.color = '#888';
+            el.style.fontWeight = 'normal';
+        }
+    }
 
 })(jQuery);

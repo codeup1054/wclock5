@@ -20,6 +20,9 @@ function drawWeatherChart() {
     const windMin = -2.27;
     const windMax = 6;
 
+    const container = canvas.parentElement;
+    setupCanvasForDPR(canvas, container);
+
     $.getJSON('api/charts_data', function(data) {
         if (!Array.isArray(data)) {
             console.warn('Invalid data format');
@@ -84,8 +87,6 @@ function drawWeatherChart() {
 
         // Full creation
         const ctx = canvas.getContext('2d');
-        const container = canvas.parentElement;
-        setupCanvasForDPR(canvas, container);
 
         const customXAxisPlugin = {
             id: 'customXAxisPlugin',

@@ -102,8 +102,8 @@ body.edit-mode .clock-panel:hover {
 }
 
 .clock-panel canvas {
-    width: 100% !important;
-    height: 100% !important;
+    width: 100%;
+    height: 100%;
     position: absolute;
     top: 0;
     left: 0;
@@ -229,7 +229,7 @@ body.edit-mode .clock-panel .panel-header {
 
 /* Battery Chart Panel */
 #battery_chart_panel {
-    display: none;
+    /* visible by default — managed by modal ☰ */
 }
 
 #battery_chart_panel canvas {
@@ -237,11 +237,7 @@ body.edit-mode .clock-panel .panel-header {
     height: 100% !important;
 }
 
-/* Show/hide panels based on view */
-body.view-energy #battery_chart_panel { display: block !important; }
-body.view-energy #invest_panel { display: none !important; }
-body.view-invest #battery_chart_panel { display: none !important; }
-body.view-invest #invest_panel { display: block !important; }
+/* Show/hide panels based on view (deprecated — управляется через модалку ☰) */
 
 /* ─── Clock Panel ───────────────────────────────────────────── */
 #clock_panel {
@@ -252,8 +248,12 @@ body.view-invest #invest_panel { display: block !important; }
 
 #clock_panel #clock {
     text-align: left;
-    font-size: 24vh;
-    line-height: 20vh;
+    position: absolute;
+    line-height: 0.8;
+    top: 50%;
+    left: 0%;
+    transform: translate(0%, -50%);
+    white-space: nowrap;
 }
 
 /* ─── Seconds Panel ──────────────────────────────────────────── */
@@ -277,11 +277,11 @@ body.view-invest #invest_panel { display: block !important; }
 
 #date_panel #day {
     position: absolute;
-    font-size: 10vw;
+    font-size: 26vw;
     line-height: 12vh;
     width: 100%;
     text-align: center;
-    top: 5vw;
+    top: 45%;
 }
 
 
@@ -292,18 +292,17 @@ body.view-invest #invest_panel { display: block !important; }
 
 /* ─── Moon Panel ───────────────────────────────────────────── */
 #moon_panel {
-    left: 1vw;
+    left: 50vw;
     top: 42vh;
 }
-
 
 
 #moon_panel {
     position: absolute;
     left: 1vw;
     top: 35vh;
-    width: auto;
-    height: auto;
+    /* width: auto;
+    height: auto; */
     z-index: 25;
 }
 
@@ -336,8 +335,8 @@ body.view-invest #invest_panel { display: block !important; }
     position: absolute;
     left: 0;
     top: 0;
-    width: 100%;
-    height: 100%;
+    width: 200px;
+    height: 200px;
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
@@ -413,7 +412,7 @@ div[id*='forecast_'] { bottom: 0vh !important; }
     font-size: 4.5vw !important;
 }
 
-#forecast_1_feels_like {bottom: 6px !important;}
+#forecast_1_feels_like {bottom: 9px !important;}
 
 
 
@@ -445,10 +444,10 @@ div[id*='forecast_'] { bottom: 0vh !important; }
 }
 
 #fact_wind_dir_a {
-    top: -1vh !important;
+    top: -3vh !important;
 }
 div#forecast_1_wind_dir_a {
-    top: 55% !important;
+    top: 45% !important;
 }
  
 
@@ -461,17 +460,17 @@ img[id*=condition] {
 }
 
 #fact_condition { top: -1vh; }
-#forecast_1_condition { bottom:-22px !important; }
+#forecast_1_condition { bottom:-3px !important; }
 
 #sunrise, #daylight, #sunset {
     position: absolute;
-    font-size: 4vw;
-    top: 0vh;
+    font-size: 5vw;
+    top: 0;
 }
 
 #sunrise { left: 0%; }
 #daylight { left: 35%; }
-#sunset { left: 68%; }
+#sunset { right: 2%; }
 
 /* ─── Controls ───────────────────────────────────────────────── */
 div#browser_fullscreen, div#browser_reload {
@@ -547,12 +546,15 @@ div#browser_reload.panel-dragging {
 /* ─── Weather Chart ──────────────────────────────────────────── */
 
 #invest_panel {
-    position: relative;
-    width: 100%;
-    height: 100%;
     min-height: 0;
 }
+#investChart {
+    z-index: 15;
+}
 
+#invest_panel_banner {
+    z-index: 5;
+}
 #invest_banner {
     position: absolute;
     top: 0;
@@ -932,6 +934,8 @@ body:not(.edit-mode) .resize-handle {
     position: absolute;
     left: 1vw;
     top: 2vh;
+    width: 200px;
+    height: 200px;
     z-index: 20;
 }
 
@@ -1365,6 +1369,22 @@ input:checked + .slider:before {
     gap: 8px;
 }
 
+/* Extrema toggle label */
+.extrema-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    color: #ccc;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+}
+.extrema-toggle input {
+    margin: 0;
+    accent-color: var(--accent-yellow, #ffd700);
+}
+
 .temp-range-display {
     min-width: 80px;
     color: #2cba99;
@@ -1446,9 +1466,9 @@ input:checked + .slider:before {
 
 #mem-info {
     position: fixed;
-    bottom: 2px;
+    top: 5vw;
     left: 4px;
-    font-size: 10px;
+    font-size: 20px;
     font-family: monospace;
     color: rgba(255, 255, 255, 0.5);
     background: rgba(0, 0, 0, 0.6);
@@ -1456,8 +1476,9 @@ input:checked + .slider:before {
     border-radius: 3px;
     pointer-events: none;
     z-index: 9999;
-    white-space: pre;
+    white-space: nowrap;
     line-height: 1.3;
+    opacity: 0;
 }
 #mem-info.visible {
     color: rgba(255, 255, 255, 0.9);

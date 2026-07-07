@@ -1,125 +1,120 @@
 /**
  * cron.js — оркестратор периодических обновлений
- * 
- * Поддерживает:
- * - Обновление графика инвестиций (InvestPlot)
- * - Обновление погоды (WeatherWidget)
- * - Расширяемость через registerTask()
+ *
+ * Интервалы заданы в MS в начале файла
  */
 
 (function (window) {
     'use strict';
 
-    // Список задач для выполнения по расписанию
-    const tasks = [];
+    // ========== Интервалы (в миллисекундах) ==========
+    var BATTERY_INTERVAL   = 15 * 60 * 1000;  // 15 мин — обновление графика батареи
+    var PAGE_REFRESH       = 4 * 24 * 60 * 60 * 1000; // 4 дня — полная перезагрузка страницы
+    var INVEST_WIDGET      = 3 * 60 * 1000;   // 3 мин — виджет инвестиций
+    var INVEST_CHART       = 7 * 60 * 1000;   // 7 мин — график инвестиций
 
-    let masterInterval = null;
-    const UPDATE_INTERVAL = 120_000; // 2 минуты между циклами
+    // Список для совместимости с registerTask()
+    var extraTasks = [];
+    var extraTimer = null;
+    var EXTRA_INTERVAL = 10 * 60 * 1000; // 10 мин для задач из registerTask (по умолчанию)
+
+    var timers = [];
 
     /**
-     * Регистрирует новую задачу для периодического выполнения
-     * @param {string} name — имя задачи (для отладки)
-     * @param {Function} fn — функция обновления
-     * @param {boolean} runImmediately — запустить сразу?
+     * Регистрирует дополнительную задачу (для совместимости с index.js)
+     * @param {string} name
+     * @param {Function} fn
+     * @param {boolean} runImmediately
      */
-    function registerTask(name, fn, runImmediately = false) {
+    function registerTask(name, fn, runImmediately) {
         if (typeof fn !== 'function') {
-            console.error(`[Cron] Задача "${name}" не является функцией`);
+            console.error('[Cron] Задача "' + name + '" не является функцией');
             return;
         }
-
-        tasks.push({ name, fn });
-
+        extraTasks.push({ name: name, fn: fn });
         if (runImmediately) {
-            try {
-                fn();
-            } catch (e) {
-                console.error(`[Cron] Ошибка при немедленном запуске "${name}":`, e);
+            try { fn(); } catch (e) {
+                console.error('[Cron] Ошибка при немедленном запуске "' + name + '":', e);
             }
         }
     }
 
-    /**
-     * Выполняет все зарегистрированные задачи
-     */
-    function executeAllTasks() {
-        tasks.forEach(task => {
-            try {
-                task.fn();
-            } catch (e) {
-                console.error(`[Cron] Ошибка в задаче "${task.name}":`, e);
+    function executeExtraTasks() {
+        extraTasks.forEach(function(task) {
+            try { task.fn(); } catch (e) {
+                console.error('[Cron] Ошибка в задаче "' + task.name + '":', e);
             }
         });
     }
 
-    /**
-     * Запускает центральный таймер
-     */
     function start() {
-        if (masterInterval) {
+        if (timers.length > 0) {
             console.warn('[Cron] Уже запущен');
             return;
         }
 
-        console.log(`[Cron] Запуск оркестратора обновлений (каждые ${UPDATE_INTERVAL/1000} сек)...`);
-        executeAllTasks(); // Первое обновление сразу
-        masterInterval = setInterval(executeAllTasks, UPDATE_INTERVAL);
-    }
-
-    /**
-     * Останавливает все обновления
-     */
-    function stop() {
-        if (masterInterval) {
-            clearInterval(masterInterval);
-            masterInterval = null;
-            console.log('[Cron] Оркестратор обновлений остановлен');
-        }
-    }
-
-    // === Регистрация стандартных задач ===
-
-    // 1. График инвестиций (с проверкой текущего режима)
-    // Проверяем наличие InvestPlot внутри функции, а не при загрузке
-    registerTask('InvestPlot', function() {
-        if (window.InvestPlot && typeof window.InvestPlot.update === 'function') {
-            const savedView = localStorage.getItem('chartView');
-            if (!savedView || savedView === 'invest') {
-                window.InvestPlot.update();
+        // 1. Батарея — 15 мин
+        timers.push(setInterval(function() {
+            if (typeof window.sendBatteryLevel === 'function') {
+                window.sendBatteryLevel();
             }
+            var savedView = getSetting('chartView');
+            if (savedView === 'energy' && typeof batteryLevel === 'function') {
+                batteryLevel();
+            }
+            var bp = document.getElementById('battery_chart_panel');
+            if (bp && bp.style.display !== 'none' && typeof updateBatteryChart === 'function') {
+                updateBatteryChart();
+            }
+        }, BATTERY_INTERVAL));
+
+        // 2. Полная перезагрузка страницы — 4 дня (только не на планшете)
+        var _isTablet = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+        if (!_isTablet) {
+            timers.push(setInterval(function() {
+                location.reload();
+            }, PAGE_REFRESH));
         }
-    });
 
-    if (window.WeatherWidget && typeof window.WeatherWidget.update === 'function') {
-        registerTask('WeatherWidget', window.WeatherWidget.update);
-    }
+        // 4. Виджет инвестиций — 3 мин
+        timers.push(setInterval(function() {
+            if (window.InvestBanner && typeof window.InvestBanner.update === 'function') {
+                window.InvestBanner.update();
+            }
+        }, INVEST_WIDGET));
 
-    if (window.InvestBanner && typeof window.InvestBanner.update === 'function') {
-        registerTask('InvestBanner', window.InvestBanner.update);
-    }
-
-    // 2. График батареи: сначала отправка на сервер, потом обновление (только в режиме energy)
-    registerTask('Battery', function() {
-        const savedView = localStorage.getItem('chartView');
-        if (savedView === 'energy') {
-            window.sendBatteryLevel().done(function() {
-                if (typeof window.updateBatteryChart === 'function') {
-                    window.updateBatteryChart();
+        // 5. График инвестиций — 7 мин
+        timers.push(setInterval(function() {
+            if (window.InvestPlot && typeof window.InvestPlot.update === 'function') {
+                var savedView = getSetting('chartView');
+                if (!savedView || savedView === 'invest') {
+                    window.InvestPlot.update();
                 }
-            });
+            }
+        }, INVEST_CHART));
+
+        // Задачи из registerTask() — 2 мин
+        executeExtraTasks(); // Немедленный первый запуск
+        extraTimer = setInterval(executeExtraTasks, EXTRA_INTERVAL);
+
+        console.log('[Cron] Запущен: батарея ' + (BATTERY_INTERVAL/60000) + 'мин, инвестиции ' + (INVEST_CHART/60000) + 'мин, виджет ' + (INVEST_WIDGET/60000) + 'мин, релоад ' + (PAGE_REFRESH/3600000) + 'ч');
+    }
+
+    function stop() {
+        timers.forEach(function(t) { clearInterval(t); });
+        timers = [];
+        if (extraTimer) {
+            clearInterval(extraTimer);
+            extraTimer = null;
         }
-    });
+        console.log('[Cron] Остановлен');
+    }
 
-    // 3. Другие виджеты можно добавить здесь или через внешний вызов
-
-    // === Экспорт в глобальную область ===
     window.Cron = {
-        start,
-        stop,
-        registerTask,
-        getTaskCount: () => tasks.length
+        start: start,
+        stop: stop,
+        registerTask: registerTask,
+        getTaskCount: function() { return extraTasks.length; }
     };
-
-    // Запуск — вызывается из index.js после регистрации задач
 
 })(window);

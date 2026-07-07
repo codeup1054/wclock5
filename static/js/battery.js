@@ -38,14 +38,10 @@ window.sendBatteryLevel = function sendBatteryLevel() {
 function batteryLevel() {
     const deviceId = getOrCreateDeviceId();
         const renderChart = (level) => {
-        // Stop invest chart
-        if (window.InvestPlot && typeof window.InvestPlot.stop === 'function') {
-            window.InvestPlot.stop();
-        }
-        
         const currentInterval = window.currentInterval || 'hour';
+        const batteryPeriod = getSetting('battery_chart_period', '-7 day');
         
-        $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}`)
+        $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}&period=${encodeURIComponent(batteryPeriod)}`)
                 .done(dataArray => {
                     const labels = [];
                     const values = [];
@@ -53,7 +49,7 @@ function batteryLevel() {
 
                     dataArray.reverse().forEach(e => {
                         const dt = new Date(e.datetime || e.timestamp);
-                        labels.push(isNaN(dt) ? 'N/A' : dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                        labels.push(isNaN(dt) ? 'N/A' : dt.toLocaleDateString([], { day: '2-digit' }));
                         values.push(Number(e.battery_level ?? 0));
                         timestamps.push(dt);
                     });
@@ -89,6 +85,35 @@ function batteryLevel() {
 
                     const extrema = findExtrema(values, labels);
 
+                    // Custom plugin for day labels inside chart at y=25
+                    const dayLabelPlugin = {
+                        id: 'dayLabels',
+                        afterDatasetsDraw(chart) {
+                            const { ctx, scales } = chart;
+                            const xScale = scales.x;
+                            const yScale = scales.y;
+                            const labels = chart.data.labels;
+                            const shown = new Set();
+                            const targetY = yScale.getPixelForValue(25);
+
+                            ctx.save();
+                            ctx.font = 'bold 10px sans-serif';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+
+                            labels.forEach((label, idx) => {
+                                if (!label || label === 'N/A') return;
+                                if (shown.has(label)) return;
+                                shown.add(label);
+                                const x = xScale.getPixelForValue(idx);
+                                ctx.fillText(label, x, targetY);
+                            });
+
+                            ctx.restore();
+                        }
+                    };
+
                     // Custom plugin for drawing extrema labels
                     const extremaPlugin = {
                         id: 'extremaLabels',
@@ -102,7 +127,7 @@ function batteryLevel() {
                             const extrema = findExtrema(values, chart.data.labels);
 
                             ctx.save();
-                            ctx.font = 'bold 24px sans-serif';
+                            ctx.font = 'bold 14px sans-serif';
                             ctx.textAlign = 'center';
                             ctx.textBaseline = 'bottom';
 
@@ -122,8 +147,8 @@ function batteryLevel() {
                         }
                     };
 
-                    // Prepare plugin list (extrema + midnight if available)
-                    const plugins = [extremaPlugin];
+                    // Prepare plugin list (dayLabel + extrema + midnight if available)
+                    const plugins = [dayLabelPlugin, extremaPlugin];
                     if (window.MidnightLinesPlugin) {
                         try {
                             const midnightPlugin = window.initChartPlugin(window.MidnightLinesPlugin(timestamps,0.70), { enabled: true });
@@ -140,9 +165,9 @@ function batteryLevel() {
                             labels,
                             datasets: [{
                                 data: values,
-                                borderColor: 'rgba(255, 204, 0, 1)',
-                                backgroundColor: 'rgba(255,204,0,0.05)',
-                                borderWidth: 5,
+                                borderColor: '#FFB74D',
+                                backgroundColor: 'rgba(255,183,77,0.12)',
+                                borderWidth: 2.5,
                                 tension: 0.3,
                                 pointRadius: 0,
                                 fill: true
@@ -152,7 +177,7 @@ function batteryLevel() {
                             responsive: true,
                             maintainAspectRatio: false,
                             animation: false,
-                            devicePixelRatio: Math.min((window.devicePixelRatio || 1) * 2, 3.0),
+                            devicePixelRatio: Math.min(parseFloat(getSetting('chart_dpi', '2')) || 2, 6.0) * (window.devicePixelRatio || 1),
                             plugins: {
                                 legend: { display: false },
                                 tooltip: { enabled: false },
@@ -164,7 +189,7 @@ function batteryLevel() {
                                         yMax: 55,
                                         backgroundColor: 'rgba(20, 59, 150, 0.5)',
                                         borderColor: 'rgba(236, 48, 6, 0.9)',
-                                        borderWidth: 5,
+                                        borderWidth: 3,
                                         borderDash: [17, 7],
                                         drawTime: 'beforeDatasetsDraw'
                                         }
@@ -175,11 +200,14 @@ function batteryLevel() {
                                 y: {
                                     min: 0,
                                     max: 105,
-                                    ticks: { stepSize: 25, font: { size: 20 } },
-                                    grid: { color: '#ffffff33', lineWidth: 2 }
+                                    ticks: { stepSize: 25, font: { size: 12 } },
+                                    grid: { color: '#ffffff33', lineWidth: 1 }
                                 },
                                 x: {
-                                    ticks: { maxTicksLimit: 8, font: { size: 12 } }
+                                    ticks: {
+                                        font: { size: 8 },
+                                        callback: () => ''
+                                    }
                                 }
                             }
                         }
@@ -213,7 +241,7 @@ window.initBatteryUI = function initBatteryUI() {
         const updateBatteryDiv = () => {
             const level = Math.round(battery.level * 100);
             const charging = battery.charging;
-            const text = (charging ? '+' : '') + level + '%';
+            const text = (charging ? '⚡' : '') + level + '%';
             
             const $el = $('#battery');
             const $panelEl = $('#battery_indicator_panel');
@@ -238,6 +266,9 @@ window.initBatteryUI = function initBatteryUI() {
                 $el.addClass('battery-high');
                 $panelEl.addClass('battery-high');
             }
+            if (typeof window.sendBatteryLevel === 'function') {
+                window.sendBatteryLevel();
+            }
         };
         updateBatteryDiv();
         battery.addEventListener('levelchange', updateBatteryDiv);
@@ -253,15 +284,16 @@ window.updateBatteryChart = function updateBatteryChart() {
 
     const deviceId = getOrCreateDeviceId();
     const currentInterval = window.currentInterval || 'hour';
+    const batteryPeriod = getSetting('battery_chart_period', '-7 day');
 
-    $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}`)
+    $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}&period=${encodeURIComponent(batteryPeriod)}`)
         .done(dataArray => {
             const labels = [];
             const values = [];
 
             dataArray.reverse().forEach(e => {
                 const dt = new Date(e.datetime || e.timestamp);
-                labels.push(isNaN(dt) ? 'N/A' : dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                labels.push(isNaN(dt) ? 'N/A' : dt.toLocaleDateString([], { day: '2-digit' }));
                 values.push(Number(e.battery_level ?? 0));
             });
 
