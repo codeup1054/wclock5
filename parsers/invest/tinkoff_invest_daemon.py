@@ -174,8 +174,14 @@ def fetch_portfolio():
     finally:
         conn.close()
 
+MIN_POSITIONS = 2  # минимум позиций для сохранения (чтобы не писать неполные снепшоты)
+
 # --- Сохранение в SQLite ---
 def save_to_sqlite(positions):
+    if len(positions) < MIN_POSITIONS:
+        print(f"⚠️ Пропущен снепшот: только {len(positions)} позиций (нужно {MIN_POSITIONS})", flush=True)
+        return None
+
     total_value = 0.0
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -296,10 +302,12 @@ def main():
             positions = data.get("positions", [])
             total = save_to_sqlite(positions)
 
-            # Генерируем данные для графика
-            generate_chart_data()
-
-            print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
+            if total is None:
+                print(f"[{now_str}] ⏭️ Снепшот пропущен (неполные данные)", flush=True)
+            else:
+                # Генерируем данные для графика
+                generate_chart_data()
+                print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
 
             # Агрегация старых данных: каждый 10-й цикл (~каждые 10 мин)
             if iteration % 10 == 0:
