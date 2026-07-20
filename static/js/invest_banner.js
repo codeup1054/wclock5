@@ -201,12 +201,14 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         
         const $banner = $('#invest_banner');
         
-        $.getJSON('/api/invest/history', function(historyData) {
-            console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
-            renderBanner(historyData);
-        }).fail(function(xhr, status, error) {
-            console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
-            $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
+        loadTgoldData(function() {
+            $.getJSON('/api/invest/history', function(historyData) {
+                console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
+                renderBanner(historyData);
+            }).fail(function(xhr, status, error) {
+                console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
+                $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
+            });
         });
     }
 
