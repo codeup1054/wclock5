@@ -39,7 +39,7 @@ if not API_TOKEN:
 # Используем FIGI из вашего JSON
 TRACKED_FIGI = [
     "TCS80A101X50",   # TGLD@
-    "FUTGOLD03260"    # GDH6
+    "FUTGOLD03260",   # GDH6
 ]
 
 UPDATE_INTERVAL_SEC = int(os.environ.get("TRACKED_UPDATE_INTERVAL_SEC", "60"))
@@ -93,7 +93,7 @@ def get_db_stats():
     cursor = conn.cursor()
     
     stats = {}
-    for figi in TRACKED_FIGI:
+    for figi in TRACKED_FIGI + ["XAU_USD"]:
         cursor.execute(
             "SELECT MIN(timestamp), MAX(timestamp), COUNT(*) FROM last_prices WHERE figi = ?",
             (figi,)
@@ -107,6 +107,27 @@ def get_db_stats():
     
     conn.close()
     return stats
+
+# --- Получение XAU/USD через yfinance ---
+def fetch_xau_price():
+    """Получить текущую цену XAU/USD (GC=F) через yfinance."""
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker("GC=F")
+        data = ticker.history(period="1d", interval="1m")
+        if data.empty:
+            print("  ⚠️ yfinance: нет данных GC=F", flush=True)
+            return None
+        price = float(data["Close"].iloc[-1])
+        return {
+            "figi": "XAU_USD",
+            "ticker": "XAU/USD",
+            "class_code": "yfinance",
+            "price": price,
+        }
+    except Exception as e:
+        print(f"  ❌ yfinance ошибка: {e}", flush=True)
+        return None
 
 # --- Получение последних цен ---
 def fetch_last_prices(figi_list):
@@ -164,6 +185,23 @@ def save_prices(last_prices):
     conn.close()
     return saved
 
+# --- Сохранение XAU в БД ---
+def save_xau_price(item):
+    """Сохранить одну запись XAU (уже float цена)."""
+    if not item:
+        return 0
+    timestamp = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-120 days')")
+    cursor.execute('''
+        INSERT INTO last_prices (timestamp, figi, ticker, class_code, price)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (timestamp, item["figi"], item["ticker"], item["class_code"], round(item["price"], 2)))
+    conn.commit()
+    conn.close()
+    return 1
+
 # --- Основной цикл ---
 def main():
     print("✅ Демон последних цен запущен", flush=True)
@@ -188,6 +226,11 @@ def main():
 
             prices = fetch_last_prices(TRACKED_FIGI)
             saved = save_prices(prices)
+
+            # XAU/USD через yfinance
+            xau = fetch_xau_price()
+            if xau:
+                saved += save_xau_price(xau)
 
             print(f"[{now_str}] ✅ Сохранено {saved} записей", flush=True)
 
