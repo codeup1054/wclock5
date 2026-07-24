@@ -259,11 +259,23 @@ console.log('[InvestPlot] Script loaded');
                     },
                     plugins: {
                         legend: { 
-                            display: false, 
+                            display: true, 
+                            position: 'top',
+                            align: 'end',
                             labels: { 
-                                font: { size: 4 },
-                                padding: 5
-                            } 
+                                font: { size: 11 },
+                                padding: 8,
+                                usePointStyle: true,
+                                pointStyle: 'line',
+                                color: '#ccc'
+                            },
+                            onClick: function(e, legendItem, legend) {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                const meta = ci.getDatasetMeta(index);
+                                meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                                ci.update();
+                            }
                         },
                         tooltip: {
                             enabled: true,
@@ -507,6 +519,21 @@ console.log('[InvestPlot] Script loaded');
                     });
                 });
 
+                datasets.push({
+                    label: 'XAU/USD',
+                    data: [],
+                    borderColor: '#5dade2',
+                    borderWidth: 2,
+                    borderDash: [10, 5],
+                    tension: 0.2,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    hidden: true,
+                    spanGaps: true,
+                    yAxisID: 'y_xau'
+                });
+
                 // === CHART CREATION / UPDATE ===
                 if (investChart && investChart._currentInterval === currentInterval) {
                     investChart._dailyBars = dailyBars;
@@ -645,25 +672,22 @@ console.log('[InvestPlot] Script loaded');
 
     console.log('[InvestPlot] Module loaded');
 
-    // === Load TGLD@ after chart creation ===
+    // === Load TGLD@ and XAU/USD after chart creation ===
     window.loadTgoldToChart = function(chart, portfolioLabels, portfolioTimestamps) {
-        console.log('[InvestPlot] loadTgoldToChart called, chart:', !!chart);
-        if (!chart) return;
+        if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
         
         const interval = window.currentInterval || 'hour';
         
         var tPeriod = getSetting('invest_panel_period', '-35 day');
         $.getJSON(`/api/invest/tickers?interval=${interval}&period=${encodeURIComponent(tPeriod)}`)
             .done(function(tickersData) {
-                console.log('[InvestPlot] Ticker data received:', tickersData);
+                if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
+
+                // === TGLD@ ===
                 try {
-                    // === TGLD@ ===
                     if (tickersData && tickersData['TGLD@']) {
                         const tgold = tickersData['TGLD@'];
-                        console.log('[InvestPlot] TGLD@ data:', tgold);
                         if (tgold.prices && tgold.prices.length > 0) {
-                            console.log('[InvestPlot] TGLD prices count:', tgold.prices.length);
-                            
                             const tgoldPrices = tgold.prices.map(p => ({
                                 x: new Date(p.timestamp),
                                 y: p.price
@@ -682,74 +706,84 @@ console.log('[InvestPlot] Script loaded');
                                 yAxisID: 'y_tgold'
                             };
                             
-                            if (!chart || !chart.canvas || !chart.canvas.isConnected) {
-                                console.warn('[InvestPlot] Chart canvas unavailable for TGLD@');
-                                return;
-                            }
                             const existingTgoldIdx = chart.data.datasets.findIndex(ds => ds.label === 'TGLD@');
                             if (existingTgoldIdx >= 0) {
                                 chart.data.datasets[existingTgoldIdx].data = tgoldDataset.data;
                             } else {
                                 chart.data.datasets.push(tgoldDataset);
                             }
-                            console.log('[InvestPlot] TGLD@', existingTgoldIdx >= 0 ? 'updated' : 'added', 'to chart');
-                        } else {
-                            console.log('[InvestPlot] No TGLD prices data');
                         }
-                    } else {
-                        console.log('[InvestPlot] No TGLD@ in tickersData');
                     }
+                } catch(e) {
+                    console.error('[InvestPlot] TGLD@ error:', e);
+                }
 
-                    // === XAU/USD ===
+                // === XAU/USD ===
+                try {
+                    console.log('[XAU] keys:', Object.keys(tickersData));
+                    console.log('[XAU] has XAU/USD:', !!tickersData['XAU/USD']);
                     if (tickersData && tickersData['XAU/USD']) {
                         const xau = tickersData['XAU/USD'];
-                        console.log('[InvestPlot] XAU/USD data:', xau);
+                        console.log('[XAU] prices:', xau.prices?.length);
                         if (xau.prices && xau.prices.length > 0) {
-                            console.log('[InvestPlot] XAU prices count:', xau.prices.length);
-                            
                             const xauPrices = xau.prices.map(p => ({
                                 x: new Date(p.timestamp),
                                 y: p.price
                             })).sort((a, b) => a.x - b.x);
                             
-                            const aggregated = aggregateTgoldData(xauPrices, portfolioTimestamps, interval);
+                            const xauData = portfolioTimestamps.map(ts => {
+                                const tsMs = ts.getTime();
+                                let closest = null;
+                                let minDiff = Infinity;
+                                for (let k = 0; k < xauPrices.length; k++) {
+                                    const diff = Math.abs(xauPrices[k].x.getTime() - tsMs);
+                                    if (diff < minDiff) {
+                                        minDiff = diff;
+                                        closest = xauPrices[k].y;
+                                    }
+                                }
+                                return minDiff < 86400000 * 2 ? closest : null;
+                            });
+                            
+                            let firstValid = xauData.find(v => v !== null);
+                            const xauFilled = firstValid !== undefined
+                                ? xauData.map(v => v !== null ? v : firstValid)
+                                : xauData;
                             
                             const xauDataset = {
                                 label: 'XAU/USD',
-                                data: aggregated.data,
+                                data: xauFilled,
                                 borderColor: '#5dade2',
                                 borderWidth: 2,
                                 borderDash: [10, 5],
                                 tension: 0.2,
                                 fill: false,
-                                pointRadius: 0,
-                                pointHoverRadius: 4,
-                                hidden: true,
+                                pointRadius: 2,
+                                pointHoverRadius: 5,
+                                spanGaps: true,
                                 yAxisID: 'y_xau'
                             };
                             
-                            if (!chart || !chart.canvas || !chart.canvas.isConnected) {
-                                console.warn('[InvestPlot] Chart canvas unavailable for XAU/USD');
-                                return;
-                            }
                             const existingXauIdx = chart.data.datasets.findIndex(ds => ds.label === 'XAU/USD');
+                            console.log('[XAU] existingXauIdx:', existingXauIdx, 'datasets:', chart.data.datasets.length);
                             if (existingXauIdx >= 0) {
                                 chart.data.datasets[existingXauIdx].data = xauDataset.data;
+                                chart.data.datasets[existingXauIdx].hidden = false;
                             } else {
                                 chart.data.datasets.push(xauDataset);
+                                console.log('[XAU] pushed, new count:', chart.data.datasets.length);
                             }
-                            console.log('[InvestPlot] XAU/USD', existingXauIdx >= 0 ? 'updated' : 'added', 'to chart');
-                        } else {
-                            console.log('[InvestPlot] No XAU prices data');
                         }
-                    } else {
-                        console.log('[InvestPlot] No XAU/USD in tickersData');
                     }
+                } catch(e) {
+                    console.error('[InvestPlot] XAU/USD error:', e);
+                }
 
+                try {
                     chart.resize();
                     chart.update('none');
                 } catch(e) {
-                    console.error('[InvestPlot] Ticker processing error:', e);
+                    console.error('[InvestPlot] Chart update error:', e);
                 }
             })
             .fail(function(xhr, status, error) {

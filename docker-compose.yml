@@ -65,6 +65,7 @@ services:
     volumes:
       - ./parsers/invest:/app/parsers/invest
       - ./parsers/invest/tracked_tickers.db:/app/parsers/invest/tracked_tickers.db
+      - ./parsers/invest/candles.db:/app/parsers/invest/candles.db
 
 networks:
   wclock-net:

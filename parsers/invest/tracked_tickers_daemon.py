@@ -108,26 +108,90 @@ def get_db_stats():
     conn.close()
     return stats
 
-# --- Получение XAU/USD через yfinance ---
-def fetch_xau_price():
-    """Получить текущую цену XAU/USD (GC=F) через yfinance."""
+# --- Получение XAU/USD: candles.db (история) + yfinance (обновления) ---
+CANDLES_DB_PATH = os.path.join(os.path.dirname(__file__), "candles.db")
+
+def _read_xau_from_candles_db():
+    """Прочитать последнюю XAU цену из candles.db."""
+    if not os.path.exists(CANDLES_DB_PATH):
+        return None, None
+    try:
+        conn = sqlite3.connect(CANDLES_DB_PATH)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT time_utc, close FROM candles
+            WHERE instrument='XAU' AND interval='1h'
+            ORDER BY time_utc DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            return row[0], float(row[1])
+    except Exception:
+        pass
+    return None, None
+
+def _save_xau_to_candles_db(time_utc, close):
+    """Добавить XAU свечу в candles.db (INSERT OR IGNORE)."""
+    if not os.path.exists(CANDLES_DB_PATH):
+        return
+    try:
+        conn = sqlite3.connect(CANDLES_DB_PATH)
+        conn.execute("""
+            INSERT OR IGNORE INTO candles (instrument, time_utc, open, high, low, close, volume, interval, source)
+            VALUES ('XAU', ?, ?, ?, ?, ?, 0, '1h', 'yfinance')
+        """, (time_utc, close, close, close, close))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def _fetch_xau_from_yfinance():
+    """Получить свежую цену XAU/USD через yfinance."""
     try:
         import yfinance as yf
         ticker = yf.Ticker("GC=F")
         data = ticker.history(period="1d", interval="1m")
         if data.empty:
-            print("  ⚠️ yfinance: нет данных GC=F", flush=True)
-            return None
+            return None, None
         price = float(data["Close"].iloc[-1])
-        return {
-            "figi": "XAU_USD",
-            "ticker": "XAU/USD",
-            "class_code": "yfinance",
-            "price": price,
-        }
+        from datetime import datetime, timezone
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+        return now_utc, price
     except Exception as e:
-        print(f"  ❌ yfinance ошибка: {e}", flush=True)
+        print(f"  ⚠️ yfinance: {e}", flush=True)
+        return None, None
+
+def fetch_xau_price():
+    """Получить XAU/USD: сначала yfinance (свежие), потом candles.db (история)."""
+    now_utc = None
+    yf_price = None
+
+    # 1) Попробовать yfinance (свежая цена)
+    now_utc, yf_price = _fetch_xau_from_yfinance()
+    if yf_price is not None:
+        print(f"  📈 XAU yfinance: ${yf_price:.2f}", flush=True)
+        _save_xau_to_candles_db(now_utc, yf_price)
+
+    # 2) Если yfinance не сработал — взять из candles.db
+    if yf_price is None:
+        db_time, db_price = _read_xau_from_candles_db()
+        if db_price is not None:
+            print(f"  📊 XAU candles.db: ${db_price:.2f} ({db_time})", flush=True)
+            return {
+                "figi": "XAU_USD",
+                "ticker": "XAU/USD",
+                "class_code": "candles_db",
+                "price": round(db_price, 2),
+            }
         return None
+
+    return {
+        "figi": "XAU_USD",
+        "ticker": "XAU/USD",
+        "class_code": "yfinance",
+        "price": round(yf_price, 2),
+    }
 
 # --- Получение последних цен ---
 def fetch_last_prices(figi_list):
