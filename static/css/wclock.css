@@ -2,7 +2,7 @@
     --main-bg: #000;
     --text-color: #aaa;
     --accent-orange: #ff4e07;
-    --accent-green: #2ecc71;
+    --accent-green: #1fc163;
     --accent-blue: #2499b9;
     --accent-teal: #31e378;
     --accent-yellow: #ffaa00;
@@ -240,21 +240,6 @@ body.edit-mode .clock-panel .panel-header {
 /* Show/hide panels based on view (deprecated — управляется через модалку ☰) */
 
 /* ─── Clock Panel ───────────────────────────────────────────── */
-#clock_panel {
-    left: 0vw;
-    top: 0vh;
-    min-width: 200px;
-}
-
-#clock_panel #clock {
-    text-align: left;
-    position: absolute;
-    line-height: 0.8;
-    top: 50%;
-    left: 0%;
-    transform: translate(0%, -50%);
-    white-space: nowrap;
-}
 
 /* ─── Seconds Panel ──────────────────────────────────────────── */
 #seconds_panel {
@@ -560,15 +545,15 @@ div#browser_reload.panel-dragging {
     top: 0;
     left: 0;
     width: 100%;
-    padding: 8px 12px;
+    padding: 1px 1px;
     box-sizing: border-box;
     font-family: helvetica, arial, sans-serif;
-    font-size: 13px;
+    font-size: 15px;
     color: #ddd;
     z-index: 10;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 0px;
 }
 
 #invest_banner .banner-message {
@@ -585,14 +570,35 @@ div#browser_reload.panel-dragging {
     font-size: 68px;
     font-weight: normal;
     color: #8d9d9d;
-    line-height: 1.2;
+    line-height: 0.8;
 }
 
-#invest_banner .banner-changes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    font-size: 21px;
+#invest_banner .banner-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 4px 0;
+}
+
+#invest_banner .banner-table td {
+    padding: 1px 4px;
+    text-align: right;
+}
+
+#invest_banner [class*="banner-td-"] {
+    font-size: 18px;
+}
+
+#invest_banner .banner-td-change {
+    min-width: 65px;
+}
+
+#invest_banner .banner-td-pct {
+    min-width: 50px;
+}
+
+#invest_banner .banner-td-empty {
+    min-width: 1px;
 }
 
 #invest_banner .change-positive {
@@ -601,10 +607,6 @@ div#browser_reload.panel-dragging {
 
 #invest_banner .change-negative {
     color: #e74c3c;
-}
-
-#invest_banner .tgold-data {
-    color: #FFD700;
 }
 
 #invest_banner .banner-assets {
@@ -616,60 +618,46 @@ div#browser_reload.panel-dragging {
 
 #invest_banner .asset-row {
     display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-#invest_banner .asset-info {
-    display: flex;
-    justify-content: space-between;
+    flex-direction: row;
     align-items: center;
-    font-size: 11px;
-}
-
-#invest_banner .asset-ticker {
-    width: 45px;
-    font-weight: bold;
-    color: #ddd;
-}
-
-#invest_banner .asset-value {
-    flex: 1;
-    text-align: right;
-    padding-right: 8px;
-}
-
-#invest_banner .asset-percent {
-    width: 45px;
-    text-align: right;
-    color: #aaa;
 }
 
 #invest_banner .asset-bar-container {
+    flex: 1;
     position: relative;
     height: 10px;
     background: rgba(100, 100, 100, 0.3);
     border-radius: 3px;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 5px;
     overflow: hidden;
 }
 
-#invest_banner .asset-bar-bg {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(100, 100, 100, 0.3);
-    border-radius: 3px;
+#invest_banner .asset-bar {
+    height: 100%;
+    min-width: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
-#invest_banner .asset-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    height: 100%;
-    border-radius: 3px;
-    min-width: 2px;
+#invest_banner .asset-bar-label {
+    color: #fff;
+    font-size: 10px;
+    font-weight: bold;
+    white-space: nowrap;
+    text-shadow: 0 0 2px rgba(0,0,0,0.7);
+}
+
+#invest_banner .asset-value {
+    color: #fff;
+    font-size: 10px;
+    white-space: nowrap;
+    text-shadow: 0 0 2px rgba(0,0,0,0.5);
 }
 
 
@@ -919,6 +907,21 @@ body:not(.edit-mode) .resize-handle {
     left: 1vw;
     top: 10vh;
     z-index: 20;
+    min-width: 100px;
+    min-height: 40px;
+}
+
+#clock_panel #clock {
+    text-align: left;
+    position: absolute;
+    line-height: 0.8;
+    top: 50%;
+    left: 0%;
+    transform: translate(0%, -50%);
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Date panel */

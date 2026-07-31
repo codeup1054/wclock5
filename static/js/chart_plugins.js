@@ -249,7 +249,7 @@ afterDatasetsDraw(chart) {
 
         const sign = m.pctGrowth >= 0 ? "+" : "";
 
-        ctx.fillStyle = m.pctGrowth >= 0 ? "#2ecc71" : "#e74c3c";
+        ctx.fillStyle = m.pctGrowth >= 0 ? "#1fc163" : "#e74c3c";
 
         ctx.fillText(
             `${sign}${m.pctGrowth.toFixed(2)}%`,

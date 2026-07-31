@@ -431,14 +431,14 @@ def api_invest_history():
             conn = get_invest_db()
             cur = conn.cursor()
 
-            # Сырые данные за последние 3 дня
+            # Сырые данные за запрошенный период
             cur.execute("""
                 SELECT timestamp, SUM(value) AS total, MAX(value) AS max_pos
                 FROM portfolio_positions
-                WHERE timestamp >= datetime('now', '-3 day')
+                WHERE timestamp >= datetime('now', ?)
                 GROUP BY timestamp
                 ORDER BY timestamp ASC
-            """)
+            """, (period,))
             raw_rows = cur.fetchall()
 
             # Часовые свечи за запрошенный период
@@ -540,7 +540,7 @@ def api_invest_ticker(ticker):
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-28 day')
     bucket_size = {'minute': 600, 'hour': 3600, 'day': 86400}.get(interval, 3600)
-    figi = {"TGLD@": "TCS80A101X50", "GDH6": "FUTGOLD03260"}.get(ticker.upper())
+    figi = {"TGLD@": "TCS80A101X50", "GDH6": "FUTGOLD03260", "XAU/USD": "XAU_USD"}.get(ticker.upper())
     if not figi:
         return jsonify({"error": "Ticker not found"}), 404
 

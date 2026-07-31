@@ -5,17 +5,17 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 (function($) {
     'use strict';
 
-    let tgoldData = null;
+    let tickersData = {};
 
     const COLORS = {
         capital: '#8d9d9d',
-        positive: '#2ecc71',
+        positive: '#1fc163',
         negative: '#e74c3c',
         ticker: '#ddd',
-        rubTicker: '#26aa71',
+        rubTicker: '#1da067',
         tgold: '#FFD700',
         barBackground: 'rgba(100, 100, 100, 0.5)',
-        assetColors: ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
+        assetColors: ['#3498db', '#e74c3c', '#1fc163', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
     };
 
     function formatCurrency(value) {
@@ -35,10 +35,22 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return `${sign}${Math.abs(value).toFixed(2)}%`;
     }
 
+    function formatPrice(value) {
+        return value.toFixed(2);
+    }
+
     function getAssetsData(positions) {
         if (!Array.isArray(positions) || positions.length === 0) return [];
 
         const totalValue = positions.reduce((sum, p) => sum + (p.value || 0), 0);
+        
+        const ASSET_ORDER = ['TGLD', 'RUB', 'TMON'];
+        const assetRank = function(t) {
+            for (let i = 0; i < ASSET_ORDER.length; i++) {
+                if (t.includes(ASSET_ORDER[i])) return i;
+            }
+            return -1;
+        };
         
         return positions
             .map(p => ({
@@ -48,7 +60,14 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 value: p.value || 0,
                 percent: totalValue > 0 ? ((p.value || 0) / totalValue) * 100 : 0
             }))
-            .sort((a, b) => b.value - a.value)
+            .sort((a, b) => {
+                const ia = assetRank(a.ticker);
+                const ib = assetRank(b.ticker);
+                if (ia !== -1 && ib !== -1) return ia - ib;
+                if (ia !== -1) return -1;
+                if (ib !== -1) return 1;
+                return b.value - a.value;
+            })
             .slice(0, 5);
     }
 
@@ -94,20 +113,39 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             : 0;
     }
 
-    function loadTgoldData(callback) {
-        $.getJSON('/api/invest/ticker/TGLD@')
+    function loadTickersData(callback) {
+        $.getJSON('/api/invest/tickers')
             .done(function(data) {
                 if (data && !data.error) {
-                    tgoldData = data;
-                    console.log('[InvestBanner] TGLD@ data loaded:', data);
-                    if (callback) callback(data);
+                    tickersData = data;
+                    console.log('[InvestBanner] Tickers loaded:', Object.keys(data));
                 } else {
-                    console.warn('[InvestBanner] TGLD@: Нет данных:', data?.error);
+                    console.warn('[InvestBanner] Tickers: no data');
                 }
             })
             .fail(function(err) {
-                console.error('[InvestBanner] TGLD@ Ошибка загрузки:', err);
+                console.error('[InvestBanner] Tickers error:', err);
+            })
+            .always(function() {
+                if (callback) callback();
             });
+    }
+
+    function renderAssetRow(ticker, color, label) {
+        const t = tickersData[ticker];
+        if (!t) return '';
+        const price = t.current_price || 0;
+        const dayPct = t.day_change_pct || 0;
+        const monthPct = t.month_change_pct || 0;
+        const dayClass = dayPct >= 0 ? 'change-positive' : 'change-negative';
+        const monthClass = monthPct >= 0 ? 'change-positive' : 'change-negative';
+
+        return `<tr>
+            <td class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
+            <td class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
+            <td class="banner-td-empty"></td>
+            <td class="banner-td-pct ${monthClass}">${formatPercent(monthPct)}</td>
+        </tr>`;
     }
 
     function renderBanner(historyData) {
@@ -146,51 +184,49 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         let html = '';
 
         // === CAPITAL ===
+        html += `<div class="banner-capital" id="invest-banner-capital">${formatCurrency(currentTotal)}</div>`;
+
+        // === ASSETS BARS ===
         const dayChangeClass = absChange >= 0 ? 'change-positive' : 'change-negative';
         const weekChangeClass = absChangeWeek >= 0 ? 'change-positive' : 'change-negative';
 
-        html += `<div class="banner-capital">${formatCurrency(currentTotal)}</div>`;
-
-        // === CHANGES ===
-        html += `<div class="banner-changes">`;
-        html += `<span class="${dayChangeClass}">Д: ${formatChange(absChange)} ${formatPercent(pctChange)}</span>`;
-        html += `<span class="${weekChangeClass}">7д: ${formatChange(absChangeWeek)} ${formatPercent(pctChangeWeek)}</span>`;
-        
-        // === TGLD@ ===
-        if (tgoldData) {
-            const dayPct = (tgoldData.day_change_pct || 0).toFixed(2);
-            const monthPct = (tgoldData.month_change_pct || 0).toFixed(2);
-            const weekRow = document.getElementById('tgold-week-change');
-            const daySign = (tgoldData.day_change || 0) >= 0 ? '+' : '';
-            const monthSign = (tgoldData.month_change || 0) >= 0 ? '+' : '';
-            html += `<span class="tgold-data">TGLD: ${(tgoldData.current_price || 0).toFixed(2)}  Д: ${daySign}${dayPct}%  М: ${monthSign}${monthPct}%</span>`;
-        }
-        html += `</div>`;
-
-        // === ASSETS BARS ===
         if (assets.length > 0) {
-            html += `<div class="banner-assets">`;
-            
+            html += `<div class="banner-assets" id="invest-assets-bars">`;
+            html += `<div class="asset-bar-container">`;
+
             assets.forEach((asset, index) => {
                 let color = COLORS.assetColors[index % COLORS.assetColors.length];
-                if (asset.ticker.includes('TGLD')) color = '#ffb700';
+                if (asset.ticker.includes('TGLD')) color = '#efad05';
+                if (asset.ticker.includes('TMON')) color = '#e74c3c';
                 if (asset.ticker.includes('RUB')) color = COLORS.rubTicker;
 
-                html += `<div class="asset-row">`;
-                html += `<div class="asset-info">`;
-                html += `<span class="asset-ticker">${asset.ticker}</span>`;
-                html += `<span class="asset-value">${formatCurrency(asset.value)} ₽</span>`;
-                html += `<span class="asset-percent">${asset.percent.toFixed(1)}%</span>`;
-                html += `</div>`;
-                html += `<div class="asset-bar-container">`;
-                html += `<div class="asset-bar-bg"></div>`;
-                html += `<div class="asset-bar" style="width: ${asset.percent}%; background-color: ${color};"></div>`;
-                html += `</div>`;
-                html += `</div>`;
+                let assetTitle = asset.name;
+                if (assetTitle.includes('TGLD')) assetTitle = 'Золото (TGLD)';
+                else if (assetTitle.includes('TMON')) assetTitle = 'Обл. Минфин (TMON)';
+                else if (assetTitle.includes('RUB')) assetTitle = 'Рубль';
+
+                html += `<span class="asset-bar" title="${assetTitle}" style="width: ${Math.max(asset.percent, 1)}%; background-color: ${color};"><span class="asset-bar-label">${asset.percent.toFixed(1)}%</span></span>`;
             });
-            
+
+            html += `</div>`;
             html += `</div>`;
         }
+
+        // === TABLE ===
+        html += `<table class="banner-table" id="invest-banner-table"><tbody>`;
+
+        html += `<tr class="banner-row-portfolio">
+            <td class="banner-td-change ${dayChangeClass}" style="color:#1fc163">${formatChange(absChange)}</td>
+            <td class="banner-td-pct ${dayChangeClass}">${formatPercent(pctChange)}</td>
+            <td class="banner-td-change ${weekChangeClass}">${formatChange(absChangeWeek)}</td>
+            <td class="banner-td-pct ${weekChangeClass}">${formatPercent(pctChangeWeek)}</td>
+        </tr>`;
+
+        html += renderAssetRow('TGLD@', COLORS.tgold, 'TGLD');
+        html += renderAssetRow('TMON@', '#e74c3c', 'TMON');
+        html += renderAssetRow('XAU/USD', '#3498db', 'XAU');
+
+        html += `</tbody></table>`;
 
         $banner.html(html);
         console.log('[InvestBanner] Banner rendered, capital:', currentTotal, 'assets:', assets.length);
@@ -199,9 +235,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     function updateInvestBanner() {
         console.log('[InvestBanner] updateInvestBanner called');
         
-        const $banner = $('#invest_banner');
-        
-        loadTgoldData(function() {
+        loadTickersData(function() {
             $.getJSON('/api/invest/history', function(historyData) {
                 console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
                 renderBanner(historyData);
@@ -215,16 +249,23 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     function init() {
         console.log('[InvestBanner] init called');
         
-        loadTgoldData();
+        loadTickersData();
         updateInvestBanner();
     }
 
     // Принимает готовые данные (из invest_chart.js), без повторного fetch
     function renderFromData(historyData, tgoldPrices) {
         if (tgoldPrices && tgoldPrices.current_price) {
-            tgoldData = tgoldPrices;
+            tickersData['TGLD@'] = tgoldPrices;
         }
-        renderBanner(historyData);
+        // Если тикеры ещё не загружены — подгружаем
+        if (Object.keys(tickersData).length === 0) {
+            loadTickersData(function() {
+                renderBanner(historyData);
+            });
+        } else {
+            renderBanner(historyData);
+        }
     }
 
     $(document).ready(init);

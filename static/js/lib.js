@@ -247,6 +247,7 @@ function createTempRangeSettings() {
  */
 function createPanelsModal() {
     const panelNames = {
+        'invest_panel': 'Инвестиции',
         'clock_panel': 'Часы',
         'date_panel': 'Дата',
         'moon_panel': 'Луна',
@@ -256,7 +257,6 @@ function createPanelsModal() {
         'sun_panel': 'Солнце',
         'battery_indicator_panel': 'Батарея (индикатор)',
         'battery_chart_panel': 'Батарея (график)',
-        'invest_panel': 'Инвестиции',
         'invest_banner': 'Инвестиции (баннер)',
         'chart_control_panel': 'Панель управления'
     };
@@ -379,7 +379,7 @@ function createPanelsModal() {
                     { value: '-90 day', label: '3 месяца' },
                     { value: '-35 day', label: '5 недель' },
                     { value: '-7 day', label: '1 неделя' },
-                    { value: '-1 day', label: '1 день' }
+                    { value: '-1 day', label: '1.5 дня' }
                 ];
                 periodOpts.forEach(function(opt) {
                     $periodSelect.append($('<option></option>').attr('value', opt.value).text(opt.label));
@@ -389,6 +389,19 @@ function createPanelsModal() {
                 $periodSelect.on('change', function() {
                     setSetting('invest_panel_period', this.value);
                     saveSettingsToServer({ invest_panel_period: this.value });
+
+                    // Auto-switch interval to default for the selected range
+                    var defaultInterval = {
+                        '-90 day': 'day',
+                        '-35 day': 'hour',
+                        '-7 day': 'hour',
+                        '-1 day': 'minute'
+                    }[this.value] || 'hour';
+                    window.currentInterval = defaultInterval;
+                    try { localStorage.setItem('chartInterval', defaultInterval); } catch(e) {}
+                    $('.interval-btn').removeClass('active');
+                    $('.interval-btn[data-interval="' + defaultInterval + '"]').addClass('active');
+
                     $(document).trigger('panelViewChange', { panel: 'invest_panel', view: 'period' });
                 });
                 $periodLabel.append($periodSelect);

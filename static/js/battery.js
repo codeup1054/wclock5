@@ -63,21 +63,23 @@ function batteryLevel() {
                     function findExtrema(values, labels) {
                         const extrema = [];
                         const n = values.length;
+                        if (n === 0) return extrema;
 
-                        for (let i = 1; i < n - 1; i++) {
-                            const prev = values[i - 1];
-                            const curr = values[i];
-                            const next = values[i + 1];
-
-                            // Локальный максимум
-                            if (curr > prev && curr > next) {
-                                extrema.push({ type: 'max', index: i, value: curr, label: labels[i] });
-                            }
-                            // Локальный минимум
-                            else if (curr < prev && curr < next) {
-                                extrema.push({ type: 'min', index: i, value: curr, label: labels[i] });
+                        const dayMap = {};
+                        for (let i = 0; i < n; i++) {
+                            const day = labels[i];
+                            if (!dayMap[day]) dayMap[day] = { maxIdx: i, minIdx: i, maxVal: values[i], minVal: values[i] };
+                            else {
+                                if (values[i] > dayMap[day].maxVal) { dayMap[day].maxVal = values[i]; dayMap[day].maxIdx = i; }
+                                if (values[i] < dayMap[day].minVal) { dayMap[day].minVal = values[i]; dayMap[day].minIdx = i; }
                             }
                         }
+
+                        Object.keys(dayMap).forEach(day => {
+                            const d = dayMap[day];
+                            extrema.push({ type: 'max', index: d.maxIdx, value: d.maxVal, label: day });
+                            extrema.push({ type: 'min', index: d.minIdx, value: d.minVal, label: day });
+                        });
 
                         return extrema;
                     }
@@ -167,7 +169,7 @@ function batteryLevel() {
                                 data: values,
                                 borderColor: '#FFB74D',
                                 backgroundColor: 'rgba(255,183,77,0.12)',
-                                borderWidth: 2.5,
+                                borderWidth: 0.7,
                                 tension: 0.3,
                                 pointRadius: 0,
                                 fill: true
