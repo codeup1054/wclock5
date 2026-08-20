@@ -463,16 +463,16 @@ div#browser_fullscreen, div#browser_reload {
     z-index: 100;
     opacity: 0.00;
     background: #FFF;
-    width: 25vw;
-    height: 30vh;
-    top: 7vh;
+    width: 22vw;
+    height: 22vh;
+    top: 5vh;
     border-radius: 5vw;
     cursor: pointer;
     transition: opacity 0.2s ease, background 0.2s ease, border 0.2s ease, z-index 0s;
 }
 
 div#browser_fullscreen{left: 1vw;}
-div#browser_reload{left: 27vw;}
+div#browser_reload{left: 22vw;}
 
 
 
@@ -571,6 +571,7 @@ div#browser_reload.panel-dragging {
     font-weight: normal;
     color: #8d9d9d;
     line-height: 0.8;
+    text-align: right;
 }
 
 #invest_banner .banner-table {
@@ -602,11 +603,11 @@ div#browser_reload.panel-dragging {
 }
 
 #invest_banner .change-positive {
-    color: #2ecc71;
+    color: #1fc163;
 }
 
 #invest_banner .change-negative {
-    color: #e74c3c;
+    color: #ff5341;
 }
 
 #invest_banner .banner-assets {

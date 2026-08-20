@@ -125,7 +125,7 @@
         return true;
     }
 
-    function buildScales(portfolioMin, portfolioMax, showTime) {
+    function buildScales(portfolioMin, portfolioMax, showTime, finamMin, finamMax) {
         var portfolioRange = portfolioMax - portfolioMin;
         var portfolioPadding = portfolioRange > 0 ? portfolioRange * 0.1 : Math.max(portfolioMax * 0.1, 1000);
 
@@ -235,6 +235,34 @@
             }
         };
 
+        // Отдельная правая ось для капитала Finam (розовые метки), если есть данные
+        if (finamMax > 0) {
+            var finamRange = finamMax - finamMin;
+            var finamPadding = finamRange > 0 ? finamRange * 0.1 : Math.max(finamMax * 0.1, 100);
+            scales.y_finam = {
+                position: 'right',
+                stacked: false,
+                min: Math.max(0, finamMin - finamPadding),
+                max: Math.max(finamMax + finamPadding, finamMin + 100),
+                display: true,
+                ticks: {
+                    beginAtZero: false,
+                    display: true,
+                    callback: function(value) {
+                        if (value >= 1e6) return '' + (value / 1e6).toFixed(2);
+                        return '' + Number(value).toLocaleString('ru-RU');
+                    },
+                    font: { size: 10 },
+                    color: '#e84393',
+                    autoSkip: true,
+                    padding: -1,
+                    maxTicksLimit: 8
+                },
+                grid: { display: false },
+                title: { display: false }
+            };
+        }
+
         // Generate scales from registry
         var addedAxes = {};
         Object.keys(TICKER_REGISTRY).forEach(function(key) {
@@ -292,6 +320,36 @@
             });
         });
         return datasets;
+    }
+
+    // Ряд итогов портфеля по конкретному источнику (tinkoff/finam)
+    function buildPortfolioSeriesBySource(rawData, timestamps, source) {
+        var values = [];
+        var lastValid = null;
+        for (var i = 0; i < timestamps.length; i++) {
+            var entry = rawData[timestamps[i]];
+            var sum = 0;
+            var found = false;
+            if (Array.isArray(entry)) {
+                for (var k = 0; k < entry.length; k++) {
+                    var p = entry[k];
+                    if (p && p.source === source) {
+                        var val = Number(p.value);
+                        if (!isNaN(val)) {
+                            sum += val;
+                            found = true;
+                        }
+                    }
+                }
+            }
+            if (found) {
+                lastValid = sum;
+                values.push(sum);
+            } else {
+                values.push(lastValid !== null ? lastValid : null);
+            }
+        }
+        return values;
     }
 
     // ================================================================
@@ -483,6 +541,9 @@
             };
 
             var chart = new Chart(ctx, config);
+            chart.canvas.addEventListener('click', function(event) {
+                toggleLegendDataset(chart, event);
+            });
             chart._extrema = extrema;
             chart._dailyGrowthMarks = dailyGrowthMarks;
             chart._midnightTimestamps = chartData.timestamps;
@@ -592,10 +653,11 @@
             }
 
             showDataFreshness(timestamps);
+            updateSourceBadge(rawData);
 
             // Pass data to banner
             if (typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.renderFromData === 'function') {
-                window.InvestBanner.renderFromData(rawData);
+                window.InvestBanner.renderFromData(rawData, tickersData);
             }
 
             // Aggregation
@@ -644,29 +706,56 @@
                 extrema = window.findDailyExtrema(aggregatedPortfolio, aggregatedTimestamps);
             }
 
-            // Min/max for axes
-            var validValues = aggregatedPortfolio.filter(function(v) { return v != null && v > 0; });
-            var portfolioMin = validValues.length > 0 ? Math.min.apply(null, validValues) : 0;
-            var validForMax = aggregatedPortfolio.filter(function(v) { return v != null; });
-            var portfolioMax = validForMax.length > 0 ? Math.max.apply(null, validForMax) : 0;
+            // Build datasets: отдельные линии портфелей Tinkoff и Finam
+            // Сырые ряды по источникам, затем та же агрегация, что и у суммарного ряда
+            var tinkoffRaw = buildPortfolioSeriesBySource(rawData, timestamps, 'tinkoff');
+            var finamRaw = buildPortfolioSeriesBySource(rawData, timestamps, 'finam');
+            var tinkoffAgg = aggregateData(timestamps, tinkoffRaw, currentInterval, 'time');
+            var finamAgg = aggregateData(timestamps, finamRaw, currentInterval, 'time');
+            var tinkoffSeries = tinkoffAgg.values;
+            var finamSeries = finamAgg.values;
+
+            // Min/max для осей: каждый график нормирован по своему диапазону
+            var validTinkoff = tinkoffSeries.filter(function(v) { return v != null && v > 0; });
+            var portfolioMin = validTinkoff.length > 0 ? Math.min.apply(null, validTinkoff) : 0;
+            var portfolioMax = validTinkoff.length > 0 ? Math.max.apply(null, validTinkoff) : 0;
+            var validFinam = finamSeries.filter(function(v) { return v != null && v > 0; });
+            var finamMin = validFinam.length > 0 ? Math.min.apply(null, validFinam) : 0;
+            var finamMax = validFinam.length > 0 ? Math.max.apply(null, validFinam) : 0;
 
             // Build scales from registry
-            var scales = buildScales(portfolioMin, portfolioMax, showTime);
+            var scales = buildScales(portfolioMin, portfolioMax, showTime, finamMin, finamMax);
 
-            // Build datasets
-            var datasets = [{
-                label: '\u041F\u043E\u0440\u0442\u0444\u0435\u043B\u044C',
-                data: aggregatedPortfolio,
-                borderColor: '#2cba99',
-                backgroundColor: 'rgba(25, 150, 89, 0.15)',
-                borderWidth: 2,
-                tension: 0.2,
-                fill: true,
-                pointRadius: 0,
-                pointHoverRadius: 4,
-                spanGaps: true,
-                yAxisID: 'y_portfolio'
-            }];
+            var finamAxis = finamMax > 0 ? 'y_finam' : 'y_portfolio';
+
+            var datasets = [
+                {
+                    label: '\u041F\u043E\u0440\u0442\u0444\u0435\u043B\u044C Tinkoff',
+                    data: tinkoffSeries,
+                    borderColor: '#2cba99',
+                    backgroundColor: 'rgba(25, 150, 89, 0.15)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    yAxisID: 'y_portfolio'
+                },
+                {
+                    label: '\u041F\u043E\u0440\u0442\u0444\u0435\u043B\u044C Finam',
+                    data: finamSeries,
+                    borderColor: '#e84393',
+                    backgroundColor: 'rgba(232, 67, 147, 0.12)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    yAxisID: finamAxis
+                }
+            ];
 
             // Add ticker placeholder datasets from registry
             var placeholders = buildPlaceholderDatasets();
@@ -682,8 +771,9 @@
                 investChart.data.labels = labels;
 
                 // Update portfolio in place, remove old ticker datasets
-                investChart.data.datasets[0].data = aggregatedPortfolio;
-                while (investChart.data.datasets.length > 1) {
+                if (investChart.data.datasets[0]) investChart.data.datasets[0].data = tinkoffSeries;
+                if (investChart.data.datasets[1]) investChart.data.datasets[1].data = finamSeries;
+                while (investChart.data.datasets.length > 2) {
                     investChart.data.datasets.pop();
                 }
 
@@ -743,7 +833,8 @@
 
     window.inlineLegendPlugin = {
         id: 'inlineLegend',
-        afterDatasetsDraw: function(chart) {
+        // Рисуем ПОСЛЕ тултипа/линии значений, чтобы легенда была поверх всех слоёв
+        afterTooltipDraw: function(chart) {
             var ctx = chart.ctx;
             var chartArea = chart.chartArea;
             var datasets = chart.data.datasets;
@@ -752,10 +843,15 @@
             var x = chartArea.left + 10;
             var y = chartArea.top + 20;
             var lineHeight = 14;
+            var areas = [];
 
             ctx.save();
             ctx.font = '11px sans-serif';
             ctx.textBaseline = 'middle';
+
+            // Подложка для читаемости поверх линий
+            ctx.fillStyle = 'rgba(18, 20, 24, 0.78)';
+            ctx.fillRect(chartArea.left, chartArea.top + 10, 130, datasets.length * lineHeight + 6);
 
             for (var i = 0; i < datasets.length; i++) {
                 var ds = datasets[i];
@@ -769,12 +865,39 @@
                 ctx.fillRect(x, y - 4, 12, 2);
                 ctx.fillStyle = hidden ? '#666' : '#ccc';
                 ctx.fillText(ds.label, x + 18, y);
+
+                areas.push({
+                    x: chartArea.left,
+                    y: y - 6,
+                    width: 130,
+                    height: lineHeight,
+                    datasetIndex: i
+                });
                 y += lineHeight;
             }
 
             ctx.restore();
+            chart._legendHitAreas = areas;
         }
     };
+
+    function toggleLegendDataset(chart, event) {
+        var areas = chart._legendHitAreas;
+        if (!areas || !areas.length) return;
+        var rect = chart.canvas.getBoundingClientRect();
+        var x = event.clientX - rect.left;
+        var y = event.clientY - rect.top;
+        for (var i = 0; i < areas.length; i++) {
+            var a = areas[i];
+            if (x >= a.x && x <= a.x + a.width && y >= a.y && y <= a.y + a.height) {
+                var ds = chart.data.datasets[a.datasetIndex];
+                if (!ds) return;
+                ds.hidden = !ds.hidden;
+                chart.update();
+                return;
+            }
+        }
+    }
 
     window.dailyGrowthLabelsPlugin = {
         id: 'dailyGrowthLabels',
@@ -850,6 +973,39 @@
             el.style.color = '#888';
             el.style.fontWeight = 'normal';
         }
+    }
+
+    // ================================================================
+    // DATA SOURCE BADGE — Finam / Tinkoff / оба
+    // ================================================================
+
+    function updateSourceBadge(rawData) {
+        var panel = document.getElementById('invest_panel');
+        if (!panel) return;
+        var el = document.getElementById('invest_source');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'invest_source';
+            el.style.cssText = 'position:absolute;top:2px;right:4px;font-size:10px;z-index:15;font-family:helvetica,arial,sans-serif;padding:1px 6px;border-radius:8px;background:rgba(40,40,40,0.65);letter-spacing:.3px;pointer-events:none;';
+            panel.appendChild(el);
+        }
+        var timestamps = Object.keys(rawData || {}).sort();
+        if (!timestamps.length) { el.style.display = 'none'; return; }
+        var latest = rawData[timestamps[timestamps.length - 1]];
+        if (!Array.isArray(latest)) { el.style.display = 'none'; return; }
+        var sources = {};
+        for (var i = 0; i < latest.length; i++) {
+            if (latest[i] && latest[i].source) sources[latest[i].source] = true;
+        }
+        var keys = Object.keys(sources);
+        if (keys.length === 0) { el.style.display = 'none'; return; }
+        var hasFinam = !!sources['finam'];
+        var hasTinkoff = !!sources['tinkoff'];
+        var label = hasFinam && hasTinkoff ? 'Finam + Tinkoff' : hasFinam ? 'Finam' : hasTinkoff ? 'Tinkoff' : '';
+        if (!label) { el.style.display = 'none'; return; }
+        el.textContent = '\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: ' + label;
+        el.style.display = 'block';
+        el.style.color = hasFinam ? '#7cb7ff' : '#aaa';
     }
 
     // ================================================================

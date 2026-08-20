@@ -59,7 +59,8 @@ def init_db():
     db_dir = os.path.dirname(DB_PATH)
     os.makedirs(db_dir, exist_ok=True)
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -89,7 +90,7 @@ def get_db_stats():
     """Получить статистику по БД"""
     if not os.path.exists(DB_PATH):
         return {}
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cursor = conn.cursor()
     
     stats = {}
@@ -228,7 +229,8 @@ def save_prices(last_prices):
     timestamp = datetime.now(timezone.utc).isoformat()
     saved = 0
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     cursor = conn.cursor()
 
     cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-120 days')")
@@ -255,7 +257,7 @@ def save_xau_price(item):
     if not item:
         return 0
     timestamp = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-120 days')")
     cursor.execute('''

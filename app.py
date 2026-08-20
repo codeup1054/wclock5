@@ -431,31 +431,35 @@ def api_invest_history():
             conn = get_invest_db()
             cur = conn.cursor()
 
-            # Сырые данные за запрошенный период
+            # Сырые данные за запрошенный период — итоги по источникам
             cur.execute("""
-                SELECT timestamp, SUM(value) AS total, MAX(value) AS max_pos
+                SELECT timestamp, source, SUM(value) AS total
                 FROM portfolio_positions
                 WHERE timestamp >= datetime('now', ?)
-                GROUP BY timestamp
+                GROUP BY timestamp, source
                 ORDER BY timestamp ASC
             """, (period,))
             raw_rows = cur.fetchall()
 
-            # Часовые свечи за запрошенный период
-            cur.execute("""
-                SELECT timestamp, close AS total, close AS max_pos
-                FROM portfolio_hourly
-                WHERE timestamp >= datetime('now', ?)
-                ORDER BY timestamp ASC
-            """, (period,))
-            hourly_rows = cur.fetchall()
+            # Часовые свечи за запрошенный период (таблица может отсутствовать)
+            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='portfolio_hourly'")
+            has_hourly = cur.fetchone() is not None
+            hourly_rows = []
+            if has_hourly:
+                cur.execute("""
+                    SELECT timestamp, close AS total
+                    FROM portfolio_hourly
+                    WHERE timestamp >= datetime('now', ?)
+                    ORDER BY timestamp ASC
+                """, (period,))
+                hourly_rows = cur.fetchall()
 
             # Если нет ни сырых, ни часовых — пробуем все сырые (обратная совместимость)
             if not raw_rows and not hourly_rows:
                 cur.execute("""
-                    SELECT timestamp, SUM(value) AS total, MAX(value) AS max_pos
+                    SELECT timestamp, source, SUM(value) AS total
                     FROM portfolio_positions
-                    GROUP BY timestamp
+                    GROUP BY timestamp, source
                     ORDER BY timestamp ASC
                 """)
                 raw_rows = cur.fetchall()
@@ -464,56 +468,83 @@ def api_invest_history():
                 conn.close()
                 return {}
 
-            # Объединяем и сортируем
+            # Объединяем и сортируем: ключ (timestamp, source)
             all_ts = {}
+            raw_ts = set()
             for row in raw_rows:
                 ts = row["timestamp"]
                 total = row["total"]
                 if total is None:
                     continue
-                all_ts[ts] = round(total, 2)
+                all_ts[(ts, row["source"] or "tinkoff")] = round(total, 2)
+                raw_ts.add(ts)
             for row in hourly_rows:
                 ts = row["timestamp"]
                 total = row["total"]
                 if total is None:
                     continue
-                if ts not in all_ts:
-                    all_ts[ts] = round(total, 2)
+                if ts not in raw_ts:
+                    all_ts[(ts, "mixed")] = round(total, 2)
 
             aggregated = {}
             latest_ts = None
 
-            for ts in sorted(all_ts.keys()):
-                total = all_ts[ts]
+            for (ts, src) in sorted(all_ts.keys()):
+                total = all_ts[(ts, src)]
                 dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
                 bucket_epoch = int(dt.timestamp() / bucket_size) * bucket_size
-                aggregated[str(bucket_epoch)] = (ts, total)
+                bucket_key = str(bucket_epoch)
+                if bucket_key not in aggregated:
+                    aggregated[bucket_key] = {"ts": ts, "by_source": {}}
+                agg = aggregated[bucket_key]
+                # Последний снапшот за бакет (не сумма): демон пишет 2 раза/мин
+                agg["by_source"][src] = total
+                if ts > agg["ts"]:
+                    agg["ts"] = ts
                 if latest_ts is None or ts > latest_ts:
                     latest_ts = ts
 
-            # Последние позиции — всегда из portfolio_positions
-            cur.execute("""
-                SELECT instrument_type, name, ticker, quantity, value
-                FROM portfolio_positions
-                WHERE timestamp = ?
-                ORDER BY value DESC
-            """, (latest_ts,))
-            latest_positions = [
-                {
-                    "type": r["instrument_type"] or "Other",
-                    "name": r["name"] or r["ticker"] or "Unknown",
-                    "quantity": round(r["quantity"], 4),
-                    "value": round(r["value"], 2),
-                }
-                for r in cur.fetchall()
-            ]
+            # Последние позиции — отдельно по каждому источнику (у tinkoff и finam свои снапшоты)
+            cur.execute("SELECT source, MAX(timestamp) AS ts FROM portfolio_positions GROUP BY source")
+            src_latest_rows = cur.fetchall()
+            latest_positions = []
+            latest_ts = None
+            for row in src_latest_rows:
+                src_ts = row["ts"]
+                if not src_ts:
+                    continue
+                if latest_ts is None or src_ts > latest_ts:
+                    latest_ts = src_ts
+                cur.execute("""
+                    SELECT instrument_type, name, ticker, quantity, value, source
+                    FROM portfolio_positions
+                    WHERE timestamp = ? AND source = ?
+                    ORDER BY value DESC
+                """, (src_ts, row["source"]))
+                for r in cur.fetchall():
+                    latest_positions.append({
+                        "type": r["instrument_type"] or "Other",
+                        "name": r["name"] or r["ticker"] or "Unknown",
+                        "quantity": round(r["quantity"], 4),
+                        "value": round(r["value"], 2),
+                        "source": r["source"] or "tinkoff",
+                    })
 
             conn.close()
 
             result = {}
             for bucket_key in sorted(aggregated.keys()):
-                ts, total = aggregated[bucket_key]
-                result[ts] = [{"type": "total", "name": "Портфель", "value": total}]
+                agg = aggregated[bucket_key]
+                items = [
+                    {
+                        "type": "total",
+                        "name": "Портфель",
+                        "value": round(v, 2),
+                        "source": s
+                    }
+                    for s, v in sorted(agg["by_source"].items())
+                ]
+                result[agg["ts"]] = items
             if latest_ts:
                 result[latest_ts] = latest_positions
             return result
@@ -545,7 +576,8 @@ def api_invest_ticker(ticker):
         return jsonify({"error": "Ticker not found"}), 404
 
     def generate():
-        conn = sqlite3.connect(TRACKED_TICKERS_DB_PATH)
+        conn = sqlite3.connect(TRACKED_TICKERS_DB_PATH, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""
@@ -613,7 +645,8 @@ def api_invest_tickers():
     def generate():
         if not os.path.exists(TRACKED_TICKERS_DB_PATH):
             return {"_error": "Ticker DB not found", "_error_code": 404}
-        conn = sqlite3.connect(TRACKED_TICKERS_DB_PATH)
+        conn = sqlite3.connect(TRACKED_TICKERS_DB_PATH, timeout=10)
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute("""

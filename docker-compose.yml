@@ -52,6 +52,21 @@ services:
       - ./invest_db.py:/app/invest_db.py
       - ./invest_portfolio.db:/app/invest_portfolio.db
 
+  finam-invest-parser:
+    build: .
+    image: ${DOCKER_PREFIX:-wclock5}-finam-inv
+    container_name: ${DOCKER_PREFIX:-wclock5}-finam-inv
+    command: python parsers/invest/finam_invest_daemon.py
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - wclock-net
+    volumes:
+      - ./parsers/invest:/app/parsers/invest
+      - ./invest_db.py:/app/invest_db.py
+      - ./invest_portfolio.db:/app/invest_portfolio.db
+
   tickers-parser:
     build: .
     image: ${DOCKER_PREFIX:-wclock5}-tickers

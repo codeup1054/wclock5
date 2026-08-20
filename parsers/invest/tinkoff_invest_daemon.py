@@ -67,7 +67,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS portfolio_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            total_value REAL NOT NULL
+            total_value REAL NOT NULL,
+            source TEXT DEFAULT 'tinkoff'
         )
     ''')
 
@@ -80,7 +81,8 @@ def init_db():
             ticker TEXT,
             quantity REAL,
             price REAL,
-            value REAL
+            value REAL,
+            source TEXT DEFAULT 'tinkoff'
         )
     ''')
 
@@ -111,6 +113,12 @@ def init_db():
     # Индексы для ускорения запросов
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_positions_timestamp ON portfolio_positions(timestamp)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_history_timestamp ON portfolio_history(timestamp)")
+
+    # Миграция source (общая схема с finam_invest_daemon.py)
+    for table in ("portfolio_positions", "portfolio_history"):
+        cols = [r[1] for r in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+        if "source" not in cols:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN source TEXT DEFAULT 'tinkoff'")
 
     conn.commit()
     conn.close()
