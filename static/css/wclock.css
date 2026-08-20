@@ -574,6 +574,12 @@ div#browser_reload.panel-dragging {
     text-align: right;
 }
 
+#invest_banner .banner-capital-line {
+    color: var(--text-color);
+    font-size: 45px;
+    line-height: 0.95;
+}
+
 #invest_banner .banner-table {
     width: 100%;
     border-collapse: collapse;

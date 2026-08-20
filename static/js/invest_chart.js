@@ -51,7 +51,7 @@
             borderWidth: 2,
             borderDash: [1, 1],
             pointRadius: 0,
-            hidden: false,
+            hidden: true,
             aggregation: 'closest-forward',
             axisPosition: 'left',
             maxTicksLimit: 6,
@@ -366,6 +366,8 @@
             .done(function(tickersData) {
                 if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
 
+                var legendState = getLegendState();
+
                 Object.keys(TICKER_REGISTRY).forEach(function(key) {
                     var cfg = TICKER_REGISTRY[key];
                     var tickerData = tickersData && tickersData[key];
@@ -388,7 +390,7 @@
 
                         if (existingIdx >= 0) {
                             chart.data.datasets[existingIdx].data = filledData;
-                            chart.data.datasets[existingIdx].hidden = cfg.hidden;
+                            chart.data.datasets[existingIdx].hidden = (legendState[cfg.label] !== undefined) ? legendState[cfg.label] === true : cfg.hidden;
                         } else {
                             chart.data.datasets.push({
                                 label: cfg.label,
@@ -401,7 +403,7 @@
                                 pointRadius: cfg.pointRadius || 0,
                                 pointHoverRadius: 5,
                                 spanGaps: true,
-                                hidden: cfg.hidden,
+                                hidden: (legendState[cfg.label] !== undefined) ? legendState[cfg.label] === true : cfg.hidden,
                                 yAxisID: cfg.yAxisID
                             });
                         }
@@ -794,6 +796,7 @@
                 if (!investChart) {
                     console.error('[InvestPlot] Failed to create chart');
                 } else {
+                    applyLegendState(investChart);
                     window.loadTickersToChart(investChart, aggregatedTimestamps);
                 }
             }
@@ -839,46 +842,128 @@
             var datasets = chart.data.datasets;
             if (!datasets || !datasets.length) return;
 
-            var x = chartArea.left + 10;
-            var y = chartArea.top + 20;
-            var lineHeight = 14;
-            var areas = [];
+            var rootFont = parseFloat(window.getComputedStyle(document.body).fontSize) || 16;
+            var fs = Math.round(rootFont * 2); // 2em
 
-            ctx.save();
-            ctx.font = '11px sans-serif';
+            var padX = 16;
+            var padTop = 14;
+            var swatchW = 24;
+            var swatchH = 5;
+            var labelGap = 10;
+            var cols = 2;
+            var cellGapX = 32;
+            var cellGapY = 12;
+
+            var items = [];
+            for (var i = 0; i < datasets.length; i++) {
+                var ds = datasets[i];
+                if (!ds.label) continue;
+                items.push({ index: i, label: ds.label, labelW: 0 });
+            }
+            if (!items.length) { ctx.restore(); return; }
+
+            var rows, colW, totalW, totalH;
+
+            function layout(fontPx) {
+                ctx.font = 'bold ' + fontPx + 'px sans-serif';
+                rows = Math.ceil(items.length / cols);
+                colW = [];
+                for (var c = 0; c < cols; c++) {
+                    var maxW = 0;
+                    for (var r = 0; r < rows; r++) {
+                        var idx = r * cols + c;
+                        if (idx < items.length) maxW = Math.max(maxW, ctx.measureText(items[idx].label).width);
+                    }
+                    colW.push(swatchW + labelGap + maxW);
+                }
+                totalW = colW[0] + colW[1] + cellGapX + padX * 2;
+                var itemH = Math.round(fontPx * 1.6);
+                totalH = rows * itemH + (rows - 1) * cellGapY + padTop + 8;
+                return itemH;
+            }
+
+            var itemH = layout(fs);
+            // Уменьшаем шрифт, если сетка не помещается в ширину графика
+            var availW = chartArea.right - chartArea.left;
+            while (totalW > availW && fs > 14) {
+                fs = Math.round(fs * 0.9);
+                itemH = layout(fs);
+            }
+
             ctx.textBaseline = 'middle';
 
             // Подложка для читаемости поверх линий
             ctx.fillStyle = 'rgba(18, 20, 24, 0.78)';
-            ctx.fillRect(chartArea.left, chartArea.top + 10, 130, datasets.length * lineHeight + 6);
+            ctx.fillRect(chartArea.left, chartArea.top + 6, totalW, totalH);
 
-            for (var i = 0; i < datasets.length; i++) {
-                var ds = datasets[i];
-                if (!ds.label) continue;
-                var color = ds.borderColor || ds.backgroundColor || '#ccc';
-                var hidden = ds.hidden === true;
-                var alpha = hidden ? 0.4 : 1;
+            var areas = [];
+            for (var n = 0; n < items.length; n++) {
+                var it = items[n];
+                var cIdx = n % cols;
+                var rIdx = Math.floor(n / cols);
+                var x = chartArea.left + padX + (cIdx === 0 ? 0 : colW[0] + cellGapX);
+                var y = chartArea.top + padTop + itemH / 2 + rIdx * (itemH + cellGapY);
+                var dset = datasets[it.index];
+                var color = dset.borderColor || dset.backgroundColor || '#ccc';
+                var hidden = dset.hidden === true;
 
-                ctx.globalAlpha = alpha;
+                ctx.globalAlpha = hidden ? 0.4 : 1;
                 ctx.fillStyle = color;
-                ctx.fillRect(x, y - 4, 12, 2);
+                ctx.fillRect(x, y - swatchH, swatchW, swatchH);
                 ctx.fillStyle = hidden ? '#666' : '#ccc';
-                ctx.fillText(ds.label, x + 18, y);
+                ctx.fillText(dset.label, x + swatchW + labelGap, y);
 
                 areas.push({
-                    x: chartArea.left,
-                    y: y - 6,
-                    width: 130,
-                    height: lineHeight,
-                    datasetIndex: i
+                    x: x - cellGapX / 2,
+                    y: y - itemH / 2,
+                    width: colW[cIdx] + cellGapX,
+                    height: itemH + cellGapY / 2,
+                    datasetIndex: it.index
                 });
-                y += lineHeight;
             }
 
             ctx.restore();
             chart._legendHitAreas = areas;
         }
     };
+
+    // === Legend state persistence (cookies) ===
+    var LEGEND_STATE_COOKIE = 'wclock_invest_legend';
+
+    function getLegendState() {
+        try {
+            var m = document.cookie.match(new RegExp('(?:^|; )' + LEGEND_STATE_COOKIE + '=([^;]*)'));
+            return m ? JSON.parse(decodeURIComponent(m[1])) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function applyLegendState(chart) {
+        if (!chart || !chart.data || !chart.data.datasets) return;
+        var state = getLegendState();
+        if (Object.keys(state).length === 0) return;
+        for (var i = 0; i < chart.data.datasets.length; i++) {
+            var ds = chart.data.datasets[i];
+            if (!ds || !ds.label) continue;
+            if (state[ds.label] !== undefined) {
+                ds.hidden = state[ds.label] === true;
+            }
+        }
+    }
+
+    function saveLegendState() {
+        try {
+            var chart = investChart;
+            if (!chart || !chart.data || !chart.data.datasets) return;
+            var state = {};
+            for (var i = 0; i < chart.data.datasets.length; i++) {
+                var ds = chart.data.datasets[i];
+                if (ds && ds.label) state[ds.label] = ds.hidden === true;
+            }
+            document.cookie = LEGEND_STATE_COOKIE + '=' + encodeURIComponent(JSON.stringify(state)) + '; path=/; max-age=31536000';
+        } catch (e) {}
+    }
 
     function toggleLegendDataset(chart, event) {
         var areas = chart._legendHitAreas;
@@ -893,6 +978,7 @@
                 if (!ds) return;
                 ds.hidden = !ds.hidden;
                 chart.update();
+                saveLegendState();
                 return;
             }
         }

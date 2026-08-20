@@ -295,7 +295,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
         html += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
         portfolioRows.forEach(function(row) {
-            html += `<div class="banner-capital-line" style="color:var(--text-color);font-size:45px;line-height:1.05;">${formatCurrency(row.currentTotal)}</div>`;
+            html += `<div class="banner-capital-line">${formatCurrency(row.currentTotal)}</div>`;
         });
         html += `</div>`;
 

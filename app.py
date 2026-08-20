@@ -484,7 +484,7 @@ def api_invest_history():
                 if total is None:
                     continue
                 if ts not in raw_ts:
-                    all_ts[(ts, "mixed")] = round(total, 2)
+                    all_ts[(ts, "tinkoff")] = round(total, 2)
 
             aggregated = {}
             latest_ts = None
