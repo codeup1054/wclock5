@@ -121,8 +121,13 @@ function aggregateData(timestamps, values, interval, labelMode) {
         if (!aggregated[key]) {
             aggregated[key] = { values: [], timestamp: bucket };
         }
-        const numVal = Number(values[i]);
-        aggregated[key].values.push(isNaN(numVal) ? 0 : numVal);
+        const rawVal = values[i];
+        let numVal = null;
+        if (rawVal !== null && rawVal !== undefined) {
+            numVal = Number(rawVal);
+            if (isNaN(numVal)) numVal = null;
+        }
+        aggregated[key].values.push(numVal);
     }
 
     const sortedKeys = Object.keys(aggregated).sort((a, b) => Number(a) - Number(b));
@@ -141,9 +146,15 @@ function aggregateData(timestamps, values, interval, labelMode) {
         
         let currentValue = group.values[group.values.length - 1];
         
-        if (currentValue === null || currentValue === 0 || isNaN(currentValue)) {
+        if (currentValue === null || isNaN(currentValue)) {
             if (lastValidValue !== null) {
                 currentValue = lastValidValue;
+            }
+        } else if (currentValue === 0) {
+            if (lastValidValue !== null) {
+                currentValue = lastValidValue;
+            } else {
+                lastValidValue = 0;
             }
         } else {
             lastValidValue = currentValue;

@@ -249,8 +249,7 @@
                     beginAtZero: false,
                     display: true,
                     callback: function(value) {
-                        if (value >= 1e6) return '' + (value / 1e6).toFixed(2);
-                        return '' + Number(value).toLocaleString('ru-RU');
+                        return '' + (value / 1e6).toFixed(3).replace('.', ',');
                     },
                     font: { size: 10 },
                     color: '#e84393',
@@ -980,32 +979,8 @@
     // ================================================================
 
     function updateSourceBadge(rawData) {
-        var panel = document.getElementById('invest_panel');
-        if (!panel) return;
         var el = document.getElementById('invest_source');
-        if (!el) {
-            el = document.createElement('div');
-            el.id = 'invest_source';
-            el.style.cssText = 'position:absolute;top:2px;right:4px;font-size:10px;z-index:15;font-family:helvetica,arial,sans-serif;padding:1px 6px;border-radius:8px;background:rgba(40,40,40,0.65);letter-spacing:.3px;pointer-events:none;';
-            panel.appendChild(el);
-        }
-        var timestamps = Object.keys(rawData || {}).sort();
-        if (!timestamps.length) { el.style.display = 'none'; return; }
-        var latest = rawData[timestamps[timestamps.length - 1]];
-        if (!Array.isArray(latest)) { el.style.display = 'none'; return; }
-        var sources = {};
-        for (var i = 0; i < latest.length; i++) {
-            if (latest[i] && latest[i].source) sources[latest[i].source] = true;
-        }
-        var keys = Object.keys(sources);
-        if (keys.length === 0) { el.style.display = 'none'; return; }
-        var hasFinam = !!sources['finam'];
-        var hasTinkoff = !!sources['tinkoff'];
-        var label = hasFinam && hasTinkoff ? 'Finam + Tinkoff' : hasFinam ? 'Finam' : hasTinkoff ? 'Tinkoff' : '';
-        if (!label) { el.style.display = 'none'; return; }
-        el.textContent = '\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A: ' + label;
-        el.style.display = 'block';
-        el.style.color = hasFinam ? '#7cb7ff' : '#aaa';
+        if (el) { el.remove(); }
     }
 
     // ================================================================
