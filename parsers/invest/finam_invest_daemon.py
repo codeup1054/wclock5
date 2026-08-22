@@ -7,13 +7,14 @@ import time
 import json
 import sqlite3
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import signal
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from invest_db import aggregate_old_data
+from invest_db import init_invest_db
+from invest_repo import Snapshot, Position, write_snapshot, apply_retention, current_interval, init_trades_tables, upsert_trades, guess_exchange
 
 # UTF-8 для вывода в консоль (Windows cp1251 не кодирует эмодзи)
 if hasattr(sys.stdout, "reconfigure"):
@@ -82,72 +83,10 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# --- Инициализация БД ---
+# --- Инициализация БД — через mediation-слой (invest_repo) ---
 def init_db():
-    """Создаёт таблицы, если их нет (общая схема с tinkoff_invest_daemon.py)."""
-    db_dir = os.path.dirname(DB_PATH)
-    os.makedirs(db_dir, exist_ok=True)
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA busy_timeout = 5000")
-    cursor = conn.cursor()
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS portfolio_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            total_value REAL NOT NULL,
-            source TEXT DEFAULT 'tinkoff'
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS portfolio_positions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            instrument_type TEXT,
-            name TEXT,
-            ticker TEXT,
-            quantity REAL,
-            price REAL,
-            value REAL,
-            source TEXT DEFAULT 'tinkoff'
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS portfolio_hourly (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp TEXT NOT NULL UNIQUE,
-            open REAL,
-            high REAL,
-            low REAL,
-            close REAL,
-            volume INTEGER DEFAULT 0
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )
-    ''')
-    cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
-                   ("FINAM_UPDATE_INTERVAL", str(UPDATE_INTERVAL_SEC)))
-
-    # Индексы
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_positions_timestamp ON portfolio_positions(timestamp)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_history_timestamp ON portfolio_history(timestamp)")
-
-    # Миграция source на существующих БД (созданы старым демоном)
-    for table in ("portfolio_positions", "portfolio_history"):
-        cols = [r[1] for r in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
-        if "source" not in cols:
-            cursor.execute(f"ALTER TABLE {table} ADD COLUMN source TEXT DEFAULT 'tinkoff'")
-
-    conn.commit()
-    conn.close()
+    init_invest_db()
+    init_trades_tables()
     print(f"✅ База данных инициализирована: {DB_PATH}", flush=True)
 
 # --- Вспомогательные функции ---
@@ -229,48 +168,127 @@ def map_positions(data):
 
 MIN_POSITIONS = 1  # для Finam всегда есть кэш (RUB) + позиции
 
-# --- Сохранение в SQLite ---
+# --- Сохранение через mediation-слой ---
 def save_to_sqlite(positions):
     if len(positions) < MIN_POSITIONS:
         print(f"⚠️ Пропущен снепшот: только {len(positions)} позиций (нужно {MIN_POSITIONS})", flush=True)
         return None
 
-    total_value = sum(p["value"] for p in positions)
-    timestamp = datetime.now(timezone.utc).isoformat()
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA busy_timeout = 5000")
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM portfolio_history WHERE timestamp < datetime('now', '-120 days')")
-    cursor.execute("DELETE FROM portfolio_positions WHERE timestamp < datetime('now', '-120 days')")
-
-    for p in positions:
-        cursor.execute('''
-            INSERT INTO portfolio_positions (
-                timestamp, instrument_type, name, ticker, quantity, price, value, source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            timestamp,
-            p["instrument_type"],
-            p["name"],
-            p["ticker"],
-            p["quantity"],
-            p["price"],
-            p["value"],
-            SOURCE,
-        ))
-
-    cursor.execute('''
-        INSERT INTO portfolio_history (timestamp, total_value, source)
-        VALUES (?, ?, ?)
-    ''', (timestamp, round(total_value, 2), SOURCE))
-
-    conn.commit()
-    conn.close()
-    return total_value
+    snap_positions = [
+        Position(
+            instrument_type=p["instrument_type"],
+            name=p["name"],
+            ticker=p["ticker"],
+            quantity=float(p["quantity"]),
+            price=float(p["price"]),
+            value=float(p["value"]),
+            source=SOURCE,
+        )
+        for p in positions
+    ]
+    snap = Snapshot(source=SOURCE, positions=snap_positions)
+    return write_snapshot(snap)
 
 # --- Основной цикл ---
+# --- История сделок для оборотов ---
+_trades_since_ts = None   # инкрементальный курсор синхронизации
+
+
+def _trade_ts(t):
+    """timestamp сделки: ISO-строка или proto {seconds, nanos} → epoch."""
+    ts = t.get("timestamp")
+    if isinstance(ts, dict):
+        return int(ts.get("seconds") or 0)
+    if isinstance(ts, str) and ts:
+        try:
+            return int(datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            return 0
+    return 0
+
+
+def _fetch_trades_chunk(headers, start, end):
+    """Одно окно [start, end] → список сделок."""
+    base = f"{FINAM_API_BASE}/v1/accounts/{FINAM_ACCOUNT_ID}/trades"
+    params = {"limit": 500,
+              "interval.start_time": start.strftime('%Y-%m-%dT%H:%M:%SZ'),
+              "interval.end_time": end.strftime('%Y-%m-%dT%H:%M:%SZ')}
+    resp = requests.get(base, headers=headers, params=params, timeout=15)
+    if resp.status_code == 401:
+        headers = {"Authorization": f"Bearer {_get_jwt(force=True)}"}
+        resp = requests.get(base, headers=headers, params=params, timeout=15)
+    resp.raise_for_status()
+    return resp.json().get("trades", [])
+
+
+def fetch_trades(days=3):
+    """История сделок с пагинацией: идём назад от 'now', при переполнении окна (500)
+    отступаем к самой ранней сделке. Первый запуск — N дней, далее инкремент."""
+    global _trades_since_ts
+    now = datetime.now(timezone.utc)
+    if _trades_since_ts:
+        target = datetime.fromtimestamp(_trades_since_ts, tz=timezone.utc) - timedelta(minutes=5)
+    else:
+        target = now - timedelta(days=days)
+    headers = {"Authorization": f"Bearer {_get_jwt()}"}
+    end, out = now, []
+    while end > target:
+        start = max(target, end - timedelta(minutes=30))
+        batch = _fetch_trades_chunk(headers, start, end)
+        out.extend(batch)
+        if len(batch) == 500:
+            end = datetime.fromtimestamp(min(_trade_ts(t) for t in batch), tz=timezone.utc)
+        else:
+            end = start
+    _trades_since_ts = now.timestamp()
+    return out
+
+
+def map_trades(trades):
+    """Сделки Finam → формат invest_repo.upsert_trades. Комиссия считается оценкой на агрегате."""
+    out = []
+    for t in trades or []:
+        ts = _trade_ts(t)
+        if not ts:
+            continue
+        price = _dec((t.get("price") or {}).get("value"))
+        size = _dec((t.get("size") or {}).get("value"))
+        if price <= 0 or size <= 0:
+            continue
+        raw_side = t.get("side")
+        if isinstance(raw_side, int):
+            side = {1: "buy", 2: "sell"}.get(raw_side)
+        else:
+            side = {"SIDE_BUY": "buy", "SIDE_SELL": "sell",
+                    "BUY": "buy", "SELL": "sell"}.get(str(raw_side).upper())
+        if not side:
+            continue
+        symbol = t.get("symbol") or "?"
+        out.append({
+            "trade_id": t.get("trade_id") or f"{symbol}_{ts}_{side}_{price}_{size}",
+            "source": "finam",
+            "symbol": symbol,
+            "side": side,
+            "quantity": size,
+            "price": price,
+            "sum": price * size,
+            "commission": 0.0,
+            "exchange": guess_exchange(symbol),
+            "ts_epoch": int(ts),
+        })
+    return out
+
+
+def sync_trades():
+    """Раз в ~2 минуты: подтянуть новые сделки в БД."""
+    try:
+        added = upsert_trades(map_trades(fetch_trades(days=3)))
+        if added:
+            print(f"💰 Новых сделок Finam: {added}", flush=True)
+    except Exception as e:
+        print(f"⚠️ finam sync_trades: {e}", flush=True)
+
+
 def main():
     print("🔄 Запуск демона Finam Invest", flush=True)
     print(f"🗃️  База данных: {DB_PATH}", flush=True)
@@ -295,9 +313,13 @@ def main():
             else:
                 print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
 
-            # Агрегация старых данных: каждый 10-й цикл (~каждые 10 мин)
+            # Агрегация старых данных: каждый 10-й цикл
             if iteration % 10 == 0:
-                aggregate_old_data()
+                apply_retention()
+
+            # Сделки/оборот: каждый 12-й цикл (~2 мин)
+            if iteration % 12 == 1:
+                sync_trades()
 
         except Exception as e:
             now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -309,9 +331,11 @@ def main():
         if shutdown:
             break
 
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⏳ Ожидание {UPDATE_INTERVAL_SEC} секунд до следующего запроса...", flush=True)
+        # Адаптивный интервал: 10с днём (08:00–24:00 МСК), ночью — базовый из env
+        interval = current_interval(base=UPDATE_INTERVAL_SEC)
+        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⏳ Ожидание {interval} секунд до следующего запроса...", flush=True)
 
-        for _ in range(UPDATE_INTERVAL_SEC):
+        for _ in range(interval):
             if shutdown:
                 break
             time.sleep(1)

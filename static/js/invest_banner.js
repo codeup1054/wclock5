@@ -6,6 +6,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     'use strict';
 
     let tickersData = {};
+    let refHistory = null;   // фиксированный срез hour/-8day для статичных колонок (сутки/неделя)
 
     const COLORS = {
         capital: '#8d9d9d',
@@ -16,7 +17,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         tgold: '#FFD700',
         coral: '#ff7f50',
         finam: '#8e44ad',
-        finamPink: '#e84393',
+        finamBlue: '#5b6ee8',
         tinvest: '#43e893',
         barBackground: 'rgba(100, 100, 100, 0.5)',
         assetColors: ['#3498db', '#e74c3c', '#1fc163', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
@@ -137,6 +138,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     function calculatePeriodMs(period) {
         if (!period) return 35 * 86400000;
+        const hm = period.match(/-(\d+)\s*hour/);
+        if (hm) return parseInt(hm[1]) * 3600000;
         const match = period.match(/-(\d+)\s*day/);
         if (match) return parseInt(match[1]) * 86400000;
         if (period.includes('1.5')) return 1.5 * 86400000;
@@ -195,6 +198,33 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             });
     }
 
+    // === Обороты сделок (заполняется из /api/invest/turnover) ===
+    let turnoverData = null;
+
+    function formatCompactRub(n) {
+        if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.', ',') + 'М';
+        if (n >= 1000) {
+            const k = n / 1000;
+            return (k >= 100 ? Math.round(k).toString() : k.toFixed(k >= 10 ? 1 : 2)).replace('.', ',') + 'к';
+        }
+        return String(Math.round(n));
+    }
+
+    function renderTurnoverBlock(source, capital) {
+        if (!turnoverData || !capital) return '';
+        const t = turnoverData[source] || {};
+        const total = t.total || 0;
+        const comm = t.commission || 0;
+        const x = total / capital;
+        const xStr = x >= 10 ? x.toFixed(0) : x.toFixed(1).replace('.', ',');
+        const pct = total > 0 ? comm / total * 100 : 0;
+        const pctStr = pct > 0 ? Number(pct.toPrecision(3)).toString().replace('.', ',') : '0';
+        return `<table class="banner-turnover-block"><tr>` +
+            `<td>x${xStr}</td><td class="tb-col2">${formatCompactRub(total)}</td></tr>` +
+            `<tr><td>${pctStr} %</td><td class="tb-col2">${formatCompactRub(comm)}</td></tr>` +
+            `</table>`;
+    }
+
     function renderAssetRow(ticker, color, label) {
         const t = tickersData[ticker];
         if (!t) return '';
@@ -230,7 +260,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         </tr>`;
     }
 
-    function renderBanner(historyData) {
+    function renderBanner(historyData, dynData) {
         const $banner = $('#invest_banner');
         
         if (!historyData || Object.keys(historyData).length === 0) {
@@ -258,12 +288,16 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const period = getSetting('invest_panel_period', '-35 day');
         const periodMs = calculatePeriodMs(period);
 
+        // Динамический датасет выбранного периода — только для колонок 5-6
+        const dynHistory = dynData || historyData;
+        const dynTimestamps = Object.keys(dynHistory).sort();
+
         // Показатели по каждому портфелю отдельно
         const portfolioRows = presentSources.map(function(src) {
             const currentTotal = totals[src];
             const baselineTotal = calculateBaselineTotal(historyData, timestamps, src);
             const baselineWeekTotal = calculateWeekBaselineTotal(historyData, timestamps, src);
-            const baselinePeriodTotal = calculatePeriodBaselineTotal(historyData, timestamps, periodMs, src);
+            const baselinePeriodTotal = calculatePeriodBaselineTotal(dynHistory, dynTimestamps, periodMs, src);
             const absChange = currentTotal - baselineTotal;
             const pctChange = baselineTotal !== 0 ? (absChange / baselineTotal * 100) : 0;
             const absChangeWeek = currentTotal - baselineWeekTotal;
@@ -274,7 +308,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 source: src,
                 label: src === 'finam' ? 'Finam' : 'Тинвест',
                 marker: src === 'finam' ? 'F' : 'T',
-                color: src === 'finam' ? COLORS.finamPink : COLORS.tinvest,
+                color: src === 'finam' ? COLORS.finamBlue : COLORS.tinvest,
                 cssClass: src === 'finam' ? 'banner-row-portfolio-finam' : 'banner-row-portfolio-tinvest',
                 currentTotal: currentTotal,
                 assets: getAssetsDataBySource(latestPositions, src),
@@ -295,7 +329,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
         html += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
         portfolioRows.forEach(function(row) {
-            html += `<div class="banner-capital-line">${formatCurrency(row.currentTotal)}</div>`;
+            html += `<div class="banner-capital-line"><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
         });
         html += `</div>`;
 
@@ -343,7 +377,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
         html += renderAssetRow('TGLD@', COLORS.tgold, 'TGLD');
         html += renderAssetRow('TMON@', '#e74c3c', 'TMON');
-        html += renderAssetRow('XAU/USD', '#3498db', 'XAU');
+        html += renderAssetRow('XAU/USD', '#cc7722', 'XAU');
 
         html += `</tbody></table>`;
 
@@ -351,17 +385,43 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         console.log('[InvestBanner] Banner rendered, sources:', presentSources, 'capital:', totals, 'assets:', portfolioRows.map(r => r.assets.length));
     }
 
+    function loadRefHistory(callback) {
+        $.getJSON('/api/invest/history?interval=hour&period=-8%20day')
+            .done(function(d) { refHistory = d; })
+            .fail(function() { console.warn('[InvestBanner] ref history failed'); })
+            .always(function() { if (callback) callback(); });
+    }
+
     function updateInvestBanner() {
         console.log('[InvestBanner] updateInvestBanner called');
-        
+
+        // Обороты с начала суток (локальная полночь)
+        const midnight = new Date();
+        midnight.setHours(0, 0, 0, 0);
+        $.getJSON('/api/invest/turnover?since=' + Math.floor(midnight.getTime() / 1000))
+            .done(function(d) { turnoverData = d; })
+            .fail(function() { console.warn('[InvestBanner] turnover fetch failed'); });
+
+        loadRefHistory(function() {
         loadTickersData(function() {
-            $.getJSON('/api/invest/history', function(historyData) {
+            const period = getSetting('invest_panel_period', '-35 day');
+            const interval = {
+                '-90 day': 'day',
+                '-35 day': 'hour',
+                '-7 day': 'hour',
+                '-1 day': 'hour',
+                '-6 hour': 'fivemin',
+                '-3 hour': 'minute',
+                '-1 hour': 'minute'
+            }[period] || 'hour';
+            $.getJSON('/api/invest/history?interval=' + interval + '&period=' + encodeURIComponent(period), function(historyData) {
                 console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
-                renderBanner(historyData);
+                renderBanner(refHistory || historyData, historyData);
             }).fail(function(xhr, status, error) {
                 console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
                 $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
             });
+        });
         });
     }
 
@@ -377,12 +437,21 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         if (externalTickers && typeof externalTickers === 'object') {
             $.extend(tickersData, externalTickers);
         }
-        if (Object.keys(tickersData).length === 0) {
-            loadTickersData(function() {
-                renderBanner(historyData);
+        const render = function() {
+            renderBanner(refHistory || historyData, historyData);
+        };
+        if (!refHistory) {
+            loadRefHistory(function() {
+                if (Object.keys(tickersData).length === 0) {
+                    loadTickersData(render);
+                } else {
+                    render();
+                }
             });
+        } else if (Object.keys(tickersData).length === 0) {
+            loadTickersData(render);
         } else {
-            renderBanner(historyData);
+            render();
         }
     }
 

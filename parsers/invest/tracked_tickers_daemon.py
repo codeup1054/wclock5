@@ -13,6 +13,9 @@ from datetime import datetime, timezone
 import signal
 import ssl
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import invest_repo as repo
+
 # === Загрузка .env ===
 PROJECT_ROOT = os.getcwd()
 ENV_PATH = os.path.join(PROJECT_ROOT, ".env")
@@ -226,29 +229,15 @@ def price_to_float(price_obj):
 
 # --- Сохранение в БД ---
 def save_prices(last_prices):
-    timestamp = datetime.now(timezone.utc).isoformat()
     saved = 0
-
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.execute("PRAGMA journal_mode=WAL")
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-120 days')")
-
     for item in last_prices:
         figi = item["figi"]
         ticker = item.get("ticker", "")
         class_code = item.get("classCode", "")
         price = price_to_float(item.get("price"))
-
-        cursor.execute('''
-            INSERT INTO last_prices (timestamp, figi, ticker, class_code, price)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (timestamp, figi, ticker, class_code, price))
+        repo.write_price(figi, ticker, class_code, price, db_path=DB_PATH)
         saved += 1
-
-    conn.commit()
-    conn.close()
+    repo.apply_ticker_retention(days=120, db_path=DB_PATH)
     return saved
 
 # --- Сохранение XAU в БД ---
@@ -256,16 +245,8 @@ def save_xau_price(item):
     """Сохранить одну запись XAU (уже float цена)."""
     if not item:
         return 0
-    timestamp = datetime.now(timezone.utc).isoformat()
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM last_prices WHERE timestamp < datetime('now', '-120 days')")
-    cursor.execute('''
-        INSERT INTO last_prices (timestamp, figi, ticker, class_code, price)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (timestamp, item["figi"], item["ticker"], item["class_code"], round(item["price"], 2)))
-    conn.commit()
-    conn.close()
+    repo.write_price(item["figi"], item["ticker"], item["class_code"], round(item["price"], 2), db_path=DB_PATH)
+    repo.apply_ticker_retention(days=120, db_path=DB_PATH)
     return 1
 
 # --- Основной цикл ---

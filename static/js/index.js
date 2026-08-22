@@ -207,9 +207,29 @@ $(document).ready(function () {
         }
     }
 
+    // Жёсткая перезагрузка со сбросом кэша:
+    // 1) перекачиваем все css/js с сети (cache:'reload' обновляет записи HTTP-кэша),
+    // 2) чистим CacheStorage (service worker), 3) перезагружаем страницу
+    function hardReload() {
+        const urls = new Set();
+        document.querySelectorAll('link[rel="stylesheet"], script[src]').forEach(el => {
+            const u = el.href || el.src;
+            if (u) urls.add(u);
+        });
+        const refetch = Promise.all(
+            Array.from(urls).map(u =>
+                fetch(u, { cache: 'reload', credentials: 'same-origin' }).catch(() => {})
+            )
+        );
+        const clearCaches = (window.caches && caches.keys)
+            ? caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).catch(() => {})
+            : Promise.resolve();
+        Promise.all([refetch, clearCaches]).finally(() => location.reload());
+    }
+
     // === ИНИЦИАЛИЗАЦИЯ ===
     function initUI() {
-        $('#browser_reload').on('click', () => location.reload());
+        $('#browser_reload').on('click', () => hardReload());
         $('#browser_fullscreen').on('click', toggleFullscreen);
         $('#fullscreen2').on('click', toggleFullscreen);
         // Disable fullscreen toggle on clicks inside weather panel

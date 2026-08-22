@@ -106,8 +106,20 @@ function aggregateData(timestamps, values, interval, labelMode) {
                 bucket.setSeconds(0, 0);
                 key = String(bucket.getTime());
                 break;
+            case 'fivemin':
+                bucket.setMinutes(Math.floor(bucket.getMinutes() / 5) * 5, 0, 0);
+                key = String(bucket.getTime());
+                break;
+            case 'twentymin':
+                bucket.setMinutes(Math.floor(bucket.getMinutes() / 20) * 20, 0, 0);
+                key = String(bucket.getTime());
+                break;
             case 'hour':
                 bucket.setMinutes(0, 0, 0);
+                key = String(bucket.getTime());
+                break;
+            case 'sixhour':
+                bucket.setHours(Math.floor(bucket.getHours() / 6) * 6, 0, 0, 0);
                 key = String(bucket.getTime());
                 break;
             case 'day':
@@ -138,6 +150,9 @@ function aggregateData(timestamps, values, interval, labelMode) {
     let lastValidValue = null;
     let intervalMs = 3600000;
     if (interval === 'minute') intervalMs = 60000;
+    if (interval === 'fivemin') intervalMs = 300000;
+    if (interval === 'twentymin') intervalMs = 1200000;
+    if (interval === 'sixhour') intervalMs = 21600000;
     if (interval === 'day') intervalMs = 86400000;
 
     sortedKeys.forEach(key => {
@@ -242,7 +257,7 @@ function aggregateTgoldData(prices, portfolioTimestamps, interval) {
         priceMap[key] = p.y;
     });
     
-    const intervalMs = interval === 'minute' ? 60000 : interval === 'hour' ? 3600000 : 86400000;
+    const intervalMs = interval === 'minute' ? 60000 : interval === 'fivemin' ? 300000 : interval === 'twentymin' ? 1200000 : interval === 'hour' ? 3600000 : interval === 'sixhour' ? 21600000 : 86400000;
     
     const rawData = portfolioTimestamps.map(ts => {
         const tsTime = ts.getTime();

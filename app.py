@@ -4,15 +4,17 @@ VALID_KEY = "6HKJ809-YUI67-HKJJL-5677-HJKK"
 SECRET_MODE_KEY = "INVEST_MODE"
 
 import os
+import re
 import sqlite3
 import json
 import time
 import traceback
-from datetime import datetime
-from flask import Flask, jsonify, render_template, request, make_response
+from datetime import datetime, timedelta, timezone
+from flask import Flask, jsonify, render_template, request, make_response, url_for
 
 # === Инициализация БД ===
 from db_init import init_db
+import invest_repo
 print("🔧 Инициализация базы данных...")
 init_db()  # ← вызывается СРАЗУ при импорте app.py
 
@@ -27,16 +29,27 @@ app = Flask(__name__,
             static_url_path="/static"
             )
 
-# Авто cache-busting: no-cache для статики
+# Авто cache-busting: no-cache для статики и HTML-страниц
 @app.after_request
 def add_no_cache(response):
-    if request.path.startswith('/static/'):
+    if request.path.startswith('/static/') or response.mimetype == 'text/html':
         response.cache_control.no_cache = True
         response.cache_control.no_store = True
         response.cache_control.must_revalidate = True
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
     return response
+
+# Версионирование статики по mtime: URL меняется при каждом изменении файла,
+# поэтому даже браузеры, игнорирующие no-cache, получают свежую версию
+@app.template_global()
+def surl(filename):
+    fp = os.path.join(app.static_folder, filename)
+    try:
+        v = int(os.stat(fp).st_mtime)
+    except OSError:
+        v = 0
+    return f"{url_for('static', filename=filename)}?v={v}"
 
 # ================================
 # Вспомогательные функции
@@ -422,142 +435,65 @@ def get_invest_db():
 def api_invest_history():
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-30 day')
-    bucket_size = {'minute': 600, 'hour': 3600, 'day': 86400}.get(interval, 3600)
+    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
 
-    def generate():
-        if not os.path.exists(INVEST_DB_PATH):
-            return {"_error": "Invest DB not found", "_error_code": 404}
-        try:
-            conn = get_invest_db()
-            cur = conn.cursor()
-
-            # Сырые данные за запрошенный период — итоги по источникам
-            cur.execute("""
-                SELECT timestamp, source, SUM(value) AS total
-                FROM portfolio_positions
-                WHERE timestamp >= datetime('now', ?)
-                GROUP BY timestamp, source
-                ORDER BY timestamp ASC
-            """, (period,))
-            raw_rows = cur.fetchall()
-
-            # Часовые свечи за запрошенный период (таблица может отсутствовать)
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='portfolio_hourly'")
-            has_hourly = cur.fetchone() is not None
-            hourly_rows = []
-            if has_hourly:
-                cur.execute("""
-                    SELECT timestamp, close AS total
-                    FROM portfolio_hourly
-                    WHERE timestamp >= datetime('now', ?)
-                    ORDER BY timestamp ASC
-                """, (period,))
-                hourly_rows = cur.fetchall()
-
-            # Если нет ни сырых, ни часовых — пробуем все сырые (обратная совместимость)
-            if not raw_rows and not hourly_rows:
-                cur.execute("""
-                    SELECT timestamp, source, SUM(value) AS total
-                    FROM portfolio_positions
-                    GROUP BY timestamp, source
-                    ORDER BY timestamp ASC
-                """)
-                raw_rows = cur.fetchall()
-
-            if not raw_rows and not hourly_rows:
-                conn.close()
-                return {}
-
-            # Объединяем и сортируем: ключ (timestamp, source)
-            all_ts = {}
-            raw_ts = set()
-            for row in raw_rows:
-                ts = row["timestamp"]
-                total = row["total"]
-                if total is None:
-                    continue
-                all_ts[(ts, row["source"] or "tinkoff")] = round(total, 2)
-                raw_ts.add(ts)
-            for row in hourly_rows:
-                ts = row["timestamp"]
-                total = row["total"]
-                if total is None:
-                    continue
-                if ts not in raw_ts:
-                    all_ts[(ts, "tinkoff")] = round(total, 2)
-
-            aggregated = {}
-            latest_ts = None
-
-            for (ts, src) in sorted(all_ts.keys()):
-                total = all_ts[(ts, src)]
-                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
-                bucket_epoch = int(dt.timestamp() / bucket_size) * bucket_size
-                bucket_key = str(bucket_epoch)
-                if bucket_key not in aggregated:
-                    aggregated[bucket_key] = {"ts": ts, "by_source": {}}
-                agg = aggregated[bucket_key]
-                # Последний снапшот за бакет (не сумма): демон пишет 2 раза/мин
-                agg["by_source"][src] = total
-                if ts > agg["ts"]:
-                    agg["ts"] = ts
-                if latest_ts is None or ts > latest_ts:
-                    latest_ts = ts
-
-            # Последние позиции — отдельно по каждому источнику (у tinkoff и finam свои снапшоты)
-            cur.execute("SELECT source, MAX(timestamp) AS ts FROM portfolio_positions GROUP BY source")
-            src_latest_rows = cur.fetchall()
-            latest_positions = []
-            latest_ts = None
-            for row in src_latest_rows:
-                src_ts = row["ts"]
-                if not src_ts:
-                    continue
-                if latest_ts is None or src_ts > latest_ts:
-                    latest_ts = src_ts
-                cur.execute("""
-                    SELECT instrument_type, name, ticker, quantity, value, source
-                    FROM portfolio_positions
-                    WHERE timestamp = ? AND source = ?
-                    ORDER BY value DESC
-                """, (src_ts, row["source"]))
-                for r in cur.fetchall():
-                    latest_positions.append({
-                        "type": r["instrument_type"] or "Other",
-                        "name": r["name"] or r["ticker"] or "Unknown",
-                        "quantity": round(r["quantity"], 4),
-                        "value": round(r["value"], 2),
-                        "source": r["source"] or "tinkoff",
-                    })
-
-            conn.close()
-
-            result = {}
-            for bucket_key in sorted(aggregated.keys()):
-                agg = aggregated[bucket_key]
-                items = [
-                    {
-                        "type": "total",
-                        "name": "Портфель",
-                        "value": round(v, 2),
-                        "source": s
-                    }
-                    for s, v in sorted(agg["by_source"].items())
-                ]
-                result[agg["ts"]] = items
-            if latest_ts:
-                result[latest_ts] = latest_positions
-            return result
-
-        except Exception as e:
-            print(f"[ERROR] /api/invest/history generate(): {e}")
-            traceback.print_exc()
-            return {"_error": str(e), "_error_code": 500}
-
-    data = cached_invest("history", INVEST_DB_PATH, {"interval": interval, "period": period}, generate)
+    data = cached_invest("history", INVEST_DB_PATH, {"interval": interval, "period": period},
+                         lambda: invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH))
     if isinstance(data, dict) and data.get("_error"):
         return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
     return jsonify(data)
+
+
+@app.route("/api/invest/turnover")
+def api_invest_turnover():
+    """Оборот по источникам. Приоритет — сводки стратегии из Telegram-канала
+    (strategy_summary, за сегодня МСК); фолбэк — сделки счёта из API брокера."""
+    import sqlite3
+    now_msk = datetime.now(timezone.utc) + timedelta(hours=3)
+    today = now_msk.strftime("%Y-%m-%d")
+    out = {}
+    try:
+        con = sqlite3.connect(INVEST_DB_PATH)
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT source, capital, turnover FROM strategy_summary"
+            " WHERE day=? ORDER BY id DESC", (today,)).fetchall()
+        seen = set()
+        for r in rows:
+            if r["source"] in seen:
+                continue
+            seen.add(r["source"])
+            total = r["turnover"] or 0
+            # Комиссия: Тинвест — 0,02% от оборота; Финам — тариф «Трейдер n6»
+            # (брекетная ставка МосБиржи; стратегия торгует TGLD на MOEX)
+            if r["source"] == "tinkoff":
+                comm = round(total * 0.0002, 2)
+            elif r["source"] == "finam":
+                # Стратегия Финам торгует на СПБ Бирже:
+                # брекетная ставка + урегулирование СПБ 0,01%
+                comm = round(invest_repo.finam_commission_estimate(0, total), 2)
+            else:
+                comm = None
+            out[r["source"]] = {
+                "total": total,
+                "buy": 0, "sell": 0,
+                "commission": comm,
+                "capital": r["capital"],
+                "strategy": True,
+            }
+        con.close()
+    except sqlite3.Error:
+        pass
+    # Фолбэк: все сделки счёта с начала суток (UTC-полночь)
+    missing = {"tinkoff", "finam"} - set(out)
+    if missing:
+        since = int(datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0).timestamp())
+        for src, d in invest_repo.read_turnover_since(since, db_path=INVEST_DB_PATH).items():
+            if src in missing:
+                d["strategy"] = False
+                out[src] = d
+    return jsonify(out)
 
 
 # === API для тикеров (TGLD@) ===
@@ -570,32 +506,15 @@ def api_invest_ticker(ticker):
     
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-28 day')
-    bucket_size = {'minute': 600, 'hour': 3600, 'day': 86400}.get(interval, 3600)
+    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
     figi = {"TGLD@": "TCS80A101X50", "GDH6": "FUTGOLD03260", "XAU/USD": "XAU_USD"}.get(ticker.upper())
     if not figi:
         return jsonify({"error": "Ticker not found"}), 404
 
     def generate():
-        conn = sqlite3.connect(TRACKED_TICKERS_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT timestamp, price, ticker, class_code
-            FROM last_prices
-            WHERE figi = ? AND timestamp >= datetime('now', ?)
-            ORDER BY timestamp ASC
-        """, (figi, period))
-        rows = cur.fetchall()
+        rows = invest_repo.read_prices(period, figi=figi, db_path=TRACKED_TICKERS_DB_PATH)
         if not rows:
-            cur.execute("""
-                SELECT timestamp, price, ticker, class_code
-                FROM last_prices
-                WHERE figi = ?
-                ORDER BY timestamp ASC
-            """, (figi,))
-            rows = cur.fetchall()
-        conn.close()
+            rows = invest_repo.read_prices(None, figi=figi, db_path=TRACKED_TICKERS_DB_PATH)
         if not rows:
             return {"_error": "No data for ticker", "_error_code": 404}
 
@@ -640,30 +559,14 @@ def api_invest_ticker(ticker):
 def api_invest_tickers():
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-28 day')
-    bucket_size = {'minute': 600, 'hour': 3600, 'day': 86400}.get(interval, 3600)
+    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
 
     def generate():
         if not os.path.exists(TRACKED_TICKERS_DB_PATH):
             return {"_error": "Ticker DB not found", "_error_code": 404}
-        conn = sqlite3.connect(TRACKED_TICKERS_DB_PATH, timeout=10)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT figi, ticker, class_code, timestamp, price
-            FROM last_prices
-            WHERE timestamp >= datetime('now', ?)
-            ORDER BY figi, timestamp ASC
-        """, (period,))
-        rows = cur.fetchall()
+        rows = invest_repo.read_prices(period, db_path=TRACKED_TICKERS_DB_PATH)
         if not rows:
-            cur.execute("""
-                SELECT figi, ticker, class_code, timestamp, price
-                FROM last_prices
-                ORDER BY figi, timestamp ASC
-            """)
-            rows = cur.fetchall()
-        conn.close()
+            rows = invest_repo.read_prices(None, db_path=TRACKED_TICKERS_DB_PATH)
 
         ticker_groups = {}
         for r in rows:

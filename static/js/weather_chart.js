@@ -8,7 +8,7 @@ function drawWeatherChart() {
         return;
     }
 
-    const FONT_SIZE = 24;
+    const FONT_SIZE = dpiFont(24, 'weather');
     let tempRange = [-15, 25];
     try {
         tempRange = JSON.parse(localStorage.getItem('weather_panel_range')) || [-15, 25];
@@ -21,7 +21,7 @@ function drawWeatherChart() {
     const windMax = 6;
 
     const container = canvas.parentElement;
-    setupCanvasForDPR(canvas, container);
+    setupCanvasForDPR(canvas, container, chartDpiValue('weather'));
 
     $.getJSON('api/charts_data', function(data) {
         if (!Array.isArray(data)) {
@@ -96,21 +96,14 @@ function drawWeatherChart() {
                 if (!x || !y_temp || !y_wind) return;
 
                 const ts = chart._rawTimestamps || rawTimestamps;
-                const ci = chart._closestIndex || closestIndex;
-                const tMin = chart._tempMin || tempMin;
-                const fSize = chart._FONT_SIZE || FONT_SIZE;
-
-                const prevIndex = Math.max(ci - 1, 1);
-                const tPrev = new Date(ts[prevIndex]).getTime();
-                const tNext = new Date(ts[ci]).getTime();
-                const nowTime = new Date().getTime();
-                const ratio = (nowTime - tPrev) / (tNext - tPrev);
+                const tMin = chart._tempMin ?? tempMin;
+                const fSize = chart._FONT_SIZE ?? FONT_SIZE;
 
                 ctx.save();
 
                 const yTemp0 = scales.y_temp.getPixelForValue(0);
                 ctx.strokeStyle = '#ff5900ff';
-                ctx.lineWidth = 5;
+                ctx.lineWidth = 5 * chartFontScale('weather');
                 ctx.setLineDash([63, 4]);
                 ctx.beginPath();
                 ctx.moveTo(chart.chartArea.left, yTemp0);
@@ -119,45 +112,63 @@ function drawWeatherChart() {
 
                 const yWind0 = scales.y_wind.getPixelForValue(0);
                 ctx.strokeStyle = '#ffffffaa';
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 4 * chartFontScale('weather');
                 ctx.setLineDash([60, 7]);
                 ctx.beginPath();
                 ctx.moveTo(chart.chartArea.left, yWind0);
                 ctx.lineTo(chart.chartArea.right, yWind0);
                 ctx.stroke();
 
-                const xNow = scales.x.getPixelForTick(ci - 1) + ratio * (scales.x.getPixelForTick(ci) - scales.x.getPixelForTick(prevIndex));
-                ctx.strokeStyle = '#ffc941ff';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([32, 6]);
-                ctx.beginPath();
-                ctx.moveTo(xNow, chart.chartArea.top);
-                ctx.lineTo(xNow, yWind0);
-                ctx.stroke();
+                // Линия текущего времени: позиция интерполируется по ВРЕМЕНИ между
+                // соседними точками данных (пиксели точек, а не тиков оси!)
+                let xNow = null;
+                let fcIndex = -1;
+                if (Array.isArray(ts) && ts.length >= 2) {
+                    const nowTime = Date.now();
+                    let ci = -1;
+                    for (let i = 0; i < ts.length; i++) {
+                        if (new Date(ts[i]).getTime() > nowTime) { ci = i; break; }
+                    }
+                    if (ci <= 0) {
+                        xNow = chart.chartArea.left;
+                    } else if (ci >= ts.length) {
+                        xNow = chart.chartArea.right;
+                    } else {
+                        const tPrev = new Date(ts[ci - 1]).getTime();
+                        const tNext = new Date(ts[ci]).getTime();
+                        let ratio = tNext > tPrev ? (nowTime - tPrev) / (tNext - tPrev) : 0;
+                        ratio = Math.max(0, Math.min(1, ratio));
+                        const pPrev = scales.x.getPixelForValue(ci - 1);
+                        const pNext = scales.x.getPixelForValue(ci);
+                        if (isFinite(pPrev) && isFinite(pNext)) {
+                            xNow = pPrev + ratio * (pNext - pPrev);
+                            if (ci + 5 < ts.length) fcIndex = ci + 5;
+                        }
+                    }
+                }
 
-                const xForecast = scales.x.getPixelForTick(ci + 5);
-                ctx.strokeStyle = '#ffc531ff';
-                ctx.lineWidth = 3;
-                ctx.setLineDash([12, 3]);
-                ctx.beginPath();
-                ctx.moveTo(xForecast, chart.chartArea.top);
-                ctx.lineTo(xForecast, yWind0);
-                ctx.stroke();
+                if (xNow !== null && isFinite(xNow)) {
+                    ctx.strokeStyle = '#ffc94166';
+                    ctx.lineWidth = 16 * chartFontScale('weather');
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.moveTo(xNow, chart.chartArea.top);
+                    ctx.lineTo(xNow, yWind0);
+                    ctx.stroke();
+                }
 
-                const yTempMin = scales.y_temp.getPixelForValue(tMin - 0.5);
-                ctx.fillStyle = 'rgba(182, 238, 255, 0.9)';
-                ctx.font = fSize + 'px sans-serif';
-                ctx.textAlign = 'right';
-                ctx.textBaseline = 'middle';
-
-                scales.x.ticks.forEach((tick, i) => {
-                    const x = scales.x.getPixelForTick(i);
-                    ctx.save();
-                    ctx.translate(x, yTempMin);
-                    ctx.rotate(-Math.PI / 3);
-                    ctx.fillText(tick.label, 0, 0);
-                    ctx.restore();
-                });
+                if (fcIndex > 0) {
+                    const xForecast = scales.x.getPixelForValue(fcIndex);
+                    if (isFinite(xForecast)) {
+                        ctx.strokeStyle = '#ffc531cc';
+                        ctx.lineWidth = 3 * chartFontScale('weather');
+                        ctx.setLineDash([]);
+                        ctx.beginPath();
+                        ctx.moveTo(xForecast, chart.chartArea.top);
+                        ctx.lineTo(xForecast, yWind0);
+                        ctx.stroke();
+                    }
+                }
 
                 ctx.restore();
             }
@@ -176,7 +187,7 @@ function drawWeatherChart() {
                         yAxisID: 'y_temp',
                         tension: 0.5,
                         pointRadius: 0,
-                        borderWidth: 10,
+                        borderWidth: Math.max(1, 10 * chartFontScale('weather')),
                         spanGaps: true
                     },
                     {
@@ -188,7 +199,7 @@ function drawWeatherChart() {
                         tension: 0.5,
                         pointRadius: 0,
                         borderDash: [30, 8],
-                        borderWidth: 5,
+                        borderWidth: Math.max(1, 5 * chartFontScale('weather')),
                         spanGaps: true
                     },
                     {
@@ -200,7 +211,7 @@ function drawWeatherChart() {
                         yAxisID: 'y_wind',
                         tension: 0.6,
                         pointRadius: 0,
-                        borderWidth: 10,
+                        borderWidth: Math.max(1, 10 * chartFontScale('weather')),
                         borderDash: [50, 8],
                         spanGaps: true
                     },
@@ -212,7 +223,7 @@ function drawWeatherChart() {
                         yAxisID: 'y_humidity',
                         tension: 0.4,
                         pointRadius: 0,
-                        borderWidth: 6,
+                        borderWidth: Math.max(1, 6 * chartFontScale('weather')),
                         spanGaps: true
                     },
                     {
@@ -223,7 +234,7 @@ function drawWeatherChart() {
                         yAxisID: 'y_pressure',
                         tension: 0.4,
                         pointRadius: 0,
-                        borderWidth: 11,
+                        borderWidth: Math.max(1, 11 * chartFontScale('weather')),
                         spanGaps: true
                     },
                     {
@@ -236,7 +247,7 @@ function drawWeatherChart() {
                         tension: 0.4,
                         pointRadius: 0,
                         borderDash: [12, 9],
-                        borderWidth: 7,
+                        borderWidth: Math.max(1, 7 * chartFontScale('weather')),
                         spanGaps: true
                     }
                 ]
@@ -245,7 +256,7 @@ function drawWeatherChart() {
                 responsive: false,
                 maintainAspectRatio: false,
                 animation: false,
-                devicePixelRatio: 1,
+                devicePixelRatio: Math.min(chartDpiValue('weather'), 6.0) * (window.devicePixelRatio || 1),
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { display: false }
@@ -299,6 +310,14 @@ $(document).on('weatherTempRangeChange', function(e, min, max) {
 
 let _lastWeatherSize = { w: 0, h: 0 };
 
+$(document).on('weatherDpiChange', function() {
+    if (window.weatherChart) {
+        try { window.weatherChart.destroy(); } catch(e) {}
+        window.weatherChart = null;
+    }
+    if (typeof drawWeatherChart === 'function') drawWeatherChart();
+});
+
 $(document).on('weatherChartResize', function() {
     const canvas = document.getElementById('weatherChart');
     if (!canvas) return;
@@ -313,3 +332,13 @@ $(document).on('weatherChartResize', function() {
     window.weatherChart = null;
     drawWeatherChart();
 });
+
+// Живая линия текущего времени: перерисовка раз в минуту без пересборки данных
+if (!window._weatherNowLineTimer) {
+    window._weatherNowLineTimer = setInterval(function() {
+        const c = window.weatherChart;
+        if (c && typeof c.update === 'function' && document.getElementById('weatherChart')) {
+            c.update('none');
+        }
+    }, 60000);
+}

@@ -170,7 +170,7 @@ function batteryLevel() {
                                 borderColor: '#FFB74D',
                                 backgroundColor: 'rgba(255,183,77,0.12)',
                                 borderWidth: 0.7,
-                                tension: 0.3,
+                                tension: chartTension(0.3),
                                 pointRadius: 0,
                                 fill: true
                             }]

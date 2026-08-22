@@ -13,7 +13,7 @@
     }
     </script>
     
-    <link rel="stylesheet" href="/static/css/wclock.css?v=7">
+    <link rel="stylesheet" href="{{ surl('css/wclock.css') }}">
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 
     <!-- jQuery -->
@@ -27,24 +27,24 @@
     <script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.min.js"></script>
 
     <!-- Локальные скрипты -->
-    <script src="/static/js/cookie.js"></script>
-    <script src="/static/js/lib.js?v=17"></script>
-    <script src="/static/js/control_panel.js?v=3"></script>
-    <script src="/static/js/battery.js?v=8"></script>
-    <script src="/static/js/weather_chart.js?v=10"></script>
-    <script src="/static/js/panel_configs.js?v=2"></script>
-    <script src="/static/js/panel_resize.js?v=6"></script>
+    <script src="{{ surl('js/cookie.js') }}"></script>
+    <script src="{{ surl('js/lib.js') }}"></script>
+    <script src="{{ surl('js/control_panel.js') }}"></script>
+    <script src="{{ surl('js/battery.js') }}"></script>
+    <script src="{{ surl('js/weather_chart.js') }}"></script>
+    <script src="{{ surl('js/panel_configs.js') }}"></script>
+    <script src="{{ surl('js/panel_resize.js') }}"></script>
 
-    <script src="/static/js/invest_banner.js?v=8"></script>
-    <script src="/static/js/chart_plugins.js"></script>
-    <script src="/static/js/invest_chart_helpers.js?v=6"></script>
-    <script src="/static/js/invest_chart.js?v=58"></script>
+    <script src="{{ surl('js/invest_banner.js') }}"></script>
+    <script src="{{ surl('js/chart_plugins.js') }}"></script>
+    <script src="{{ surl('js/invest_chart_helpers.js') }}"></script>
+    <script src="{{ surl('js/invest_chart.js') }}"></script>
 
     <!-- Оркестратор обновлений -->
-    <script src="/static/js/cron.js?v=11"></script>
+    <script src="{{ surl('js/cron.js') }}"></script>
 
     <!-- Основной модуль -->
-    <script src="/static/js/index.js?v=8"></script>
+    <script src="{{ surl('js/index.js') }}"></script>
 
 </head>
 <body>

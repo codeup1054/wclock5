@@ -34,7 +34,7 @@
             yAxisID: 'y_tgold',
             tickColor: '#ffd9007e',
             tickFormat: function(v) { return v.toFixed(1); },
-            borderWidth: 1.5,
+            borderWidth: 0.75,
             borderDash: [],
             pointRadius: 0,
             hidden: false,
@@ -44,11 +44,11 @@
         },
         'XAU/USD': {
             label: 'XAU',
-            color: '#5dade2',
+            color: '#cc7722',
             yAxisID: 'y_xau',
-            tickColor: '#5dade2',
+            tickColor: '#cc7722',
             tickFormat: function(v) { return v >= 1000 ? (v / 1000).toFixed(1) + '\u043A' : v.toFixed(0); },
-            borderWidth: 2,
+            borderWidth: 0.75,
             borderDash: [1, 1],
             pointRadius: 0,
             hidden: true,
@@ -69,7 +69,10 @@
 
         var intervalMs = 86400000;
         if (window.currentInterval === 'minute') intervalMs = 60000;
+        else if (window.currentInterval === 'fivemin') intervalMs = 300000;
+        else if (window.currentInterval === 'twentymin') intervalMs = 1200000;
         else if (window.currentInterval === 'hour') intervalMs = 3600000;
+        else if (window.currentInterval === 'sixhour') intervalMs = 21600000;
 
         var threshold = intervalMs * 2;
         var priceIdx = 0;
@@ -109,8 +112,9 @@
         var last = new Date(tsArr[tsArr.length - 1]).getTime();
         var rangeMs = Math.max(1, last - first);
         var h = 3600000;
-        if (rangeMs <= 3 * h) return 'minute';
-        if (rangeMs <= 24 * h) return '10min';
+        if (rangeMs <= 1 * h) return '5min';
+        if (rangeMs <= 3 * h) return '15min';
+        if (rangeMs <= 24 * h) return '30min';
         if (rangeMs <= 72 * h) return 'hour';
         return 'day';
     }
@@ -118,7 +122,9 @@
     function isTimeAligned(d, step) {
         switch (step) {
             case 'minute': return d.getSeconds() === 0 && d.getMilliseconds() === 0;
-            case '10min': return d.getMinutes() % 10 === 0 && d.getSeconds() === 0;
+            case '5min': return d.getMinutes() % 5 === 0 && d.getSeconds() === 0;
+            case '15min': return d.getMinutes() % 15 === 0 && d.getSeconds() === 0;
+            case '30min': return d.getMinutes() % 30 === 0 && d.getSeconds() === 0;
             case 'hour': return d.getMinutes() === 0 && d.getSeconds() === 0;
             case 'day': return d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0;
         }
@@ -171,6 +177,7 @@
         var scales = {
             x: {
                 stacked: false,
+                position: showTime ? 'top' : 'bottom',
                 afterBuildTicks: function(axis) {
                     if (!showTime) return;
                     var tsArr = axis.chart.data.timestamps || axis.chart._midnightTimestamps;
@@ -184,28 +191,31 @@
                         if (isTimeAligned(d, step)) ticks.push({ value: i });
                     }
                     if (ticks.length === 0) return;
-                    if (ticks.length > 10) {
+                    if (ticks.length > 20) {
                         var picked = [];
-                        var skip = Math.ceil(ticks.length / 10);
+                        var skip = Math.ceil(ticks.length / 20);
                         for (var t = 0; t < ticks.length; t += skip) picked.push(ticks[t]);
                         var last = ticks[ticks.length - 1];
                         if (picked[picked.length - 1].value !== last.value) picked.push(last);
-                        ticks = picked.slice(0, 10);
-                    }
-                    axis.ticks = ticks;
+                        ticks = picked.slice(0, 20);
+                    }                    axis.ticks = ticks;
                 },
-                ticks: {
-                    display: true,
-                    maxRotation: 0,
-                    minRotation: 0,
-                    padding: -30,
+            ticks: {
+                display: true,
+                maxRotation: 0,
+                minRotation: 0,
+                padding: showTime ? 0 : -30,
                     autoSkip: true,
-                    maxTicksLimit: showTime ? 10 : 30,
-                    font: { size: 10 },
+                    maxTicksLimit: showTime ? 20 : 30,
+                    font: { size: dpiFont(10) },
                     color: xTickColor,
                     callback: xTickCallback
                 },
-                grid: { display: false }
+                grid: {
+                    display: true,
+                    color: 'rgba(46, 167, 151, 0.15)',
+                    lineWidth: 1
+                }
             },
             y_portfolio: {
                 position: 'right',
@@ -220,7 +230,7 @@
                         if (value >= 1e6) return '' + (value / 1e6).toFixed(2);
                         return '' + Number(value).toLocaleString('ru-RU');
                     },
-                    font: { size: 10 },
+                    font: { size: dpiFont(10) },
                     color: '#2cba99',
                     autoSkip: true,
                     padding: -1,
@@ -231,7 +241,7 @@
                     color: 'rgba(46, 167, 151, 0.28)',
                     lineWidth: 1
                 },
-                title: { display: false, text: 'Портфель', color: '#2cbaa3', font: { size: 14 } }
+                title: { display: false, text: 'Портфель', color: '#2cbaa3', font: { size: dpiFont(14) } }
             }
         };
 
@@ -251,8 +261,8 @@
                     callback: function(value) {
                         return '' + (value / 1e6).toFixed(3).replace('.', ',');
                     },
-                    font: { size: 10 },
-                    color: '#e84393',
+                    font: { size: dpiFont(10) },
+                    color: '#5b6ee8',
                     autoSkip: true,
                     padding: -1,
                     maxTicksLimit: 8
@@ -274,7 +284,7 @@
                     ticks: {
                         display: true,
                         callback: cfg.tickFormat,
-                        font: { size: 13 },
+                        font: { size: dpiFont(13) },
                         color: cfg.tickColor,
                         autoSkip: true,
                         padding: -1,
@@ -285,7 +295,7 @@
                         display: false,
                         text: cfg.label.replace(/\/.*/, ''),
                         color: cfg.tickColor,
-                        font: { size: 14 },
+                        font: { size: dpiFont(14) },
                         padding: -10
                     }
                 };
@@ -309,7 +319,7 @@
                 borderColor: cfg.color,
                 borderWidth: cfg.borderWidth || 2,
                 borderDash: cfg.borderDash || [],
-                tension: 0.2,
+                tension: chartTension(0.2),
                 fill: false,
                 pointRadius: cfg.pointRadius || 0,
                 pointHoverRadius: 5,
@@ -398,7 +408,7 @@
                                 borderColor: cfg.color,
                                 borderWidth: cfg.borderWidth || 2,
                                 borderDash: cfg.borderDash || [],
-                                tension: 0.2,
+                                tension: chartTension(0.2),
                                 fill: false,
                                 pointRadius: cfg.pointRadius || 0,
                                 pointHoverRadius: 5,
@@ -427,6 +437,16 @@
     // ================================================================
     // CHART CREATION
     // ================================================================
+
+    // Кастомная позиция тултипа: фиксированная высота top:20, x следует за точкой
+    if (window.Chart && Chart.Tooltip && Chart.Tooltip.positioners) {
+        Chart.Tooltip.positioners.topFixed = function(active) {
+            if (!active || !active.length) return false;
+            var x = active[0].element ? active[0].element.x : 0;
+            var tt = this;
+            return { x: x, y: 20, caretPadding: 4 };
+        };
+    }
 
     function createChart(canvas, chartData, extrema, labelMode) {
         var hasDatasets = Array.isArray(chartData.datasets);
@@ -488,6 +508,11 @@
                 plugins.push(window.dailyGrowthLabelsPlugin);
             }
 
+            // Метки начала/конца периода на линиях капитала
+            if (window.periodEndpointsPlugin) {
+                plugins.push(window.periodEndpointsPlugin);
+            }
+
             var config = {
                 type: 'line',
                 plugins: plugins,
@@ -500,7 +525,7 @@
                     animation: false,
                     responsive: true,
                     maintainAspectRatio: false,
-                    devicePixelRatio: Math.min(parseFloat(getSetting('chart_dpi', '2')) || 2, 6.0) * (window.devicePixelRatio || 1),
+                    devicePixelRatio: Math.min(chartDpiValue('invest'), 6.0) * (window.devicePixelRatio || 1),
                     clip: false,
                     layout: {
                         padding: { top: 4, right: 6, bottom: 23, left: 10 }
@@ -509,17 +534,27 @@
                         legend: { display: false },
                         tooltip: {
                             enabled: true,
+                            position: 'topFixed',
                             mode: 'index',
                             intersect: false,
                             callbacks: {
-                                title: function(items) { return (items[0] && items[0].label || '').replace(/\|\|/g, ' '); },
+                                title: function(items) {
+                                    if (!items || !items.length) return '';
+                                    var tsArr = items[0].chart._midnightTimestamps || items[0].chart.data.timestamps;
+                                    var ts = (tsArr && tsArr[items[0].dataIndex] != null) ? tsArr[items[0].dataIndex] : null;
+                                    var d = ts instanceof Date ? ts : (ts != null ? new Date(ts) : null);
+                                    if (d && !isNaN(d.getTime())) {
+                                        return String(d.getMonth() + 1).padStart(2, '0') + '-' +
+                                               String(d.getDate()).padStart(2, '0') + ' ' +
+                                               String(d.getHours()).padStart(2, '0') + ':' +
+                                               String(d.getMinutes()).padStart(2, '0');
+                                    }
+                                    return (items[0].label || '').replace(/\|\|/g, ' ');
+                                },
                                 label: function(ctx) {
                                     var value = Number(ctx.parsed && ctx.parsed.y);
-                                    var dataset = ctx.dataset;
-                                    var unit = '';
-                                    if (dataset.yAxisID === 'y_portfolio') unit = '\u20BD';
-                                    else if (dataset.yAxisID === 'y_xau') unit = '$';
-                                    return dataset.label + ': ' + unit + value.toLocaleString('ru-RU');
+                                    var name = String(ctx.dataset.label || '').replace(/^Портфель\s+/, '');
+                                    return name + ': ' + value.toLocaleString('ru-RU');
                                 }
                             },
                             displayColors: true,
@@ -543,8 +578,14 @@
 
             var chart = new Chart(ctx, config);
             chart.canvas.addEventListener('click', function(event) {
+                if (chart._legendDragMoved) {
+                    chart._legendDragMoved = false;
+                    return;
+                }
                 toggleLegendDataset(chart, event);
             });
+            chart._legendPos = getLegendPos();
+            attachLegendDrag(chart);
             chart._extrema = extrema;
             chart._dailyGrowthMarks = dailyGrowthMarks;
             chart._midnightTimestamps = chartData.timestamps;
@@ -671,7 +712,7 @@
             var aggregatedTimestamps = aggResult.timestamps;
 
             // Filter X-axis labels: show only 00:00 midnight growth values
-            if (currentInterval === 'hour' || currentInterval === 'minute') {
+            if (currentInterval === 'hour' || currentInterval === 'minute' || currentInterval === 'fivemin' || currentInterval === 'twentymin' || currentInterval === 'sixhour') {
                 var origLabels = labels.slice();
                 var midnightIndices = [];
                 for (var i = 0; i < origLabels.length; i++) {
@@ -691,7 +732,7 @@
             }
 
             // Growth marks (only when "изменения размера портфеля" is enabled)
-            if (showChange && (currentInterval === 'minute' || currentInterval === 'hour' || currentInterval === 'day')) {
+            if (showChange && (currentInterval === 'minute' || currentInterval === 'fivemin' || currentInterval === 'twentymin' || currentInterval === 'hour' || currentInterval === 'sixhour' || currentInterval === 'day')) {
                 dailyGrowthMarks = calculateDailyGrowthMarks(aggregatedTimestamps, aggregatedPortfolio);
                 dailyBars = dailyGrowthMarks.map(function(m) {
                     return { value: m.pctGrowth, isPositive: m.pctGrowth >= 0 };
@@ -736,7 +777,7 @@
                     borderColor: '#2cba99',
                     backgroundColor: 'rgba(25, 150, 89, 0.15)',
                     borderWidth: 2,
-                    tension: 0.2,
+                    tension: chartTension(0.2),
                     fill: true,
                     pointRadius: 0,
                     pointHoverRadius: 4,
@@ -746,10 +787,10 @@
                 {
                     label: '\u041F\u043E\u0440\u0442\u0444\u0435\u043B\u044C Finam',
                     data: finamSeries,
-                    borderColor: '#e84393',
-                    backgroundColor: 'rgba(232, 67, 147, 0.12)',
+                    borderColor: '#5b6ee8',
+                    backgroundColor: 'rgba(91, 110, 232, 0.12)',
                     borderWidth: 2,
-                    tension: 0.2,
+                    tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
                     pointHoverRadius: 4,
@@ -892,17 +933,24 @@
 
             ctx.textBaseline = 'middle';
 
-            // Подложка для читаемости поверх линий
+            // Позиция легенды: сохранённая в куке или дефолт (низ слева).
+            // Координаты — CSS-пиксели канваса, клампятся в его границы.
+            var pos = chart._legendPos || { x: chartArea.left, y: chartArea.bottom - totalH + 14 };
+            pos.x = Math.min(Math.max(pos.x, 0), Math.max(chart.width - totalW, 0));
+            pos.y = Math.min(Math.max(pos.y, 0), Math.max(chart.height - totalH, 0));
+            var bx = pos.x;
+            var by = pos.y;
+
             ctx.fillStyle = 'rgba(18, 20, 24, 0.78)';
-            ctx.fillRect(chartArea.left, chartArea.top + 6, totalW, totalH);
+            ctx.fillRect(bx, by, totalW, totalH);
 
             var areas = [];
             for (var n = 0; n < items.length; n++) {
                 var it = items[n];
                 var cIdx = n % cols;
                 var rIdx = Math.floor(n / cols);
-                var x = chartArea.left + padX + (cIdx === 0 ? 0 : colW[0] + cellGapX);
-                var y = chartArea.top + padTop + itemH / 2 + rIdx * (itemH + cellGapY);
+                var x = bx + padX + (cIdx === 0 ? 0 : colW[0] + cellGapX);
+                var y = by + padTop + itemH / 2 + rIdx * (itemH + cellGapY);
                 var dset = datasets[it.index];
                 var color = dset.borderColor || dset.backgroundColor || '#ccc';
                 var hidden = dset.hidden === true;
@@ -923,6 +971,7 @@
             }
 
             ctx.restore();
+            chart._legendRect = { x: bx, y: by, w: totalW, h: totalH };
             chart._legendHitAreas = areas;
         }
     };
@@ -984,6 +1033,76 @@
         }
     }
 
+    // === Legend position persistence (cookie) + drag ===
+    var LEGEND_POS_COOKIE = 'wclock_invest_legend_pos';
+    var _legendDragBound = false;
+
+    function getLegendPos() {
+        try {
+            var m = document.cookie.match(new RegExp('(?:^|; )' + LEGEND_POS_COOKIE + '=([^;]*)'));
+            return m ? JSON.parse(decodeURIComponent(m[1])) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function saveLegendPos(pos) {
+        document.cookie = LEGEND_POS_COOKIE + '=' +
+            encodeURIComponent(JSON.stringify({ x: Math.round(pos.x), y: Math.round(pos.y) })) +
+            '; path=/; max-age=31536000; SameSite=Lax';
+    }
+
+    function attachLegendDrag(chart) {
+        if (_legendDragBound || !chart || !chart.canvas) return;
+        _legendDragBound = true;
+        var canvas = chart.canvas;
+        var dragging = false, moved = false, lastX = 0, lastY = 0;
+
+        function hitLegend(ev) {
+            var r = chart._legendRect;
+            if (!r) return false;
+            var rect = canvas.getBoundingClientRect();
+            var x = ev.clientX - rect.left;
+            var y = ev.clientY - rect.top;
+            return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+        }
+
+        canvas.addEventListener('pointerdown', function(e) {
+            if (!hitLegend(e)) return;
+            dragging = true;
+            moved = false;
+            chart._legendDragMoved = false;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            e.preventDefault();
+        });
+
+        window.addEventListener('pointermove', function(e) {
+            if (!dragging) return;
+            var dx = e.clientX - lastX;
+            var dy = e.clientY - lastY;
+            if (!moved && Math.abs(dx) < 5 && Math.abs(dy) < 5) return;
+            moved = true;
+            chart._legendDragMoved = true;
+            if (!chart._legendRect) return;
+            var p = chart._legendPos || (chart._legendPos = { x: chart._legendRect.x, y: chart._legendRect.y });
+            p.x += dx;
+            p.y += dy;
+            chart.draw();
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        window.addEventListener('pointerup', function() {
+            if (dragging && moved && chart._legendPos) saveLegendPos(chart._legendPos);
+            dragging = false;
+        });
+
+        canvas.addEventListener('pointermove', function(e) {
+            if (!dragging) canvas.style.cursor = hitLegend(e) ? 'move' : '';
+        });
+    }
+
     window.dailyGrowthLabelsPlugin = {
         id: 'dailyGrowthLabels',
         afterDatasetsDraw: function(chart) {
@@ -1014,6 +1133,78 @@
                 ctx.textBaseline = 'middle';
                 ctx.fillText(label, 0, 0);
                 ctx.restore();
+            }
+            ctx.restore();
+        }
+    };
+
+    // ================================================================
+    // PERIOD ENDPOINTS — начальный (слева) и конечный + дельта % (справа)
+    // капитал на линиях Tinkoff/Finam для выбранного периода
+    // ================================================================
+
+    function fmtCap(v) {
+        var a = Math.abs(v);
+        if (a >= 1e6) return (v / 1e6).toFixed(2).replace('.', ',') + '\u041C';
+        if (a >= 1e3) return Math.round(v / 1e3) + '\u043A';
+        return String(Math.round(v));
+    }
+
+    function drawChip(ctx, x, y, valueText, valueColor, pctText, pctColor, alignRight) {
+        var padX = 5, padY = 3;
+        var wValue = ctx.measureText(valueText).width;
+        var wPct = pctText ? ctx.measureText(pctText).width : 0;
+        var w = wValue + (pctText ? 8 : 0) + wPct + padX * 2;
+        var h = 12 + padY * 2;
+        var bx = alignRight ? x - w : x;
+        var by = Math.max(y - h / 2, 2);
+        ctx.fillStyle = 'rgba(18, 20, 24, 0.82)';
+        ctx.fillRect(bx, by, w, h);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = valueColor;
+        ctx.fillText(valueText, bx + padX, y);
+        if (pctText) {
+            ctx.fillStyle = pctColor;
+            ctx.fillText(pctText, bx + padX + wValue + 8, y);
+        }
+    }
+
+    window.periodEndpointsPlugin = {
+        id: 'periodEndpoints',
+        afterDatasetsDraw: function(chart) {
+            var ctx = chart.ctx;
+            var area = chart.chartArea;
+            var dsList = chart.data.datasets;
+            if (!dsList || dsList.length < 1) return;
+            var defs = [
+                { idx: 0, axis: 'y_portfolio' },
+                { idx: 1, axis: 'y_finam' }
+            ];
+            ctx.save();
+            ctx.font = 'bold 12px sans-serif';
+            for (var d = 0; d < defs.length; d++) {
+                var ds = dsList[defs[d].idx];
+                var sc = chart.scales[defs[d].axis];
+                if (!ds || !sc || !ds.data || ds.data.length < 2 || ds.hidden === true) continue;
+                var firstVal = null, lastVal = null;
+                for (var i = 0; i < ds.data.length; i++) {
+                    var p = ds.data[i];
+                    var v = Number(p && p.y != null ? p.y : p);
+                    if (isNaN(v)) continue;
+                    if (firstVal === null) firstVal = v;
+                    lastVal = v;
+                }
+                if (firstVal === null || isNaN(lastVal)) continue;
+
+                drawChip(ctx, area.left + 2, sc.getPixelForValue(firstVal),
+                         fmtCap(firstVal), ds.borderColor || '#cccccc', null, null, false);
+
+                var pct = firstVal !== 0 ? (lastVal - firstVal) / Math.abs(firstVal) * 100 : 0;
+                var pctTxt = (pct >= 0 ? '+' : '') + pct.toFixed(2).replace('.', ',') + '%';
+                drawChip(ctx, area.right - 2, sc.getPixelForValue(lastVal),
+                         fmtCap(lastVal), ds.borderColor || '#cccccc', pctTxt,
+                         pct >= 0 ? '#4caf50' : '#f44336', true);
             }
             ctx.restore();
         }
@@ -1095,7 +1286,7 @@
         }
     });
 
-    $(document).on('dpiChange', function() {
+    $(document).on('investDpiChange', function() {
         if (investChart) {
             investChart.destroy();
             investChart = null;

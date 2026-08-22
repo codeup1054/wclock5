@@ -578,6 +578,30 @@ div#browser_reload.panel-dragging {
     color: var(--text-color);
     font-size: 45px;
     line-height: 0.95;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+#invest_banner table.banner-turnover-block {
+    border-collapse: collapse;
+    width: 130px;
+    font-size: 15px;
+    line-height: 1.15;
+    color: #8d9d9d;
+    opacity: 0.85;
+    text-align: right;
+}
+
+#invest_banner table.banner-turnover-block td {
+    padding: 0 4px 0 0;
+    width: 50%;
+}
+
+#invest_banner table.banner-turnover-block .tb-col2 {
+    padding-left: 7px;
+    border-left: 1px solid rgba(141, 157, 157, 0.35);
 }
 
 #invest_banner .banner-table {
@@ -950,39 +974,41 @@ body:not(.edit-mode) .resize-handle {
 }
 
 /* ─── Control Panel ─────────────────────────────────────────────── */
-.chart-control-panel {
-    position: absolute;
-    bottom: 5px;
-    right: 5px;
-    z-index: 200;
+#chart_control_panel button,
+#chart_control_panel .panel-view-select {
+    height: 38px !important;
+    box-sizing: border-box;
+}
+
+/* Элементы размещены непосредственно в панели, без внутренней рамки */
+#chart_control_panel.clock-panel {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none !important;
+    overflow: visible;
     display: flex;
     flex-wrap: nowrap;
     gap: 5px;
     align-items: center;
-    background: var(--control-bg);
-    padding: 5px;
-    border-radius: 8px;
-    border: 1px solid var(--control-border);
     transition: all 0.3s ease;
-    max-width: 320px;
-    overflow: visible;
     opacity: 0.4;
 }
 
-.chart-control-panel:hover {
+#chart_control_panel.clock-panel:hover {
     opacity: 1;
 }
 
-.chart-control-panel .panel-buttons,
-.chart-control-panel .interval-group {
+#chart_control_panel .panel-buttons,
+#chart_control_panel .interval-group {
     pointer-events: auto !important;
 }
 
-.chart-control-panel button {
+#chart_control_panel button {
     pointer-events: auto !important;
 }
 
-.chart-control-panel .panel-buttons {
+#chart_control_panel .panel-buttons {
     display: inline-flex;
     flex-wrap: nowrap;
     gap: 3px;
@@ -1036,7 +1062,7 @@ body:not(.edit-mode) .resize-handle {
     transform: translateX(16px);
 }
 
-.chart-control-panel .interval-group {
+#chart_control_panel .interval-group {
     display: inline-flex;
     gap: 2px;
     border-left: 1px solid var(--control-border);

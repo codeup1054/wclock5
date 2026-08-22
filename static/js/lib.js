@@ -48,6 +48,26 @@ window.currentView = currentView;
 
 // --- DPR / Canvas helpers ---
 
+/**
+ * Масштаб шрифтов графиков: chart_dpi=2 → x1 (базовый вид), 6 → x3
+ */
+function chartDpiValue(target) {
+    const key = target === 'weather' ? 'weather_chart_dpi' : 'invest_chart_dpi';
+    const fallback = getSetting('chart_dpi', '2'); // миграция со старой общей настройки
+    return parseFloat(getSetting(key, fallback)) || 2;
+}
+window.chartDpiValue = chartDpiValue;
+
+function chartFontScale(target) {
+    return Math.max(0.5, chartDpiValue(target) / 2);
+}
+window.chartFontScale = chartFontScale;
+
+function dpiFont(n, target) {
+    return Math.round(n * chartFontScale(target) * 10) / 10;
+}
+window.dpiFont = dpiFont;
+
 function getSafeDPR(maxDPI) {
     return Math.min(window.devicePixelRatio || 1, maxDPI || 2.0);
 }
@@ -188,6 +208,18 @@ function togglePanelsModal() {
 window.togglePanelsModal = togglePanelsModal;
 
 /**
+ * Натяжение линий графиков с учётом настройки сглаживания
+ */
+function chartTension(base) {
+    try {
+        return getSetting('chart_smoothing', '1') !== '0' ? base : 0;
+    } catch (e) {
+        return base;
+    }
+}
+window.chartTension = chartTension;
+
+/**
  * Создает настройки температуры (двойной слайдер)
  */
 function createTempRangeSettings() {
@@ -257,8 +289,7 @@ function createPanelsModal() {
         'sun_panel': 'Солнце',
         'battery_indicator_panel': 'Батарея (индикатор)',
         'battery_chart_panel': 'Батарея (график)',
-        'invest_banner': 'Инвестиции (баннер)',
-        'chart_control_panel': 'Панель управления'
+        'invest_banner': 'Инвестиции (баннер)'
     };
     
     const panelSettings = {
@@ -371,41 +402,6 @@ function createPanelsModal() {
                     $(document).trigger('panelViewChange', { panel: panelId, view: 'extrema' });
                 });
                 $settings.append($extremaLabel);
-
-                // Interval period
-                var $periodLabel = $('<label class="extrema-toggle" style="margin-top:8px">Период: </label>');
-                var $periodSelect = $('<select class="panel-view-select" style="margin-left:4px"></select>');
-                var periodOpts = [
-                    { value: '-90 day', label: '3 месяца' },
-                    { value: '-35 day', label: '5 недель' },
-                    { value: '-7 day', label: '1 неделя' },
-                    { value: '-1 day', label: '1.5 дня' }
-                ];
-                periodOpts.forEach(function(opt) {
-                    $periodSelect.append($('<option></option>').attr('value', opt.value).text(opt.label));
-                });
-                var savedPeriod = getSetting('invest_panel_period', '-35 day');
-                $periodSelect.val(savedPeriod);
-                $periodSelect.on('change', function() {
-                    setSetting('invest_panel_period', this.value);
-                    saveSettingsToServer({ invest_panel_period: this.value });
-
-                    // Auto-switch interval to default for the selected range
-                    var defaultInterval = {
-                        '-90 day': 'day',
-                        '-35 day': 'hour',
-                        '-7 day': 'hour',
-                        '-1 day': 'minute'
-                    }[this.value] || 'hour';
-                    window.currentInterval = defaultInterval;
-                    try { localStorage.setItem('chartInterval', defaultInterval); } catch(e) {}
-                    $('.interval-btn').removeClass('active');
-                    $('.interval-btn[data-interval="' + defaultInterval + '"]').addClass('active');
-
-                    $(document).trigger('panelViewChange', { panel: 'invest_panel', view: 'period' });
-                });
-                $periodLabel.append($periodSelect);
-                $settings.append($periodLabel);
             } else if (panelId === 'battery_chart_panel') {
                 var $batPeriodLabel = $('<label class="extrema-toggle" style="margin-top:8px">Период: </label>');
                 var $batPeriodSelect = $('<select class="panel-view-select" style="margin-left:4px"></select>');
@@ -459,18 +455,40 @@ function createPanelsModal() {
         $content.append($row);
     });
     
-    // Глобальная настройка DPI для графиков
-    var $dpiRow = $('<div class="panel-row"><span>DPI графиков</span></div>');
-    var $dpiSlider = $('<input type="range" min="1" max="6" step="0.5" value="' + (getSetting('chart_dpi', '2')) + '" style="width:80px">');
-    var $dpiVal = $('<span style="min-width:24px;text-align:center;color:#ffd700">' + $dpiSlider.val() + '</span>');
-    $dpiSlider.on('input', function() {
-        $dpiVal.text(this.value);
-        setSetting('chart_dpi', this.value);
-        saveSettingsToServer({ chart_dpi: this.value });
-        $(document).trigger('dpiChange', { dpi: parseFloat(this.value) });
+    // Настройки DPI: отдельные слайдеры для инвест-графика и погоды (куки + сервер)
+    function makeDpiRow(label, settingKey, eventName, min, max) {
+        const $row = $('<div class="panel-row"><span>' + label + '</span></div>');
+        const $slider = $('<input type="range" min="' + min + '" max="' + max + '" step="0.2" value="' + (getSetting(settingKey, getSetting('chart_dpi', '2')) ) + '" style="width:80px">');
+        const $val = $('<span style="min-width:24px;text-align:center;color:#ffd700">' + $slider.val() + '</span>');
+        $slider.on('input', function() {
+            $val.text(this.value);
+            setSetting(settingKey, this.value);
+            saveSettingsToServer(Object.fromEntries([[settingKey, this.value]]));
+            $(document).trigger(eventName, { dpi: parseFloat(this.value) });
+        });
+        $row.append($slider, $val);
+        return $row;
+    }
+    $content.append(makeDpiRow('DPI инвест-графика', 'invest_chart_dpi', 'investDpiChange', 0.5, 4));
+    $content.append(makeDpiRow('DPI погоды', 'weather_chart_dpi', 'weatherDpiChange', 0.5, 3));
+
+    // Сглаживание графиков
+    var $smoothRow = $('<div class="panel-row"><span>Сглаживание графиков</span></div>');
+    var $smoothToggle = $('<label class="switch"></label>');
+    var $smoothCb = $('<input type="checkbox">').prop('checked', getSetting('chart_smoothing', '1') !== '0');
+    $smoothCb.on('change', function() {
+        setSetting('chart_smoothing', this.checked ? '1' : '0');
+        saveSettingsToServer({ chart_smoothing: this.checked ? '1' : '0' });
+        if (typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
+            window.InvestPlot.update();
+        }
+        if (typeof batteryLevel === 'function') {
+            batteryLevel();
+        }
     });
-    $dpiRow.append($dpiSlider, $dpiVal);
-    $content.append($dpiRow);
+    $smoothToggle.append($smoothCb, '<span class="slider"></span>');
+    $smoothRow.append($smoothToggle);
+    $content.append($smoothRow);
 
     $modal.append($content);
     $('body').append($modal);
