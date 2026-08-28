@@ -329,7 +329,7 @@ function createPanelsModal() {
         $checkbox.on('change', function() {
             const p = document.getElementById(panelId);
             if (p) {
-                const display = panelId === 'invest_panel_banner' ? 'block' : (panelId === 'invest_banner' ? 'flex' : 'block');
+                const display = panelId === 'invest_banner' ? 'flex' : 'block';
                 p.style.display = this.checked ? display : 'none';
                 // Внешняя рамка баннера — показываем/скрываем и внутренний контент
                 if (panelId === 'invest_panel_banner') {
@@ -551,13 +551,24 @@ $(document).ready(function() {
     // Загружаем сохраненное состояние
     loadChartState();
     
+    // Синхронно применить видимость панели (баннер: внешняя рамка + внутренний контент)
+    function applyPanelVisibility(panelId, visible) {
+        var ids = (panelId === 'invest_panel_banner' || panelId === 'invest_banner')
+            ? ['invest_panel_banner', 'invest_banner']
+            : [panelId];
+        ids.forEach(function (id) {
+            var p = document.getElementById(id);
+            if (!p) return;
+            p.style.display = (id === 'invest_banner') ? (visible ? 'flex' : 'none') : (visible ? '' : 'none');
+        });
+    }
+    
     // Применяем сохранённую видимость панелей (из модалки ☰)
     try {
         var savedConfig = JSON.parse(getSetting('wclock_panel_config') || '{}');
         Object.keys(savedConfig).forEach(function(panelId) {
-            var p = document.getElementById(panelId);
-            if (!p || !savedConfig[panelId]) return;
-            p.style.display = savedConfig[panelId].visible ? '' : 'none';
+            if (!savedConfig[panelId]) return;
+            applyPanelVisibility(panelId, savedConfig[panelId].visible);
         });
     } catch(e) {}
 
@@ -567,9 +578,8 @@ $(document).ready(function() {
             try {
                 var serverConfig = JSON.parse(serverSettings.wclock_panel_config);
                 Object.keys(serverConfig).forEach(function(panelId) {
-                    var p = document.getElementById(panelId);
-                    if (!p || !serverConfig[panelId]) return;
-                    p.style.display = serverConfig[panelId].visible ? '' : 'none';
+                    if (!serverConfig[panelId]) return;
+                    applyPanelVisibility(panelId, serverConfig[panelId].visible);
                 });
             } catch(e) {}
         }

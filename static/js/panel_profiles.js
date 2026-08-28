@@ -103,6 +103,14 @@
                 if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.resizeCharts === 'function') {
                     window.PanelResize.resizeCharts();
                 }
+                // Баннер: если внешняя рамка видима — перерисовать контент
+                if (typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
+                    const b = document.getElementById('invest_panel_banner');
+                    const inner = document.getElementById('invest_banner');
+                    if (b && b.style.display !== 'none' && inner && inner.style.display !== 'none') {
+                        window.InvestBanner.update();
+                    }
+                }
             }, 50);
             if (opts.done) opts.done();
         };
@@ -157,6 +165,12 @@
     // Синхронизировать чекбоксы видимости в модалке с конфигом
     function syncVisibilityCheckboxes(config) {
         if (!config) return;
+        // Старый ключ invest_banner -> новый invest_panel_banner
+        if (config.invest_banner && !config.invest_panel_banner) {
+            var old = config.invest_banner;
+            config = JSON.parse(JSON.stringify(config));
+            config.invest_panel_banner = old;
+        }
         Object.keys(config).forEach(function (panelId) {
             var cb = document.querySelector('input[data-panel="' + panelId + '"]');
             if (!cb || !(panelId in config)) return;
