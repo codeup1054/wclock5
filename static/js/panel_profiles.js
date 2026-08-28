@@ -254,7 +254,7 @@
         });
         $select.val(data.active || data.profiles[0].name);
 
-        const $save = $('<button class="pp-btn pp-btn-apply">Сохранить</button>');
+        const $save = $('<button class="pp-btn pp-btn-apply" disabled>Сохранить</button>');
         const $saveAs = $('<button class="pp-btn pp-btn-saveas">Сохранить как…</button>');
         const $delete = $('<button class="pp-btn pp-btn-del">Удалить</button>');
 
@@ -266,7 +266,7 @@
             profile.config = currentConfig();
             dataNow.active = id;
             saveProfiles(dataNow);
-            markRow(dirty, false);
+            markRow(false);
             toast('Сохранено в «' + profile.name + '»');
         });
 
@@ -295,22 +295,21 @@
             });
         });
 
-        // флаг «раскладка отличается от сохранённой» (несохранённые изменения)
-        const dirty = $('<span class="pp-dirty" style="display:none;color:#ffb;font-size:11px;">изменено</span>');
-        function markRow($flag, on) {
-            $flag.toggle(on);
+        // Подсветка кнопки «Сохранить» при несохранённых изменениях
+        function markRow(on) {
+            $save.prop('disabled', !on);
         }
         $select.on('change', function () {
             const id = $select.val();
             applyProfile(id, {
                 force: true,
                 done: function () {
-                    markRow(dirty, false);
+                    markRow(false);
                 }
             });
         });
 
-        $row.append($label, $select, dirty, $save, $saveAs, $delete);
+        $row.append($label, $select, $save, $saveAs, $delete);
 
         // вставка после якоря
         if ($content) {
@@ -324,11 +323,11 @@
             }
         }
 
-        // Помечать dirty при изменении геометрии/видимости панелей
+        // Подсветка кнопки «Сохранить» при несохранённых изменениях
         const onDrag = function () {
             const d = loadProfiles();
             const active = d.profiles.find(function (p) { return p.name === d.active; }) || d.profiles[0];
-            if (active) markRow(dirty, !configsEqual(currentConfig(), active.config));
+            if (active) markRow(!configsEqual(currentConfig(), active.config));
         };
         if (typeof window.PanelResize !== 'undefined') {
             // прямое наблюдение за атрибутом style панелей
