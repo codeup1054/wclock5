@@ -192,28 +192,11 @@
         });
         $select.val(data.active || data.profiles[0].name);
 
-        const $apply = $('<button class="pp-btn pp-btn-apply">Применить</button>');
+        const $save = $('<button class="pp-btn pp-btn-apply">Сохранить</button>');
         const $saveAs = $('<button class="pp-btn pp-btn-saveas">Сохранить как…</button>');
-        const $overwrite = $('<button class="pp-btn pp-btn-save">В профиль</button>');
         const $delete = $('<button class="pp-btn pp-btn-del">Удалить</button>');
 
-        $apply.on('click', function () {
-            const id = $select.val();
-            applyProfile(id, {
-                done: function () {
-                    markRow(dirty, false);
-                }
-            });
-        });
-
-        $saveAs.on('click', function () {
-            const name = prompt('Имя нового профиля:');
-            if (!name || !name.trim()) return;
-            saveCurrentToProfile(name.trim());
-            rebuildOptions($select, name.trim());
-        });
-
-        $overwrite.on('click', function () {
+        $save.on('click', function () {
             const id = $select.val();
             const dataNow = loadProfiles();
             const profile = dataNow.profiles.find(function (p) { return p.name === id; }) || dataNow.profiles[0];
@@ -221,6 +204,13 @@
             dataNow.active = id;
             saveProfiles(dataNow);
             markRow(dirty, false);
+        });
+
+        $saveAs.on('click', function () {
+            const name = prompt('Имя нового профиля:');
+            if (!name || !name.trim()) return;
+            saveCurrentToProfile(name.trim());
+            rebuildOptions($select, name.trim());
         });
 
         $delete.on('click', function () {
@@ -247,12 +237,15 @@
         }
         $select.on('change', function () {
             const id = $select.val();
-            const d = loadProfiles();
-            d.active = id;
-            saveProfiles(d);
+            applyProfile(id, {
+                force: true,
+                done: function () {
+                    markRow(dirty, false);
+                }
+            });
         });
 
-        $row.append($label, $select, dirty, $apply, $saveAs, $overwrite, $delete);
+        $row.append($label, $select, dirty, $save, $saveAs, $delete);
 
         // вставка после якоря
         if ($content) {
