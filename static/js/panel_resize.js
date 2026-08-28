@@ -123,6 +123,11 @@
             
             const visible = pos.visible !== undefined ? pos.visible : (defaults.visible !== false);
             panel.style.display = visible ? '' : 'none';
+            // Внешняя рамка баннера — синхронизируем внутренний контент
+            if (panelId === 'invest_panel_banner') {
+                const inner = document.getElementById('invest_banner');
+                if (inner) inner.style.display = visible ? 'flex' : 'none';
+            }
             
             const defaultScale = DEFAULT_PANEL_CHART_SCALES[panelId] || 1;
             panel.dataset.chartScale = defaultScale;

@@ -167,21 +167,26 @@
 
     // Обновить видимость панели в активном профиле (+ синхронизация wclock_panels, чтобы F5 не откатывал)
     function updateVisibility(panelId, visible) {
-        const data = loadProfiles();
-        const active = data.profiles.find(function (p) { return p.name === data.active; }) || data.profiles[0];
-        active.config = active.config || {};
-        active.config[panelId] = active.config[panelId] || {};
-        active.config[panelId].visible = !!visible;
-        saveProfiles(data);
+        // Баннер: модалка управляет внешней рамкой invest_panel_banner,
+        // но в профиле может быть сохранён и внутренний invest_banner — синхронизируем оба
+        const panelIds = panelId === 'invest_panel_banner' ? ['invest_panel_banner', 'invest_banner'] : [panelId];
+        panelIds.forEach(function (id) {
+            const data = loadProfiles();
+            const active = data.profiles.find(function (p) { return p.name === data.active; }) || data.profiles[0];
+            active.config = active.config || {};
+            active.config[id] = active.config[id] || {};
+            active.config[id].visible = !!visible;
+            saveProfiles(data);
 
-        // Синхронизация с wclock_panels (применяется при загрузке страницы)
-        if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
-            const full = window.PanelResize.capturePanelConfig();
-            if (full[panelId]) {
-                full[panelId].visible = !!visible;
-                window.PanelResize.savePanelConfig(full);
+            // Синхронизация с wclock_panels (применяется при загрузке страницы)
+            if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
+                const full = window.PanelResize.capturePanelConfig();
+                if (full[id]) {
+                    full[id].visible = !!visible;
+                    window.PanelResize.savePanelConfig(full);
+                }
             }
-        }
+        });
     }
 
     function showConfirm(title, text, onYes) {

@@ -289,7 +289,7 @@ function createPanelsModal() {
         'sun_panel': 'Солнце',
         'battery_indicator_panel': 'Батарея (индикатор)',
         'battery_chart_panel': 'Батарея (график)',
-        'invest_banner': 'Инвестиции (баннер)'
+        'invest_panel_banner': 'Инвестиции (баннер)'
     };
     
     const panelSettings = {
@@ -329,8 +329,13 @@ function createPanelsModal() {
         $checkbox.on('change', function() {
             const p = document.getElementById(panelId);
             if (p) {
-                const display = panelId === 'invest_banner' ? 'flex' : 'block';
+                const display = panelId === 'invest_panel_banner' ? 'block' : (panelId === 'invest_banner' ? 'flex' : 'block');
                 p.style.display = this.checked ? display : 'none';
+                // Внешняя рамка баннера — показываем/скрываем и внутренний контент
+                if (panelId === 'invest_panel_banner') {
+                    const inner = document.getElementById('invest_banner');
+                    if (inner) inner.style.display = this.checked ? 'flex' : 'none';
+                }
             }
             if (this.checked) {
                 if (panelId === 'battery_chart_panel' && typeof batteryLevel === 'function') {
@@ -345,6 +350,9 @@ function createPanelsModal() {
                 }
                 if (panelId === 'invest_panel' && typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
                     window.InvestPlot.update();
+                }
+                if ((panelId === 'invest_banner' || panelId === 'invest_panel_banner') && typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
+                    window.InvestBanner.update();
                 }
             }
             // Save visibility state to cookie
