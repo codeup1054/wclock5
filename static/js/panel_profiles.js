@@ -311,13 +311,11 @@
 
         $row.append($label, $select, $save, $saveAs, $delete);
 
-        // вставка после якоря
+        // вставка первой строкой (сразу после заголовка модалки)
         if ($content) {
-            const $anchor = $content.find('.panel-row').filter(function () {
-                return $(this).find('[data-panel-label="' + anchorPanelId + '"]').length;
-            }).first();
-            if ($anchor.length) {
-                $anchor.after($row);
+            const $header = $content.find('.panels-modal-header').first();
+            if ($header.length) {
+                $header.after($row);
             } else {
                 $content.prepend($row);
             }
