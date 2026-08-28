@@ -98,6 +98,7 @@
             }
             data.active = profile.name;
             saveProfiles(data);
+            syncVisibilityCheckboxes(profile.config);
             setTimeout(function () {
                 if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.resizeCharts === 'function') {
                     window.PanelResize.resizeCharts();
@@ -153,7 +154,18 @@
         return true;
     }
 
-    // Обновить видимость панели в активном профиле
+    // Синхронизировать чекбоксы видимости в модалке с конфигом
+    function syncVisibilityCheckboxes(config) {
+        if (!config) return;
+        Object.keys(config).forEach(function (panelId) {
+            var cb = document.querySelector('input[data-panel="' + panelId + '"]');
+            if (!cb || !(panelId in config)) return;
+            var visible = config[panelId].visible !== undefined ? config[panelId].visible : true;
+            cb.checked = !!visible;
+        });
+    }
+
+    // Обновить видимость панели в активном профиле (+ синхронизация wclock_panels, чтобы F5 не откатывал)
     function updateVisibility(panelId, visible) {
         const data = loadProfiles();
         const active = data.profiles.find(function (p) { return p.name === data.active; }) || data.profiles[0];
@@ -161,6 +173,15 @@
         active.config[panelId] = active.config[panelId] || {};
         active.config[panelId].visible = !!visible;
         saveProfiles(data);
+
+        // Синхронизация с wclock_panels (применяется при загрузке страницы)
+        if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
+            const full = window.PanelResize.capturePanelConfig();
+            if (full[panelId]) {
+                full[panelId].visible = !!visible;
+                window.PanelResize.savePanelConfig(full);
+            }
+        }
     }
 
     function showConfirm(title, text, onYes) {

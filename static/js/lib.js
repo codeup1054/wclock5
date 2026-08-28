@@ -305,7 +305,7 @@ function createPanelsModal() {
     
     const $modal = $('<div id="panels-modal" class="panels-modal"></div>');
     const $content = $('<div class="panels-modal-content"></div>');
-    const $header = $('<div class="panels-modal-header"><h3>Панели</h3><button class="close-modal">&times;</button></div>');
+    const $header = $('<div class="panels-modal-header"><h3>Настройки</h3><button class="close-modal">&times;</button></div>');
     
     $content.append($header);
     
