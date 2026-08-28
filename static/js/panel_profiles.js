@@ -191,6 +191,18 @@
         document.body.appendChild(modal);
     }
 
+    // Быстрый тост-фидбек
+    function toast(msg) {
+        const existing = document.getElementById('pp-toast');
+        if (existing) existing.remove();
+        const el = document.createElement('div');
+        el.id = 'pp-toast';
+        el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2cba99;color:#fff;padding:8px 16px;border-radius:6px;font-size:13px;z-index:22000;box-shadow:0 2px 8px rgba(0,0,0,.4);pointer-events:none;';
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(function () { el.remove(); }, 1800);
+    }
+
     // Строка «Профили» для модалки панелей, вставляется после якорного panelId
     function renderRow($content, anchorPanelId) {
         const data = loadProfiles();
@@ -210,10 +222,12 @@
             const id = $select.val();
             const dataNow = loadProfiles();
             const profile = dataNow.profiles.find(function (p) { return p.name === id; }) || dataNow.profiles[0];
+            if (!profile) return;
             profile.config = currentConfig();
             dataNow.active = id;
             saveProfiles(dataNow);
             markRow(dirty, false);
+            toast('Сохранено в «' + profile.name + '»');
         });
 
         $saveAs.on('click', function () {
@@ -221,6 +235,7 @@
             if (!name || !name.trim()) return;
             saveCurrentToProfile(name.trim());
             rebuildOptions($select, name.trim());
+            toast('Создан профиль «' + name.trim() + '»');
         });
 
         $delete.on('click', function () {
@@ -270,13 +285,13 @@
         }
 
         // Помечать dirty при изменении геометрии/видимости панелей
+        const onDrag = function () {
+            const d = loadProfiles();
+            const active = d.profiles.find(function (p) { return p.name === d.active; }) || d.profiles[0];
+            if (active) markRow(dirty, !configsEqual(currentConfig(), active.config));
+        };
         if (typeof window.PanelResize !== 'undefined') {
-            const onDrag = function () {
-                const d = loadProfiles();
-                const active = d.profiles.find(function (p) { return p.name === d.active; }) || d.profiles[0];
-                markRow(dirty, !configsEqual(currentConfig(), active.config));
-            };
-            // запасной вариант — прямое наблюдение за атрибутом style панелей
+            // прямое наблюдение за атрибутом style панелей
             const panelIds = (typeof window.PanelResize.capturePanelConfig === 'function')
                 ? Object.keys(currentConfig())
                 : [];

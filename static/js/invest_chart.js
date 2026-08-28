@@ -975,6 +975,13 @@
         }
 
         if (canvasCheck.reason !== 'OK') {
+            // Панель скрыта (display:none) — тихий выход, не накапливаем попытки
+            var invPanel = document.getElementById('invest_panel');
+            if (invPanel && invPanel.style.display === 'none') {
+                initAttempts = 0;
+                isUpdating = false;
+                return;
+            }
             initAttempts++;
             if (initAttempts > MAX_INIT_ATTEMPTS) {
                 console.error('[InvestPlot] Canvas problem:', canvasCheck.reason);
