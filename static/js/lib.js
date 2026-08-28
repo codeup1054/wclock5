@@ -280,6 +280,7 @@ function createTempRangeSettings() {
 function createPanelsModal() {
     const panelNames = {
         'invest_panel': 'Инвестиции',
+        'invest_panel_banner': 'Инвестиции (баннер)',
         'clock_panel': 'Часы',
         'date_panel': 'Дата',
         'moon_panel': 'Луна',
@@ -288,8 +289,7 @@ function createPanelsModal() {
         'wind_cond_precip_panel': 'Ветер/Осадки',
         'sun_panel': 'Солнце',
         'battery_indicator_panel': 'Батарея (индикатор)',
-        'battery_chart_panel': 'Батарея (график)',
-        'invest_panel_banner': 'Инвестиции (баннер)'
+        'battery_chart_panel': 'Батарея (график)'
     };
     
     const panelSettings = {
