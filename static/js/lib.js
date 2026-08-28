@@ -356,6 +356,10 @@ function createPanelsModal() {
                 // Also save to server
                 saveSettingsToServer({ wclock_panel_config: JSON.stringify(config) });
             } catch(e) {}
+            // Save visibility to active profile
+            if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.updateVisibility === 'function') {
+                window.PanelProfiles.updateVisibility(panelId, this.checked);
+            }
         });
         
         $toggle.append($checkbox);

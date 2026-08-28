@@ -153,6 +153,16 @@
         return true;
     }
 
+    // Обновить видимость панели в активном профиле
+    function updateVisibility(panelId, visible) {
+        const data = loadProfiles();
+        const active = data.profiles.find(function (p) { return p.name === data.active; }) || data.profiles[0];
+        active.config = active.config || {};
+        active.config[panelId] = active.config[panelId] || {};
+        active.config[panelId].visible = !!visible;
+        saveProfiles(data);
+    }
+
     function showConfirm(title, text, onYes) {
         const existing = document.getElementById('pp-confirm-modal');
         if (existing) existing.remove();
@@ -305,6 +315,7 @@
         saveCurrentToProfile: saveCurrentToProfile,
         saveCurrentToActive: saveCurrentToActive,
         deleteProfile: deleteProfile,
+        updateVisibility: updateVisibility,
         renderRow: renderRow
     };
 
