@@ -491,9 +491,21 @@ def api_invest_turnover():
             hour=0, minute=0, second=0, microsecond=0).timestamp())
         for src, d in invest_repo.read_turnover_since(since, db_path=INVEST_DB_PATH).items():
             if src in missing:
+                total_fb = d.get("total", 0)
+                if src == "finam":
+                    d["commission"] = round(invest_repo.finam_commission_estimate(0, total_fb), 2)
+                elif src == "tinkoff":
+                    d["commission"] = round(total_fb * 0.0002, 2)
                 d["strategy"] = False
                 out[src] = d
-    return jsonify(out)
+    # Add no-cache headers for fresh data
+    resp = make_response(jsonify(out))
+    resp.cache_control.no_store = True
+    resp.cache_control.no_cache = True
+    resp.cache_control.must_revalidate = True
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 # === API для тикеров (TGLD@) ===

@@ -183,6 +183,23 @@ def apply_retention(db_path=None):
         ORDER BY ts_epoch ASC
     """, (raw_cutoff,)).fetchall()
 
+    # TGLD/TMON/LQDT values per (epoch, source) for area chart
+    tgld_rows = cur.execute("""
+        SELECT ts_epoch, source,
+               SUM(CASE WHEN ticker LIKE '%TGLD%' OR name LIKE '%TGLD%' THEN value ELSE 0 END) AS tgld_val,
+               SUM(CASE WHEN ticker LIKE '%TMON%' OR name LIKE '%TMON%' THEN value ELSE 0 END) AS tmon_val,
+               SUM(CASE WHEN ticker LIKE '%LQDT%' OR name LIKE '%LQDT%' THEN value ELSE 0 END) AS lqdt_val,
+               SUM(value) AS total_val
+        FROM portfolio_positions
+        WHERE ts_epoch < ?
+        GROUP BY ts_epoch, source
+        ORDER BY ts_epoch ASC
+    """, (raw_cutoff,)).fetchall()
+    tgld_map = {}
+    for t in tgld_rows:
+        tgld_map[(t["ts_epoch"], t["source"] or "tinkoff")] = (
+            round(t["tgld_val"], 2), round(t["tmon_val"], 2), round(t["lqdt_val"], 2), round(t["total_val"], 2))
+
     # Группируем по часовым бакетам (epoch // 3600)
     hours = {}  # (bucket, source) -> dict
     for r in rows:
@@ -195,17 +212,35 @@ def apply_retention(db_path=None):
         h["low"] = min(h["low"], r["total"])
         h["volume"] += 1
 
+    # Aggregate per-bucket — last snapshot wins (like close)
+    tgld_hours = {}  # (bucket, source) -> [tgld_val, tmon_val, lqdt_val, total_val, last_epoch]
+    for (epoch, source), (tv, tm, lq, tot) in tgld_map.items():
+        bucket = epoch // 3600 * 3600
+        key = (bucket, source)
+        if key not in tgld_hours or epoch > tgld_hours[key][4]:
+            tgld_hours[key] = [tv, tm, lq, tot, epoch]
+
     for (bucket, source), h in hours.items():
+        tgld_entry = tgld_hours.get((bucket, source))
+        tgld_val = tgld_entry[0] if tgld_entry else None
+        tgld_total = tgld_entry[3] if tgld_entry else None
+        tmon_val = tgld_entry[1] if tgld_entry else None
+        lqdt_val = tgld_entry[2] if tgld_entry else None
         cur.execute("""
-            INSERT INTO portfolio_hourly (timestamp, ts_epoch, source, open, high, low, close, volume)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO portfolio_hourly (timestamp, ts_epoch, source, open, high, low, close, volume, tgld_value, tgld_total, tmon_value, lqdt_value)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(ts_epoch, source) DO UPDATE SET
                 high = MAX(high, excluded.high),
                 low = MIN(low, excluded.low),
                 close = excluded.close,
-                volume = volume + excluded.volume
+                volume = volume + excluded.volume,
+                tgld_value = COALESCE(excluded.tgld_value, tgld_value),
+                tgld_total = COALESCE(excluded.tgld_total, tgld_total),
+                tmon_value = COALESCE(excluded.tmon_value, tmon_value),
+                lqdt_value = COALESCE(excluded.lqdt_value, lqdt_value)
         """, (to_iso(datetime.fromtimestamp(bucket, tz=timezone.utc)), bucket, source,
-              h["open"], h["high"], h["low"], h["close"], h["volume"]))
+              h["open"], h["high"], h["low"], h["close"], h["volume"],
+              tgld_val, tgld_total, tmon_val, lqdt_val))
 
     # Удаляем схлопнутые сырые данные и устаревшие свечи
     cur.execute("DELETE FROM portfolio_positions WHERE ts_epoch < ?", (raw_cutoff,))
@@ -230,11 +265,17 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None):
         return {"_error": "Invest DB not found", "_error_code": 404}
     try:
         cutoff = cutoff_epoch(period)
+        period_sec = period_to_seconds(period)
+        prev_cutoff = cutoff - period_sec  # начало предыдущего периода
         conn = connect(db_path)
         cur = conn.cursor()
 
         raw_rows = cur.execute("""
-            SELECT timestamp, ts_epoch, source, SUM(value) AS total
+            SELECT timestamp, ts_epoch, source,
+                   SUM(value) AS total,
+                   SUM(CASE WHEN ticker LIKE '%TGLD%' OR name LIKE '%TGLD%' THEN value ELSE 0 END) AS tgld_val,
+                   SUM(CASE WHEN ticker LIKE '%TMON%' OR name LIKE '%TMON%' THEN value ELSE 0 END) AS tmon_val,
+                   SUM(CASE WHEN ticker LIKE '%LQDT%' OR name LIKE '%LQDT%' THEN value ELSE 0 END) AS lqdt_val
             FROM portfolio_positions
             WHERE ts_epoch >= ?
             GROUP BY ts_epoch, source
@@ -247,7 +288,7 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None):
         ).fetchone() is not None
         if has_hourly:
             candles = cur.execute("""
-                SELECT timestamp, ts_epoch, source, close AS total
+                SELECT timestamp, ts_epoch, source, close AS total, tgld_value, tgld_total, tmon_value, lqdt_value
                 FROM portfolio_hourly
                 WHERE ts_epoch >= ?
                 ORDER BY ts_epoch ASC
@@ -256,7 +297,11 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None):
         # Обратная совместимость: если за период пусто — отдаём всё, что есть
         if not raw_rows and not candles:
             raw_rows = cur.execute("""
-                SELECT timestamp, ts_epoch, source, SUM(value) AS total
+                SELECT timestamp, ts_epoch, source,
+                       SUM(value) AS total,
+                       SUM(CASE WHEN ticker LIKE '%TGLD%' OR name LIKE '%TGLD%' THEN value ELSE 0 END) AS tgld_val,
+                       SUM(CASE WHEN ticker LIKE '%TMON%' OR name LIKE '%TMON%' THEN value ELSE 0 END) AS tmon_val,
+                       SUM(CASE WHEN ticker LIKE '%LQDT%' OR name LIKE '%LQDT%' THEN value ELSE 0 END) AS lqdt_val
                 FROM portfolio_positions
                 GROUP BY ts_epoch, source
                 ORDER BY ts_epoch ASC
@@ -267,27 +312,46 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None):
             return {}
 
         # Слияние: ключ (epoch, source); свечи только там, где нет сырых точек
-        points = {}     # (epoch, source) -> [display_ts, value]
+        points = {}     # (epoch, source) -> [display_ts, value, tgld_value, tgld_total, tmon_value, lqdt_value]
         raw_epochs = set()
         for r in raw_rows:
             src = r["source"] or "tinkoff"
             if r["total"] is None:
                 continue
-            points[(r["ts_epoch"], src)] = [r["timestamp"], round(r["total"], 2)]
+            tgld_v = r["tgld_val"] if r["tgld_val"] is not None else None
+            tmon_v = r["tmon_val"] if r["tmon_val"] is not None else None
+            lqdt_v = r["lqdt_val"] if r["lqdt_val"] is not None else None
+            points[(r["ts_epoch"], src)] = [
+                r["timestamp"], round(r["total"], 2),
+                tgld_v, round(r["total"], 2) if tgld_v is not None else None,
+                tmon_v, lqdt_v,
+            ]
             raw_epochs.add(r["ts_epoch"])
         for c in candles:
             src = c["source"] or "tinkoff"
             if c["total"] is None or c["ts_epoch"] in raw_epochs:
                 continue
-            points[(c["ts_epoch"], src)] = [c["timestamp"], round(c["total"], 2)]
+            points[(c["ts_epoch"], src)] = [
+                c["timestamp"], round(c["total"], 2),
+                c["tgld_value"] if c["tgld_value"] is not None else None,
+                c["tgld_total"] if c["tgld_total"] is not None else None,
+                c["tmon_value"] if c["tmon_value"] is not None else None,
+                c["lqdt_value"] if c["lqdt_value"] is not None else None,
+            ]
 
         # Бакетинг: последний снапшот за (бакет, source) побеждает
-        aggregated = {}  # bucket -> {last_epoch, display_ts, by_source{}}
+        aggregated = {}  # bucket -> {last_epoch, display_ts, by_source{}, tgld{}}
         for (epoch, src) in sorted(points.keys()):
-            display_ts, value = points[(epoch, src)]
+            display_ts, value, tgld_val, tgld_tot, tmon_val, lqdt_val = points[(epoch, src)]
             bucket = epoch // bucket_size * bucket_size
-            agg = aggregated.setdefault(bucket, {"last_epoch": epoch, "ts": display_ts, "by_source": {}})
+            agg = aggregated.setdefault(bucket, {
+                "last_epoch": epoch, "ts": display_ts,
+                "by_source": {}, "tgld": {}
+            })
             agg["by_source"][src] = value
+            if tgld_val is not None:
+                agg["tgld"][src] = {"value": tgld_val, "total": tgld_tot,
+                                    "tmon": tmon_val, "lqdt": lqdt_val}
             if epoch >= agg["last_epoch"]:
                 agg["last_epoch"] = epoch
                 agg["ts"] = display_ts
@@ -320,15 +384,50 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None):
                     "source": r["source"] or "tinkoff",
                 })
 
+        # Previous period data for start-label prevDelta
+        prev_data = {}
+        try:
+            # Check both portfolio_positions and portfolio_hourly
+            for tbl in ["portfolio_positions", "portfolio_hourly"]:
+                val_col = "value" if tbl == "portfolio_positions" else "close"
+                prev_rows = cur.execute(f"""
+                    SELECT source, MIN(ts_epoch) AS first_e, MAX(ts_epoch) AS last_e
+                    FROM {tbl}
+                    WHERE ts_epoch >= ? AND ts_epoch < ?
+                    GROUP BY source
+                """, (prev_cutoff, cutoff)).fetchall()
+                for pr in prev_rows:
+                    src = pr["source"] or "tinkoff"
+                    first_val = cur.execute(
+                        f"SELECT SUM({val_col}) FROM {tbl} WHERE ts_epoch = ? AND source = ?",
+                        (pr["first_e"], src)
+                    ).fetchone()[0]
+                    last_val = cur.execute(
+                        f"SELECT SUM({val_col}) FROM {tbl} WHERE ts_epoch = ? AND source = ?",
+                        (pr["last_e"], src)
+                    ).fetchone()[0]
+                    if first_val and last_val:
+                        if src not in prev_data:
+                            prev_data[src] = {"start": round(first_val, 2), "end": round(last_val, 2)}
+        except Exception:
+            pass
+
         conn.close()
 
         result = {}
         for bucket in sorted(aggregated.keys()):
             agg = aggregated[bucket]
-            items = [
-                {"type": "total", "name": "Портфель", "value": round(v, 2), "source": s}
-                for s, v in sorted(agg["by_source"].items())
-            ]
+            items = []
+            for s, v in sorted(agg["by_source"].items()):
+                item = {"type": "total", "name": "Портфель", "value": round(v, 2), "source": s}
+                tgld_info = agg.get("tgld", {}).get(s)
+                if tgld_info and tgld_info["total"] and tgld_info["total"] > 0:
+                    item["tgld_share"] = round(tgld_info["value"] / tgld_info["total"], 4)
+                    if tgld_info.get("tmon") is not None:
+                        item["tmon_share"] = round(tgld_info["tmon"] / tgld_info["total"], 4)
+                    if tgld_info.get("lqdt") is not None:
+                        item["lqdt_share"] = round(tgld_info["lqdt"] / tgld_info["total"], 4)
+                items.append(item)
             result[agg["ts"]] = items
         if latest_positions:
             # Позиции всегда в ПОСЛЕДНЕМ ключе, чтобы баннер не читал totals
@@ -336,6 +435,8 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None):
                 (ts for (e, _), (ts, _) in points.items() if e == latest_epoch), None)
             if target is not None:
                 result[target] = latest_positions
+        if prev_data:
+            result["_prev"] = prev_data
         return result
 
     except Exception as e:
@@ -462,6 +563,17 @@ def _migrate_portfolio_db(db_path):
         """)
         cur.execute("DROP TABLE portfolio_hourly_old")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_portfolio_hourly_epoch_source ON portfolio_hourly(ts_epoch, source)")
+
+    # 3) tgld_value / tgld_total / tmon_value / lqdt_value в portfolio_hourly
+    cols = _table_cols(cur, "portfolio_hourly")
+    if "tgld_value" not in cols:
+        cur.execute("ALTER TABLE portfolio_hourly ADD COLUMN tgld_value REAL")
+    if "tgld_total" not in cols:
+        cur.execute("ALTER TABLE portfolio_hourly ADD COLUMN tgld_total REAL")
+    if "tmon_value" not in cols:
+        cur.execute("ALTER TABLE portfolio_hourly ADD COLUMN tmon_value REAL")
+    if "lqdt_value" not in cols:
+        cur.execute("ALTER TABLE portfolio_hourly ADD COLUMN lqdt_value REAL")
 
     conn.commit()
     n = cur.execute("SELECT COUNT(*) FROM portfolio_hourly").fetchone()[0]

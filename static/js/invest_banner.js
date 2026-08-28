@@ -210,8 +210,33 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return String(Math.round(n));
     }
 
+    const FINAM_TIERS = [
+        { cap: 1_000_000,   rate: 0.025,  label: 'до 1 млн' },
+        { cap: 5_000_000,   rate: 0.015,  label: '1–5 млн' },
+        { cap: 30_000_000,  rate: 0.01,   label: '5–30 млн' },
+        { cap: 100_000_000, rate: 0.005,  label: '30–100 млн' },
+        { cap: 250_000_000, rate: 0.0025, label: '100–250 млн' },
+        { cap: Infinity,    rate: 0.001,  label: '> 250 млн' },
+    ];
+
+    function buildFinamTariffTip(total) {
+        const rows = FINAM_TIERS.map(function(t) {
+            const cls = total <= t.cap ? ' class="finam-tariff-active"' : '';
+            const arrow = total <= t.cap ? ' ←' : '';
+            return '<tr' + cls + '><td>' + t.label + '</td><td>' + t.rate.toFixed(3).replace('.', ',') + ' %' + arrow + '</td></tr>';
+        }).join('');
+        return '<div class="finam-tariff-css-tip">' +
+            '<b>Finam «Трейдер n6» — ставка брокера</b>' +
+            '<table><tbody>' + rows + '</tbody></table>' +
+            '<span class="finam-tariff-note">+ урегулирование: СПБ 0,01 %</span>' +
+            '</div>';
+    }
+
     function renderTurnoverBlock(source, capital) {
-        if (!turnoverData || !capital) return '';
+        if (!turnoverData || !capital) {
+            console.warn('[TurnoverBlock] SKIP:', source, 'turnoverData=', !!turnoverData, 'capital=', capital);
+            return '';
+        }
         const t = turnoverData[source] || {};
         const total = t.total || 0;
         const comm = t.commission || 0;
@@ -219,11 +244,75 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const xStr = x >= 10 ? x.toFixed(0) : x.toFixed(1).replace('.', ',');
         const pct = total > 0 ? comm / total * 100 : 0;
         const pctStr = pct > 0 ? Number(pct.toPrecision(3)).toString().replace('.', ',') : '0';
-        return `<table class="banner-turnover-block"><tr>` +
+        const sourceClass = source === 'tinkoff' ? ' tinvest' : ' finam';
+        const tipAttr = source === 'finam'
+            ? ` data-tariff-tip="${encodeURIComponent(buildFinamTariffTip(total))}"`
+            : '';
+        return `<table class="banner-turnover-block${sourceClass}"><tr>` +
             `<td>x${xStr}</td><td class="tb-col2">${formatCompactRub(total)}</td></tr>` +
-            `<tr><td>${pctStr} %</td><td class="tb-col2">${formatCompactRub(comm)}</td></tr>` +
+            `<tr><td class="finam-tariff-hover"${tipAttr}>${pctStr} %</td><td class="tb-col2">${formatCompactRub(comm)}</td></tr>` +
             `</table>`;
     }
+
+    // ================================================================
+    // TARIFF TOOLTIP — вынесен в <body>, чтобы его не перекрывали панели
+    // ================================================================
+    (function initTariffTip() {
+        if (window.__tariffTipInit) return;
+        window.__tariffTipInit = true;
+        var tipEl = null;
+        var CELL_SEL = '.finam-tariff-hover[data-tariff-tip]';
+
+        // Над ячейкой может лежать невидимый оверлей (#browser_reload),
+        // поэтому ищем ячейку геометрически, а не через e.target
+        function cellAt(x, y) {
+            var cells = document.querySelectorAll(CELL_SEL);
+            for (var i = 0; i < cells.length; i++) {
+                var r = cells[i].getBoundingClientRect();
+                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cells[i];
+            }
+            return null;
+        }
+
+        function hide() {
+            if (tipEl) { tipEl.remove(); tipEl = null; }
+        }
+        function showFor(cell, e) {
+            hide();
+            tipEl = document.createElement('div');
+            tipEl.className = 'finam-tariff-css-tip';
+            try {
+                tipEl.innerHTML = decodeURIComponent(cell.getAttribute('data-tariff-tip'));
+            } catch (err) {
+                tipEl.innerHTML = cell.getAttribute('data-tariff-tip');
+            }
+            tipEl._cell = cell;
+            document.body.appendChild(tipEl);
+            move(e);
+        }
+        function move(e) {
+            if (!tipEl) return;
+            const r = tipEl.getBoundingClientRect();
+            let x = e.clientX + 14, y = e.clientY + 14;
+            if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
+            if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 14;
+            tipEl.style.left = x + 'px';
+            tipEl.style.top = y + 'px';
+        }
+
+        document.addEventListener('mousemove', function(e) {
+            const cell = cellAt(e.clientX, e.clientY);
+            if (cell) {
+                if (!tipEl || !tipEl.isConnected || tipEl._cell !== cell) showFor(cell, e);
+                else move(e);
+            } else {
+                hide();
+            }
+        });
+        document.addEventListener('wheel', hide, { passive: true });
+        document.addEventListener('touchstart', hide, { passive: true });
+        window.addEventListener('blur', hide);
+    })();
 
     function renderAssetRow(ticker, color, label) {
         const t = tickersData[ticker];
@@ -261,6 +350,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     }
 
     function renderBanner(historyData, dynData) {
+        console.log('[renderBanner] called, turnoverData=', !!turnoverData, 'keys=', turnoverData ? Object.keys(turnoverData) : 'null');
         const $banner = $('#invest_banner');
         
         if (!historyData || Object.keys(historyData).length === 0) {
@@ -268,7 +358,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             return;
         }
 
-        const timestamps = Object.keys(historyData).sort();
+        const timestamps = Object.keys(historyData).filter(k => k !== '_prev').sort();
         if (timestamps.length === 0) {
             $banner.html('<div class="banner-message">Нет данных</div>');
             return;
@@ -333,13 +423,16 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         });
         html += `</div>`;
 
-        // === ASSETS BARS: отдельные строки по источникам ===
+        // === ASSETS BARS: капитал слева + бары справа ===
         if (portfolioRows.length > 0) {
+            const totalCapital = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
+            html += `<div class="banner-assets-row">`;
+            html += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
             html += `<div class="banner-assets" id="invest-assets-bars">`;
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;
                 html += `<div class="asset-row">`;
-                html += `<span class="asset-row-label" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;min-width:38px;">${row.marker}</span>`;
+                html += `<span class="asset-row-label" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;min-width:18px;">${row.marker}</span>`;
                 html += `<div class="asset-bar-container">`;
                 row.assets.forEach(function(asset, index) {
                     let color = COLORS.assetColors[index % COLORS.assetColors.length];
@@ -358,13 +451,48 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 html += `</div>`;
             });
             html += `</div>`;
+            html += `</div>`;
         }
 
-        // === TABLE: banner-row-portfolio — 2 строки (Tinkoff / Finam) ===
+        // === TABLE: banner-row-portfolio — T+F итого + строки по источникам ===
         html += `<table class="banner-table" id="invest-banner-table"><tbody>`;
 
+        // --- T+F итого (первая строка) ---
+        if (portfolioRows.length > 0) {
+            var tfCurrent = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
+
+            function sumBaselineForAll(hist, stamps, srcArr, fn) {
+                return srcArr.reduce(function(s, src) { return s + fn(hist, stamps, src); }, 0);
+            }
+            var tfBase = sumBaselineForAll(historyData, timestamps, presentSources, calculateBaselineTotal);
+            var tfBaseWeek = sumBaselineForAll(historyData, timestamps, presentSources, calculateWeekBaselineTotal);
+            var tfBasePeriod = sumBaselineForAll(dynHistory, dynTimestamps, presentSources, function(h, s, src) {
+                return calculatePeriodBaselineTotal(h, s, periodMs, src);
+            });
+
+            var tfAbs = tfCurrent - tfBase;
+            var tfPct = tfBase !== 0 ? (tfAbs / tfBase * 100) : 0;
+            var tfAbsW = tfCurrent - tfBaseWeek;
+            var tfPctW = tfBaseWeek !== 0 ? (tfAbsW / tfBaseWeek * 100) : 0;
+            var tfAbsP = tfCurrent - tfBasePeriod;
+            var tfPctP = tfBasePeriod !== 0 ? (tfAbsP / tfBasePeriod * 100) : 0;
+            var tfDayCls = tfAbs >= 0 ? 'change-positive' : 'change-negative';
+            var tfWeekCls = tfAbsW >= 0 ? 'change-positive' : 'change-negative';
+            var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
+
+            html += `<tr class="banner-row-portfolio-total">
+            <td class="banner-td-num" style="color:#999;font-size:10px;min-width:16px;text-align:left;">T+F</td>
+            <td class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
+            <td class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
+            <td class="banner-td-change ${tfWeekCls}">${formatChange(tfAbsW)}</td>
+            <td class="banner-td-pct ${tfWeekCls}">${formatPercent(tfPctW)}</td>
+            <td class="banner-td-change ${tfPeriodCls}">${formatChange(tfAbsP)}</td>
+            <td class="banner-td-pct ${tfPeriodCls}">${formatPercent(tfPctP)}</td>
+        </tr>`;
+        }
+
         portfolioRows.forEach(function(row) {
-            html += `<tr class="${row.cssClass}">
+            html += `<tr class="${row.cssClass}" style="opacity:0.7;">
             <td class="banner-td-num" style="color:${row.color};font-size:10px;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
             <td class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
             <td class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
@@ -395,34 +523,39 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     function updateInvestBanner() {
         console.log('[InvestBanner] updateInvestBanner called');
 
-        // Обороты с начала суток (локальная полночь)
         const midnight = new Date();
         midnight.setHours(0, 0, 0, 0);
-        $.getJSON('/api/invest/turnover?since=' + Math.floor(midnight.getTime() / 1000))
-            .done(function(d) { turnoverData = d; })
-            .fail(function() { console.warn('[InvestBanner] turnover fetch failed'); });
+        const cacheBust = '&_=' + Date.now();
+        const turnoverUrl = '/api/invest/turnover?since=' + Math.floor(midnight.getTime() / 1000) + cacheBust;
 
-        loadRefHistory(function() {
-        loadTickersData(function() {
-            const period = getSetting('invest_panel_period', '-35 day');
-            const interval = {
-                '-90 day': 'day',
-                '-35 day': 'hour',
-                '-7 day': 'hour',
-                '-1 day': 'hour',
-                '-6 hour': 'fivemin',
-                '-3 hour': 'minute',
-                '-1 hour': 'minute'
-            }[period] || 'hour';
-            $.getJSON('/api/invest/history?interval=' + interval + '&period=' + encodeURIComponent(period), function(historyData) {
-                console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
-                renderBanner(refHistory || historyData, historyData);
-            }).fail(function(xhr, status, error) {
-                console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
-                $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
+        function renderWithTurnover() {
+            loadRefHistory(function() {
+            loadTickersData(function() {
+                const period = getSetting('invest_panel_period', '-35 day');
+                const interval = {
+                    '-90 day': 'day',
+                    '-35 day': 'hour',
+                    '-7 day': 'hour',
+                    '-1 day': 'hour',
+                    '-6 hour': 'fivemin',
+                    '-3 hour': 'minute',
+                    '-1 hour': 'minute'
+                }[period] || 'hour';
+                $.getJSON('/api/invest/history?interval=' + interval + '&period=' + encodeURIComponent(period), function(historyData) {
+                    console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
+                    renderBanner(refHistory || historyData, historyData);
+                }).fail(function(xhr, status, error) {
+                    console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
+                    $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
+                });
             });
-        });
-        });
+            });
+        }
+
+        $.getJSON(turnoverUrl)
+            .done(function(d) { turnoverData = d; console.log('[Turnover] fetched OK, keys=', Object.keys(d)); })
+            .fail(function(xhr, status, err) { console.warn('[Turnover] FAILED:', status, err, 'xhr.status=', xhr.status); })
+            .always(function() { renderWithTurnover(); });
     }
 
     function init() {
@@ -456,6 +589,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     }
 
     $(document).ready(init);
+
+    $(document).on('panelViewChange', function(e, data) {
+        if (data && data.panel === 'invest_panel') {
+            updateInvestBanner();
+        }
+    });
 
     window.InvestBanner = {
         update: updateInvestBanner,

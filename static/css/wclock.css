@@ -589,9 +589,19 @@ div#browser_reload.panel-dragging {
     width: 130px;
     font-size: 15px;
     line-height: 1.15;
-    color: #8d9d9d;
+    color: #effcfc;
     opacity: 0.85;
     text-align: right;
+}
+
+#invest_banner table.banner-turnover-block.finam {
+    /* Стили для Finam - синие оттенки */
+    border: 1px solid rgba(91, 110, 232, 0.3);
+}
+
+#invest_banner table.banner-turnover-block.tinvest {
+    /* Стили для Тинвеста - зеленые оттенки */
+    border: 1px solid rgba(67, 232, 147, 0.3);
 }
 
 #invest_banner table.banner-turnover-block td {
@@ -604,20 +614,82 @@ div#browser_reload.panel-dragging {
     border-left: 1px solid rgba(141, 157, 157, 0.35);
 }
 
+#invest_banner .finam-tariff-hover {
+    cursor: help;
+}
+
+#invest_banner .finam-tariff-hover:hover {
+    text-decoration: underline dotted;
+}
+
+.finam-tariff-css-tip {
+    display: block;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 2147483000;
+    background: rgba(18, 28, 38, 0.7);
+    border: 1px solid rgba(91, 110, 232, 0.5);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: #c8e0e0;
+    white-space: nowrap;
+    text-align: left;
+    pointer-events: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
+}
+
+.finam-tariff-css-tip > b {
+    display: block;
+    margin-bottom: 3px;
+    color: #7eb8f7;
+    font-size: 11.5px;
+}
+
+.finam-tariff-css-tip table {
+    border-collapse: collapse;
+    font-size: 11.5px;
+}
+
+.finam-tariff-css-tip td {
+    padding: 1px 8px 1px 0;
+    border: none;
+}
+
+.finam-tariff-css-tip td:last-child {
+    text-align: right;
+    color: #86d3d3;
+}
+
+.finam-tariff-css-tip .finam-tariff-note {
+    display: block;
+    margin-top: 4px;
+    font-size: 10.5px;
+    color: #7a9a9a;
+    font-style: italic;
+}
+
+.finam-tariff-css-tip .finam-tariff-active {
+    color: #5b6ee8;
+    font-weight: bold;
+}
+
 #invest_banner .banner-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 14px;
-    margin: 4px 0;
+    font-size: 15px;
+    margin: 2px 0;
 }
 
 #invest_banner .banner-table td {
-    padding: 1px 4px;
+    padding: 0px 3px;
     text-align: right;
 }
 
 #invest_banner [class*="banner-td-"] {
-    font-size: 18px;
+    font-size: 15px;
 }
 
 #invest_banner .banner-td-change {
@@ -647,6 +719,32 @@ div#browser_reload.panel-dragging {
     margin-top: 4px;
 }
 
+#invest_banner .banner-assets-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+#invest_banner .banner-total-capital {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    font-weight: 400;
+    color: #a7aeae;
+    white-space: nowrap;
+    min-width: 90px;
+    text-align: right;
+    line-height: 1;
+}
+
+#invest_banner .banner-assets-row .banner-assets {
+    flex: 1;
+    margin-top: 0;
+}
+
 #invest_banner .asset-row {
     display: flex;
     flex-direction: row;
@@ -656,7 +754,7 @@ div#browser_reload.panel-dragging {
 #invest_banner .asset-bar-container {
     flex: 1;
     position: relative;
-    height: 10px;
+    height: 7px;
     background: rgba(100, 100, 100, 0.3);
     border-radius: 3px;
     display: flex;
