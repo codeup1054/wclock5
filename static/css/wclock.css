@@ -1496,6 +1496,48 @@ input:checked + .slider:before {
     border-color: var(--accent-yellow, #ffd700);
 }
 
+/* Panel profiles row */
+.panel-profiles-row {
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.panel-profiles-select {
+    flex: 1 1 auto;
+    min-width: 90px;
+    background: #333;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.pp-btn {
+    background: #2c3e50;
+    color: #fff;
+    border: 1px solid #4a6a8a;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.pp-btn:hover {
+    background: #3a5772;
+}
+
+.pp-btn-apply {
+    background: #2cba99;
+    border-color: #2cba99;
+}
+
+.pp-btn-apply:hover {
+    background: #27a386;
+}
+
 /* Temperature range settings */
 .temp-range-settings {
     display: flex;

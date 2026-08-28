@@ -408,17 +408,12 @@ function normalizePanelPosition(panel) {
         document.addEventListener('touchend', onDragEnd);
     }
 
-    // Save current configuration
-    function saveCurrentConfig() {
-        console.log('[EditMode] saveCurrentConfig called');
+    function capturePanelConfig() {
         const config = {};
-
         PANEL_IDS.forEach(id => {
             const panel = document.getElementById(id);
             if (!panel) return;
-            
             const isVisible = panel.style.display !== 'none';
-            
             config[id] = {
                 top: panel.style.top || '',
                 left: panel.style.left || '',
@@ -429,7 +424,14 @@ function normalizePanelPosition(panel) {
                 visible: isVisible
             };
         });
-        
+        return config;
+    }
+
+    // Save current configuration
+    function saveCurrentConfig() {
+        console.log('[EditMode] saveCurrentConfig called');
+        const config = capturePanelConfig();
+
         console.log('[EditMode] Config to save:', config);
         
         // Save to localStorage
@@ -813,7 +815,12 @@ const PANEL_CONFIG_TABLET = ${JSON.stringify(tabletConfig, null, 4)};
         toggleFullscreen: toggleFullscreen,
         saveConfig: saveCurrentConfig,
         resetPanels: resetPanels,
-        resizeCharts: resizeCharts
+        resizeCharts: resizeCharts,
+        capturePanelConfig: capturePanelConfig,
+        applyConfigToPanels: applyConfigToPanels,
+        savePanelConfig: savePanelConfig,
+        loadPanelConfig: loadPanelConfig,
+        applyDefaultPanelConfig: applyDefaultPanelConfig
     };
 
     window.exportPanels = doExportPanels;

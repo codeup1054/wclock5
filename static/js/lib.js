@@ -455,6 +455,11 @@ function createPanelsModal() {
         $content.append($row);
     });
     
+    // Профили панелей — строка после invest_panel
+    if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.renderRow === 'function') {
+        window.PanelProfiles.renderRow($content, 'invest_panel');
+    }
+    
     // Настройки DPI: отдельные слайдеры для инвест-графика и погоды (куки + сервер)
     function makeDpiRow(label, settingKey, eventName, min, max) {
         const $row = $('<div class="panel-row"><span>' + label + '</span></div>');
@@ -562,6 +567,10 @@ $(document).ready(function() {
                 setSetting(key, serverSettings[key]);
             }
         });
+        // Профили панелей с сервера
+        if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.mergeFromServer === 'function' && serverSettings.wclock_panel_profiles) {
+            window.PanelProfiles.mergeFromServer(serverSettings.wclock_panel_profiles);
+        }
     });
 
     // Рисуем график в зависимости от сохраненного состояния
