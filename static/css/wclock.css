@@ -1538,6 +1538,15 @@ input:checked + .slider:before {
     background: #27a386;
 }
 
+.pp-btn-del {
+    background: #8a3a3a;
+    border-color: #b05555;
+}
+
+.pp-btn-del:hover {
+    background: #a04444;
+}
+
 /* Temperature range settings */
 .temp-range-settings {
     display: flex;

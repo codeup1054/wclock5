@@ -139,6 +139,20 @@
         saveProfiles(data);
     }
 
+    // Удалить профиль по имени (нельзя удалить последний)
+    function deleteProfile(name) {
+        const data = loadProfiles();
+        if (data.profiles.length <= 1) return false;
+        const idx = data.profiles.findIndex(function (p) { return p.name === name; });
+        if (idx === -1) return false;
+        data.profiles.splice(idx, 1);
+        if (data.active === name) {
+            data.active = data.profiles[0].name;
+        }
+        saveProfiles(data);
+        return true;
+    }
+
     function showConfirm(title, text, onYes) {
         const existing = document.getElementById('pp-confirm-modal');
         if (existing) existing.remove();
@@ -181,6 +195,7 @@
         const $apply = $('<button class="pp-btn pp-btn-apply">Применить</button>');
         const $saveAs = $('<button class="pp-btn pp-btn-saveas">Сохранить как…</button>');
         const $overwrite = $('<button class="pp-btn pp-btn-save">В профиль</button>');
+        const $delete = $('<button class="pp-btn pp-btn-del">Удалить</button>');
 
         $apply.on('click', function () {
             const id = $select.val();
@@ -208,6 +223,23 @@
             markRow(dirty, false);
         });
 
+        $delete.on('click', function () {
+            const id = $select.val();
+            const dataNow = loadProfiles();
+            if (dataNow.profiles.length <= 1) {
+                showConfirm('Нельзя удалить', 'Должен остаться хотя бы один профиль.', null);
+                return;
+            }
+            const profile = dataNow.profiles.find(function (p) { return p.name === id; }) || dataNow.profiles[0];
+            if (!profile) return;
+            showConfirm('Удалить профиль «' + profile.name + '»?', 'Удалённый профиль нельзя восстановить.', function () {
+                if (deleteProfile(profile.name)) {
+                    rebuildOptions($select);
+                    onDrag();
+                }
+            });
+        });
+
         // флаг «раскладка отличается от сохранённой» (несохранённые изменения)
         const dirty = $('<span class="pp-dirty" style="display:none;color:#ffb;font-size:11px;">изменено</span>');
         function markRow($flag, on) {
@@ -220,7 +252,7 @@
             saveProfiles(d);
         });
 
-        $row.append($label, $select, dirty, $apply, $saveAs, $overwrite);
+        $row.append($label, $select, dirty, $apply, $saveAs, $overwrite, $delete);
 
         // вставка после якоря
         if ($content) {
@@ -279,6 +311,7 @@
         applyProfile: applyProfile,
         saveCurrentToProfile: saveCurrentToProfile,
         saveCurrentToActive: saveCurrentToActive,
+        deleteProfile: deleteProfile,
         renderRow: renderRow
     };
 
