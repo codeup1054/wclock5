@@ -621,6 +621,14 @@ FINAM_SETTLE_MOEX = 0.0003      # урегулирование сделок Мо
 FINAM_SETTLE_SPB = 0.0001       # урегулирование сделок СПБ Биржа 0,01%
 
 
+def finam_tier_rate(total):
+    """Брокерская ставка «Трейдер n6» по брекету дневного оборота (регрессивная шкала)."""
+    for cap, r in FINAM_MOEX_TIERS:
+        if total <= cap:
+            return r
+    return FINAM_MOEX_TIERS[-1][1]
+
+
 def finam_commission_estimate(moex_sum, spb_sum):
     """Комиссия Finam за день = брокерская ставка по брекету суммарного оборота
     + урегулирование сделок отдельно по площадкам."""
@@ -881,7 +889,7 @@ def read_report(period="-90 day", db_path=None):
             comm = s.get("commission")
         if comm is None:
             comm = round(v * 0.0002, 2) if src == "tinkoff" else round(finam_commission_estimate(0, v), 2)
-        rate = 0.02 if src == "tinkoff" else (round(comm / v * 100, 4) if v else None)
+        rate = 0.02 if src == "tinkoff" else (round(finam_tier_rate(v) * 100, 4) if v else None)
         days[day][src] = {
             "cap_start": c.get("start"),
             "cap_end": c.get("end"),
