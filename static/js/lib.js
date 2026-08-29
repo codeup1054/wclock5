@@ -280,7 +280,8 @@ function createTempRangeSettings() {
 function createPanelsModal() {
     const panelNames = {
         'invest_panel': 'Инвестиции',
-        'invest_panel_banner': 'Инвестиции (баннер)',
+        'invest_banner_capital': 'Инвестбаннер. Капитал',
+        'invest_banner_table': 'Инвестбаннер. Таблица',
         'clock_panel': 'Часы',
         'date_panel': 'Дата',
         'moon_panel': 'Луна',
@@ -329,13 +330,7 @@ function createPanelsModal() {
         $checkbox.on('change', function() {
             const p = document.getElementById(panelId);
             if (p) {
-                const display = panelId === 'invest_banner' ? 'flex' : 'block';
-                p.style.display = this.checked ? display : 'none';
-                // Внешняя рамка баннера — показываем/скрываем и внутренний контент
-                if (panelId === 'invest_panel_banner') {
-                    const inner = document.getElementById('invest_banner');
-                    if (inner) inner.style.display = this.checked ? 'flex' : 'none';
-                }
+                p.style.display = this.checked ? 'block' : 'none';
             }
             if (this.checked) {
                 if (panelId === 'battery_chart_panel' && typeof batteryLevel === 'function') {
@@ -351,7 +346,7 @@ function createPanelsModal() {
                 if (panelId === 'invest_panel' && typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
                     window.InvestPlot.update();
                 }
-                if ((panelId === 'invest_banner' || panelId === 'invest_panel_banner') && typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
+                if ((panelId === 'invest_banner_capital' || panelId === 'invest_banner_table') && typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
                     window.InvestBanner.update();
                 }
             }
@@ -475,7 +470,8 @@ function createPanelsModal() {
     
     // Профили панелей — строка после invest_panel
     if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.renderRow === 'function') {
-        window.PanelProfiles.renderRow($content, 'invest_panel_banner');
+        window.PanelProfiles.renderRow($content, 'invest_banner_capital');
+        window.PanelProfiles.renderRow($content, 'invest_banner_table');
     }
     
     // Настройки DPI: отдельные слайдеры для инвест-графика и погоды (куки + сервер)
@@ -557,16 +553,13 @@ $(document).ready(function() {
     // Загружаем сохраненное состояние
     loadChartState();
     
-    // Синхронно применить видимость панели (баннер: внешняя рамка + внутренний контент)
+    // Синхронно применить видимость панели (старые ключи единого баннера -> таблица)
     function applyPanelVisibility(panelId, visible) {
-        var ids = (panelId === 'invest_panel_banner' || panelId === 'invest_banner')
-            ? ['invest_panel_banner', 'invest_banner']
-            : [panelId];
-        ids.forEach(function (id) {
-            var p = document.getElementById(id);
-            if (!p) return;
-            p.style.display = (id === 'invest_banner') ? (visible ? 'flex' : 'none') : (visible ? '' : 'none');
-        });
+        if (panelId === 'invest_panel_banner' || panelId === 'invest_banner') {
+            panelId = 'invest_banner_table';
+        }
+        const p = document.getElementById(panelId);
+        if (p) p.style.display = visible ? '' : 'none';
     }
     
     // Применяем сохранённую видимость панелей (из модалки ☰)

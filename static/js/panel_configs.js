@@ -12,13 +12,21 @@ const PANEL_CONFIG_DESKTOP = {
         "width": "600px",
         "height": "500px"
     },
-    "invest_panel_banner": {
+    "invest_banner_capital": {
         "top": "191px",
         "left": "5px",
         "right": "",
         "bottom": "",
         "width": "448px",
-        "height": "186px"
+        "height": "120px"
+    },
+    "invest_banner_table": {
+        "top": "251px",
+        "left": "5px",
+        "right": "",
+        "bottom": "",
+        "width": "448px",
+        "height": "135px"
     },
     "weather_panel": {
         "top": "193px",
@@ -119,13 +127,21 @@ const PANEL_CONFIG_TABLET = {
         "width": "550px",
         "height": "371px"
     },
-    "invest_panel_banner": {
+    "invest_banner_capital": {
         "top": "161px",
         "left": "5px",
         "right": "",
         "bottom": "",
         "width": "318px",
-        "height": "348px"
+        "height": "140px"
+    },
+    "invest_banner_table": {
+        "top": "275px",
+        "left": "5px",
+        "right": "",
+        "bottom": "",
+        "width": "318px",
+        "height": "235px"
     },
     "weather_panel": {
         "top": "142px",

@@ -9,14 +9,30 @@
 
     const PANEL_COOKIE = 'wclock_panels';
     const EDIT_MODE_COOKIE = 'wclock_edit_mode';
-    const PANEL_IDS = ['invest_panel', 'invest_panel_banner', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'seconds_panel', 'date_panel', 'moon_panel', 'chart_control_panel'];
+    const PANEL_IDS = ['invest_panel', 'invest_banner_capital', 'invest_banner_table', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'seconds_panel', 'date_panel', 'moon_panel', 'chart_control_panel'];
     // Default per-panel chart scales (0.0..1.0). Panels with charts: weather_panel, invest_panel
     const DEFAULT_PANEL_CHART_SCALES = {
         weather_panel: 1,
         invest_panel: 1,
-        invest_panel_banner: 1,
+        invest_banner_capital: 1,
+        invest_banner_table: 1,
         chart_control_panel: 1
     };
+
+    // Legacy ключи единого баннера -> новая панель таблицы
+    function migratePanelConfig(config) {
+        if (!config) return config;
+        if (config.invest_banner && !config.invest_banner_table) {
+            config.invest_banner_table = config.invest_banner;
+        }
+        if (config.invest_panel_banner && !config.invest_banner_table) {
+            var old = config.invest_panel_banner;
+            config.invest_banner_table = old;
+        }
+        delete config.invest_banner;
+        delete config.invest_panel_banner;
+        return config;
+    }
 
     // Use configs from panel_configs.js (loaded before this script)
     const DEFAULT_PANEL_CONFIG_DESKTOP = typeof PANEL_CONFIG_DESKTOP !== 'undefined' ? PANEL_CONFIG_DESKTOP : {};
@@ -49,7 +65,7 @@
     function savePanelConfig(config) {
         console.log('[EditMode] savePanelConfig called with:', config);
         try {
-            localStorage.setItem(PANEL_COOKIE, JSON.stringify(config));
+            localStorage.setItem(PANEL_COOKIE, JSON.stringify(migratePanelConfig(config)));
             console.log('[EditMode] Saved to localStorage:', PANEL_COOKIE);
         } catch (e) {
             console.warn('[PanelResize] Ошибка сохранения:', e);
@@ -106,6 +122,7 @@
     }
 
     function applyConfigToPanels(config) {
+        config = migratePanelConfig(config);
         PANEL_IDS.forEach(panelId => {
             const panel = document.getElementById(panelId);
             if (!panel) return;
@@ -123,11 +140,6 @@
             
             const visible = pos.visible !== undefined ? pos.visible : (defaults.visible !== false);
             panel.style.display = visible ? '' : 'none';
-            // Внешняя рамка баннера — синхронизируем внутренний контент
-            if (panelId === 'invest_panel_banner') {
-                const inner = document.getElementById('invest_banner');
-                if (inner) inner.style.display = visible ? 'flex' : 'none';
-            }
             
             const defaultScale = DEFAULT_PANEL_CHART_SCALES[panelId] || 1;
             panel.dataset.chartScale = defaultScale;
@@ -254,7 +266,7 @@ function normalizePanelPosition(panel) {
         btn.className = 'panel-fullscreen-btn';
         
         // Special case for charts - fullscreen works without edit mode
-        if (panel.id === 'invest_panel' || panel.id === 'invest_panel_banner' || panel.id === 'weather_panel') {
+        if (panel.id === 'invest_panel' || panel.id === 'invest_banner_capital' || panel.id === 'invest_banner_table' || panel.id === 'weather_panel') {
             btn.classList.add('panel-fullscreen-btn-chart');
         }
         

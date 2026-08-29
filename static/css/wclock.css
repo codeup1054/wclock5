@@ -538,10 +538,11 @@ div#browser_reload.panel-dragging {
     z-index: 15;
 }
 
-#invest_panel_banner {
+#invest_banner_capital,
+#invest_banner_table {
     z-index: 5;
 }
-#invest_banner {
+.invest-banner-host {
     position: absolute;
     top: 0;
     left: 0;
@@ -557,17 +558,17 @@ div#browser_reload.panel-dragging {
     gap: 0px;
 }
 
-#invest_banner .banner-message {
+.invest-banner-host .banner-message {
     text-align: center;
     color: #888;
     padding: 20px;
 }
 
-#invest_banner .banner-message.error {
+.invest-banner-host .banner-message.error {
     color: #e74c3c;
 }
 
-#invest_banner .banner-capital {
+.invest-banner-host .banner-capital {
     font-size: 68px;
     font-weight: normal;
     color: #8d9d9d;
@@ -575,7 +576,7 @@ div#browser_reload.panel-dragging {
     text-align: right;
 }
 
-#invest_banner .banner-capital-line {
+.invest-banner-host .banner-capital-line {
     color: var(--text-color);
     font-size: 45px;
     line-height: 0.95;
@@ -585,7 +586,7 @@ div#browser_reload.panel-dragging {
     gap: 10px;
 }
 
-#invest_banner table.banner-turnover-block {
+.invest-banner-host table.banner-turnover-block {
     border-collapse: collapse;
     width: 130px;
     font-size: 15px;
@@ -595,31 +596,31 @@ div#browser_reload.panel-dragging {
     text-align: right;
 }
 
-#invest_banner table.banner-turnover-block.finam {
+.invest-banner-host table.banner-turnover-block.finam {
     /* Стили для Finam - синие оттенки */
     border: 1px solid rgba(91, 110, 232, 0.3);
 }
 
-#invest_banner table.banner-turnover-block.tinvest {
+.invest-banner-host table.banner-turnover-block.tinvest {
     /* Стили для Тинвеста - зеленые оттенки */
     border: 1px solid rgba(67, 232, 147, 0.3);
 }
 
-#invest_banner table.banner-turnover-block td {
+.invest-banner-host table.banner-turnover-block td {
     padding: 0 4px 0 0;
     width: 50%;
 }
 
-#invest_banner table.banner-turnover-block .tb-col2 {
+.invest-banner-host table.banner-turnover-block .tb-col2 {
     padding-left: 7px;
     border-left: 1px solid rgba(141, 157, 157, 0.35);
 }
 
-#invest_banner .finam-tariff-hover {
+.invest-banner-host .finam-tariff-hover {
     cursor: help;
 }
 
-#invest_banner .finam-tariff-hover:hover {
+.invest-banner-host .finam-tariff-hover:hover {
     text-decoration: underline dotted;
 }
 
@@ -677,50 +678,50 @@ div#browser_reload.panel-dragging {
     font-weight: bold;
 }
 
-#invest_banner .banner-table {
+.invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 15px;
     margin: 2px 0;
 }
 
-#invest_banner .banner-table td {
+.invest-banner-host .banner-table td {
     padding: 0px 3px;
     text-align: right;
 }
 
-#invest_banner [class*="banner-td-"] {
+.invest-banner-host [class*="banner-td-"] {
     font-size: 15px;
 }
 
-#invest_banner .banner-td-change {
+.invest-banner-host .banner-td-change {
     min-width: 65px;
 }
 
-#invest_banner .banner-td-pct {
+.invest-banner-host .banner-td-pct {
     min-width: 50px;
 }
 
-#invest_banner .banner-td-empty {
+.invest-banner-host .banner-td-empty {
     min-width: 1px;
 }
 
-#invest_banner .change-positive {
+.invest-banner-host .change-positive {
     color: #1fc163;
 }
 
-#invest_banner .change-negative {
+.invest-banner-host .change-negative {
     color: #ff5341;
 }
 
-#invest_banner .banner-assets {
+.invest-banner-host .banner-assets {
     display: flex;
     flex-direction: column;
     gap: 4px;
     margin-top: 4px;
 }
 
-#invest_banner .banner-assets-row {
+.invest-banner-host .banner-assets-row {
     display: flex;
     flex-direction: row;
     align-items: stretch;
@@ -728,7 +729,7 @@ div#browser_reload.panel-dragging {
     margin-top: 4px;
 }
 
-#invest_banner .banner-total-capital {
+.invest-banner-host .banner-total-capital {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -741,18 +742,18 @@ div#browser_reload.panel-dragging {
     line-height: 1;
 }
 
-#invest_banner .banner-assets-row .banner-assets {
+.invest-banner-host .banner-assets-row .banner-assets {
     flex: 1;
     margin-top: 0;
 }
 
-#invest_banner .asset-row {
+.invest-banner-host .asset-row {
     display: flex;
     flex-direction: row;
     align-items: center;
 }
 
-#invest_banner .asset-bar-container {
+.invest-banner-host .asset-bar-container {
     flex: 1;
     position: relative;
     height: 7px;
@@ -765,7 +766,7 @@ div#browser_reload.panel-dragging {
     overflow: hidden;
 }
 
-#invest_banner .asset-bar {
+.invest-banner-host .asset-bar {
     height: 100%;
     min-width: 10px;
     display: flex;
@@ -775,7 +776,7 @@ div#browser_reload.panel-dragging {
     overflow: hidden;
 }
 
-#invest_banner .asset-bar-label {
+.invest-banner-host .asset-bar-label {
     color: #fff;
     font-size: 10px;
     font-weight: bold;
@@ -783,7 +784,7 @@ div#browser_reload.panel-dragging {
     text-shadow: 0 0 2px rgba(0,0,0,0.7);
 }
 
-#invest_banner .asset-value {
+.invest-banner-host .asset-value {
     color: #fff;
     font-size: 10px;
     white-space: nowrap;

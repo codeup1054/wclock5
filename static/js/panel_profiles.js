@@ -103,11 +103,11 @@
                 if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.resizeCharts === 'function') {
                     window.PanelResize.resizeCharts();
                 }
-                // Баннер: если внешняя рамка видима — перерисовать контент
+                // Баннер: если любая из панелей видима — перерисовать контент
                 if (typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
-                    const b = document.getElementById('invest_panel_banner');
-                    const inner = document.getElementById('invest_banner');
-                    if (b && b.style.display !== 'none' && inner && inner.style.display !== 'none') {
+                    const cap = document.getElementById('invest_banner_capital');
+                    const tbl = document.getElementById('invest_banner_table');
+                    if ((cap && cap.style.display !== 'none') || (tbl && tbl.style.display !== 'none')) {
                         window.InvestBanner.update();
                     }
                 }
@@ -165,11 +165,14 @@
     // Синхронизировать чекбоксы видимости в модалке с конфигом
     function syncVisibilityCheckboxes(config) {
         if (!config) return;
-        // Старый ключ invest_banner -> новый invest_panel_banner
-        if (config.invest_banner && !config.invest_panel_banner) {
-            var old = config.invest_banner;
+        // Старые ключи единого баннера -> новая панель таблицы
+        if (config.invest_panel_banner && !config.invest_banner_table) {
             config = JSON.parse(JSON.stringify(config));
-            config.invest_panel_banner = old;
+            config.invest_banner_table = config.invest_panel_banner;
+        }
+        if (config.invest_banner && !config.invest_banner_table) {
+            config = JSON.parse(JSON.stringify(config));
+            config.invest_banner_table = config.invest_banner;
         }
         Object.keys(config).forEach(function (panelId) {
             var cb = document.querySelector('input[data-panel="' + panelId + '"]');
@@ -181,26 +184,23 @@
 
     // Обновить видимость панели в активном профиле (+ синхронизация wclock_panels, чтобы F5 не откатывал)
     function updateVisibility(panelId, visible) {
-        // Баннер: модалка управляет внешней рамкой invest_panel_banner,
-        // но в профиле может быть сохранён и внутренний invest_banner — синхронизируем оба
-        const panelIds = panelId === 'invest_panel_banner' ? ['invest_panel_banner', 'invest_banner'] : [panelId];
-        panelIds.forEach(function (id) {
-            const data = loadProfiles();
-            const active = data.profiles.find(function (p) { return p.name === data.active; }) || data.profiles[0];
-            active.config = active.config || {};
-            active.config[id] = active.config[id] || {};
-            active.config[id].visible = !!visible;
-            saveProfiles(data);
+        // Старые ключи единого баннера -> панель таблицы
+        if (panelId === 'invest_panel_banner' || panelId === 'invest_banner') panelId = 'invest_banner_table';
+        const data = loadProfiles();
+        const active = data.profiles.find(function (p) { return p.name === data.active; }) || data.profiles[0];
+        active.config = active.config || {};
+        active.config[panelId] = active.config[panelId] || {};
+        active.config[panelId].visible = !!visible;
+        saveProfiles(data);
 
-            // Синхронизация с wclock_panels (применяется при загрузке страницы)
-            if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
-                const full = window.PanelResize.capturePanelConfig();
-                if (full[id]) {
-                    full[id].visible = !!visible;
-                    window.PanelResize.savePanelConfig(full);
-                }
+        // Синхронизация с wclock_panels (применяется при загрузке страницы)
+        if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
+            const full = window.PanelResize.capturePanelConfig();
+            if (full[panelId]) {
+                full[panelId].visible = !!visible;
+                window.PanelResize.savePanelConfig(full);
             }
-        });
+        }
     }
 
     function showConfirm(title, text, onYes) {

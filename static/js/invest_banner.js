@@ -351,16 +351,23 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     function renderBanner(historyData, dynData) {
         console.log('[renderBanner] called, turnoverData=', !!turnoverData, 'keys=', turnoverData ? Object.keys(turnoverData) : 'null');
-        const $banner = $('#invest_banner');
-        
+        const $capHost = $('#invest_banner_capital_content');
+        const $tblHost = $('#invest_banner_table_content');
+
+        function emptyState(msg) {
+            const cls = msg.startsWith('Ошибка') ? ' error' : '';
+            if ($capHost.length) $capHost.html(`<div class="banner-message${cls}">${msg}</div>`);
+            if ($tblHost.length) $tblHost.html(`<div class="banner-message${cls}">${msg}</div>`);
+        }
+
         if (!historyData || Object.keys(historyData).length === 0) {
-            $banner.html('<div class="banner-message">Нет данных</div>');
+            emptyState('Нет данных');
             return;
         }
 
         const timestamps = Object.keys(historyData).filter(k => k !== '_prev').sort();
         if (timestamps.length === 0) {
-            $banner.html('<div class="banner-message">Нет данных</div>');
+            emptyState('Нет данных');
             return;
         }
 
@@ -368,7 +375,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const latestPositions = historyData[latestTs];
         
         if (!Array.isArray(latestPositions) || latestPositions.length === 0) {
-            $banner.html('<div class="banner-message">Нет позиций</div>');
+            emptyState('Нет позиций');
             return;
         }
 
@@ -414,26 +421,27 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             };
         });
 
-        let html = '';
+        let capHtml = '';
+        let tblHtml = '';
 
         // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
-        html += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
+        capHtml += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
         portfolioRows.forEach(function(row) {
-            html += `<div class="banner-capital-line"><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
+            capHtml += `<div class="banner-capital-line"><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
         });
-        html += `</div>`;
+        capHtml += `</div>`;
 
         // === ASSETS BARS: капитал слева + бары справа ===
         if (portfolioRows.length > 0) {
             const totalCapital = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
-            html += `<div class="banner-assets-row">`;
-            html += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
-            html += `<div class="banner-assets" id="invest-assets-bars">`;
+            capHtml += `<div class="banner-assets-row">`;
+            capHtml += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
+            capHtml += `<div class="banner-assets" id="invest-assets-bars">`;
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;
-                html += `<div class="asset-row">`;
-                html += `<span class="asset-row-label" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;min-width:18px;">${row.marker}</span>`;
-                html += `<div class="asset-bar-container">`;
+                capHtml += `<div class="asset-row">`;
+                capHtml += `<span class="asset-row-label" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;min-width:18px;">${row.marker}</span>`;
+                capHtml += `<div class="asset-bar-container">`;
                 row.assets.forEach(function(asset, index) {
                     let color = COLORS.assetColors[index % COLORS.assetColors.length];
                     if (asset.ticker.includes('TGLD')) color = '#efad05';
@@ -445,17 +453,17 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                     else if (assetTitle.includes('TMON')) assetTitle = 'Обл. Минфин (TMON)';
                     else if (assetTitle.includes('RUB')) assetTitle = 'Рубль';
 
-                    html += `<span class="asset-bar" title="${assetTitle}" style="width: ${Math.max(asset.percent, 1)}%; background-color: ${color};"><span class="asset-bar-label">${asset.percent.toFixed(1)}%</span></span>`;
+                    capHtml += `<span class="asset-bar" title="${assetTitle}" style="width: ${Math.max(asset.percent, 1)}%; background-color: ${color};"><span class="asset-bar-label">${asset.percent.toFixed(1)}%</span></span>`;
                 });
-                html += `</div>`;
-                html += `</div>`;
+                capHtml += `</div>`;
+                capHtml += `</div>`;
             });
-            html += `</div>`;
-            html += `</div>`;
+            capHtml += `</div>`;
+            capHtml += `</div>`;
         }
 
         // === TABLE: banner-row-portfolio — T+F итого + строки по источникам ===
-        html += `<table class="banner-table" id="invest-banner-table"><tbody>`;
+        tblHtml += `<table class="banner-table" id="invest-banner-table"><tbody>`;
 
         // --- T+F итого (первая строка) ---
         if (portfolioRows.length > 0) {
@@ -480,7 +488,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfWeekCls = tfAbsW >= 0 ? 'change-positive' : 'change-negative';
             var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
 
-            html += `<tr class="banner-row-portfolio-total">
+            tblHtml += `<tr class="banner-row-portfolio-total">
             <td class="banner-td-num" style="color:#999;font-size:10px;min-width:16px;text-align:left;">T+F</td>
             <td class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
             <td class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
@@ -492,7 +500,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
 
         portfolioRows.forEach(function(row) {
-            html += `<tr class="${row.cssClass}" style="opacity:0.7;">
+            tblHtml += `<tr class="${row.cssClass}" style="opacity:0.7;">
             <td class="banner-td-num" style="color:${row.color};font-size:10px;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
             <td class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
             <td class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
@@ -503,13 +511,14 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         </tr>`;
         });
 
-        html += renderAssetRow('TGLD@', COLORS.tgold, 'TGLD');
-        html += renderAssetRow('TMON@', '#e74c3c', 'TMON');
-        html += renderAssetRow('XAU/USD', '#cc7722', 'XAU');
+        tblHtml += renderAssetRow('TGLD@', COLORS.tgold, 'TGLD');
+        tblHtml += renderAssetRow('TMON@', '#e74c3c', 'TMON');
+        tblHtml += renderAssetRow('XAU/USD', '#cc7722', 'XAU');
 
-        html += `</tbody></table>`;
+        tblHtml += `</tbody></table>`;
 
-        $banner.html(html);
+        if ($capHost.length) $capHost.html(capHtml);
+        if ($tblHost.length) $tblHost.html(tblHtml);
         console.log('[InvestBanner] Banner rendered, sources:', presentSources, 'capital:', totals, 'assets:', portfolioRows.map(r => r.assets.length));
     }
 
@@ -547,7 +556,9 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                     renderBanner(refHistory || historyData, historyData);
                 }).fail(function(xhr, status, error) {
                     console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
-                    $('#invest_banner').html('<div class="banner-message error">Ошибка загрузки</div>');
+                    ['#invest_banner_capital_content', '#invest_banner_table_content'].forEach(function(sel) {
+                        $(sel).html('<div class="banner-message error">Ошибка загрузки</div>');
+                    });
                 });
             });
             });
@@ -592,7 +603,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     $(document).ready(init);
 
     $(document).on('panelViewChange', function(e, data) {
-        if (data && data.panel === 'invest_panel') {
+        if (data && (data.panel === 'invest_panel' || data.panel === 'invest_banner_capital' || data.panel === 'invest_banner_table')) {
             updateInvestBanner();
         }
     });
