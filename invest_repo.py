@@ -805,23 +805,37 @@ def read_report(period="-90 day", db_path=None):
     conn = connect(db_path or DB_PATH)
     conn.row_factory = sqlite3.Row
 
-    # Капитал: первая/последняя часовая свеча каждого дня по источнику
+    # Капитал: первая/последняя точка (день, источник) из portfolio_hourly +
+    # portfolio_positions (сырые снапшоты так же, как /api/invest/history).
+    # Hourly покрывает начало/конец ночи и старые дни; positions уточняют
+    # конец текущего дня, когда hourly-демон остановился.
     hourly = conn.execute("""
         SELECT date(timestamp) AS d, source, ts_epoch, close
         FROM portfolio_hourly
         WHERE ts_epoch >= ?
         ORDER BY ts_epoch ASC
     """, (cutoff,)).fetchall()
+    positions = conn.execute("""
+        SELECT date(timestamp) AS d, source, ts_epoch, SUM(value) AS total
+        FROM portfolio_positions
+        WHERE ts_epoch >= ?
+        GROUP BY ts_epoch, source
+        ORDER BY ts_epoch ASC
+    """, (cutoff,)).fetchall()
     cap = {}  # (day, source) -> {"start": .., "end": ..}
-    for h in hourly:
-        if h["close"] is None:
-            continue
-        key = (h["d"], h["source"] or "tinkoff")
+    def add_cap_point(day, src, ts, val):
+        if val is None:
+            return
+        key = (day, src or "tinkoff")
         e = cap.setdefault(key, {"start": None, "end": None, "e0": None, "e1": None})
-        if e["e0"] is None or h["ts_epoch"] < e["e0"]:
-            e["e0"], e["start"] = h["ts_epoch"], h["close"]
-        if e["e1"] is None or h["ts_epoch"] > e["e1"]:
-            e["e1"], e["end"] = h["ts_epoch"], h["close"]
+        if e["e0"] is None or ts < e["e0"]:
+            e["e0"], e["start"] = ts, val
+        if e["e1"] is None or ts > e["e1"]:
+            e["e1"], e["end"] = ts, val
+    for h in hourly:
+        add_cap_point(h["d"], h["source"], h["ts_epoch"], h["close"])
+    for p in positions:
+        add_cap_point(p["d"], p["source"], p["ts_epoch"], p["total"])
 
     # Объём/комиссия: turnover_daily
     vol = {}  # (day, source) -> {"volume": .., "commission": ..}
@@ -854,12 +868,17 @@ def read_report(period="-90 day", db_path=None):
         if day not in days:
             days[day] = {}
         c = cap.get((day, src), {})
+        s = strat.get((day, src), {})
         v = vol.get((day, src), {}).get("volume")
+        # Аномальный turnover_daily (например, счёт номиналов TGLD на T) —
+        # берём оборот стратегии, если тот заметно меньше.
+        if v is not None and s.get("volume") and v > 3 * s["volume"]:
+            v = s["volume"]
         if v is None:
-            v = strat.get((day, src), {}).get("volume", 0.0) or 0.0
+            v = s.get("volume", 0.0) or 0.0
         comm = vol.get((day, src), {}).get("commission")
         if comm is None:
-            comm = strat.get((day, src), {}).get("commission")
+            comm = s.get("commission")
         if comm is None:
             comm = round(v * 0.0002, 2) if src == "tinkoff" else round(finam_commission_estimate(0, v), 2)
         rate = 0.02 if src == "tinkoff" else (round(comm / v * 100, 4) if v else None)
