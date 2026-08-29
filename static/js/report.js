@@ -40,6 +40,14 @@
   function fmtDateRange(a, b) { return a === b ? a : a + ' — ' + b; }
   function fmt(x) { return x == null ? '' : (typeof x === 'number' ? x.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) : x); }
   function fmtPct(x) { return x == null ? '' : fmt(x) + '%'; }
+  function fmtVal(x) {
+    var s = fmt(x);
+    return x < 0 ? '<span class="r-neg">' + s + '</span>' : s;
+  }
+  function fmtPctVal(x) {
+    var s = fmtPct(x);
+    return x < 0 ? '<span class="r-neg">' + s + '</span>' : s;
+  }
 
   // Агрегация группы записей по одному источнику
   function aggCell(entries, src) {
@@ -81,10 +89,25 @@
     var dates = Object.keys(days).sort();
     var entries = dates.map(function (k) { return days[k]; });
     var c = aggAll(entries);
+
+    // F+T: по-дневная сумма источников, затем стандартная агрегация
+    var combinedEntries = dates.map(function (k) {
+      var e = days[k], f = e && e.finam, t = e && e.tinkoff;
+      var fcs = f && f.cap_start != null, tcs = t && t.cap_start != null;
+      var fce = f && f.cap_end != null, tce = t && t.cap_end != null;
+      return { combined: {
+        cap_start: (fcs || tcs) ? round2((fcs ? f.cap_start : 0) + (tcs ? t.cap_start : 0)) : null,
+        cap_end: (fce || tce) ? round2((fce ? f.cap_end : 0) + (tce ? t.cap_end : 0)) : null,
+        volume: round2(((f && f.volume) || 0) + ((t && t.volume) || 0)),
+        commission: round2(((f && f.commission) || 0) + ((t && t.commission) || 0)),
+        rate: null
+      } };
+    });
+    var combinedCell = aggCell(combinedEntries, 'combined');
+
     var tradeDays = dates.length;
     var out = {};
-    SOURCES.forEach(function (src) {
-      var cell = c[src];
+    function make(src, cell, rateAvg) {
       out[src] = {
         src: src,
         tradeDays: tradeDays,
@@ -97,11 +120,13 @@
         avgChangePct: cell.days ? round2(cell.changePct / cell.days) : null,
         volume: cell.volume,
         avgVolume: cell.days ? round2(cell.volume / cell.days) : null,
-        rateAvg: cell.rateN ? round2(cell.rateSum / cell.rateN) : null,
+        rateAvg: rateAvg != null ? rateAvg : (cell.rateN ? round2(cell.rateSum / cell.rateN) : null),
         commission: cell.commission,
         avgCommission: cell.days ? round2(cell.commission / cell.days) : null
       };
-    });
+    }
+    SOURCES.forEach(function (src) { make(src, c[src], null); });
+    make('combined', combinedCell, combinedCell.volume ? round2(combinedCell.commission / combinedCell.volume * 100) : null);
     return out;
   }
 
@@ -132,7 +157,7 @@
     lines.push('Интервал;' + state.interval + ';Период;' + state.period);
     lines.push('');
     lines.push('СВОДКА ЗА ПЕРИОД');
-    lines.push('Показатель;F (Финам);T (Тинькофф)');
+    lines.push('Показатель;F (Финам);T (Тинькофф);F+T');
     var sumRows = [
       ['Период дат', function (s) { return s.dateRange; }],
       ['Торговых дней, шт', function (s) { return s.tradeDays; }],
@@ -149,7 +174,7 @@
       ['Комиссия средняя в день, ₽', function (s) { return csvValue(s.avgCommission); }]
     ];
     sumRows.forEach(function (r) {
-      lines.push(r[0] + ';' + r[1](summary.finam) + ';' + r[1](summary.tinkoff));
+      lines.push(r[0] + ';' + r[1](summary.finam) + ';' + r[1](summary.tinkoff) + ';' + r[1](summary.combined));
     });
     lines.push('');
     lines.push('ДЕТАЛИЗАЦИЯ' + (state.interval === 'day' ? ' (по дням)' : ' (по ' + state.interval + 'ам)'));
@@ -188,9 +213,9 @@
   // Рендер сводки
   function renderSummary(summary) {
     var $tb = $('#report-summary-tbody');
-    if (!summary) { $tb.html('<tr><td colspan="3">Нет данных</td></tr>'); return; }
+    if (!summary) { $tb.html('<tr><td colspan="4">Нет данных</td></tr>'); return; }
     function row(label, fn) {
-      return '<tr><td class="r-label">' + label + '</td>' + SOURCES.map(function (s) {
+      return '<tr><td class="r-label">' + label + '</td>' + ['finam', 'tinkoff', 'combined'].map(function (s) {
         var v = fn(summary[s]);
         return '<td>' + (v == null || v === '' ? '<span class="r-empty">—</span>' : v) + '</td>';
       }).join('') + '</tr>';
@@ -199,10 +224,10 @@
       row('Период дат', function (s) { return s.dateRange + ' <span class="r-sub">(' + s.tradeDays + ' торг. дн.)</span>'; }) +
       row('Капитал на начало, ₽', function (s) { return fmt(s.cap_start); }) +
       row('Капитал на конец, ₽', function (s) { return fmt(s.cap_end); }) +
-      row('Изменение капитала за период, ₽', function (s) { return fmt(s.changeRub); }) +
-      row('Среднее изменение капитала в день, ₽', function (s) { return fmt(s.avgChangeRub); }) +
-      row('Изменение капитала за период, %', function (s) { return fmtPct(s.changePct); }) +
-      row('Среднее изменение капитала в день, %', function (s) { return fmtPct(s.avgChangePct); }) +
+      row('Изменение капитала за период, ₽', function (s) { return fmtVal(s.changeRub); }) +
+      row('Среднее изменение капитала в день, ₽', function (s) { return fmtVal(s.avgChangeRub); }) +
+      row('Изменение капитала за период, %', function (s) { return fmtPctVal(s.changePct); }) +
+      row('Среднее изменение капитала в день, %', function (s) { return fmtPctVal(s.avgChangePct); }) +
       row('Объём за период, ₽', function (s) { return fmt(s.volume); }) +
       row('Объём средний в день, ₽', function (s) { return fmt(s.avgVolume); }) +
       row('Ставка комиссии средняя, %', function (s) { return fmtPct(s.rateAvg); }) +
@@ -220,17 +245,22 @@
       SOURCES.forEach(function (src) {
         var c = r.cells[src];
         var rate = c.rateN ? round2(c.rateSum / c.rateN) : null;
-        line += '<td>' + fmt(c.cap_start) + '</td><td>' + fmt(c.cap_end) + '</td><td>' + fmt(c.changeRub) + '</td>' +
-          '<td>' + fmtPct(c.changePct) + '</td><td>' + fmt(c.volume) + '</td><td>' + fmtPct(rate) + '</td><td>' + fmt(c.commission) + '</td>';
+        line += '<td>' + fmt(c.cap_start) + '</td><td>' + fmt(c.cap_end) + '</td><td>' + fmtVal(c.changeRub) + '</td>' +
+          '<td>' + fmtPctVal(c.changePct) + '</td><td>' + fmt(c.volume) + '</td><td>' + fmtPct(rate) + '</td><td>' + fmt(c.commission) + '</td>';
       });
       return line + '</tr>';
     }).join('');
     $tb.html(html);
+    // двухрядная липкая шапка: вторая строка фиксируется на высоте первой
+    var $trs = $('#report-table-tbody').closest('table').find('thead tr');
+    if ($trs.length === 2) {
+      $trs.eq(1).find('th').css('top', $trs.eq(0).outerHeight() + 'px');
+    }
   }
 
   function render() {
     if (!state.data) {
-      $('#report-summary-tbody').html('<tr><td colspan="3">Нет данных</td></tr>');
+      $('#report-summary-tbody').html('<tr><td colspan="4">Нет данных</td></tr>');
       $('#report-table-tbody').html('<tr><td colspan="15">Нет данных</td></tr>');
       $('#report-status').text('Данных нет');
       return;
@@ -279,7 +309,7 @@
         '</div>' +
         '<div id="report-status" class="report-status"></div>' +
         '<div class="report-summary-title">Сводка за период</div>' +
-        '<table class="report-summary-table"><thead><tr><th>Показатель</th><th>F (Финам)</th><th>T (Тинькофф)</th></tr></thead>' +
+        '<table class="report-summary-table"><thead><tr><th>Показатель</th><th>F (Финам)</th><th>T (Тинькофф)</th><th>F+T</th></tr></thead>' +
           '<tbody id="report-summary-tbody"></tbody></table>' +
         '<div class="report-table-title">Детализация</div>' +
         '<div class="report-table-wrap"><table class="report-table"><thead><tr>' +

@@ -1523,6 +1523,16 @@ body.edit-mode .panel-fullscreen-btn {
     color: #6fe3a8;
 }
 
+.report-summary-table td:nth-child(4) {
+    color: #ffd700;
+}
+
+.report-summary-table .r-neg,
+.report-table .r-neg {
+    color: #ff6b6b !important;
+    font-weight: 600;
+}
+
 .report-summary-table .r-sub {
     color: #8a90b8;
     font-size: 0.72rem;
