@@ -364,9 +364,15 @@ function createPanelsModal() {
                 // Also save to server
                 saveSettingsToServer({ wclock_panel_config: JSON.stringify(config) });
             } catch(e) {}
-            // Save visibility to active profile
-            if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.updateVisibility === 'function') {
-                window.PanelProfiles.updateVisibility(panelId, this.checked);
+            // Видимость не пишем в профиль сразу — это грязное изменение,
+            // фиксируется кнопкой «Сохранить» (MutationObserver активирует её).
+            // Синхронизируем wclock_panels, чтобы F5 не откатывал видимость.
+            if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
+                var fullCfg = window.PanelResize.capturePanelConfig();
+                if (fullCfg[panelId]) {
+                    fullCfg[panelId].visible = this.checked;
+                    window.PanelResize.savePanelConfig(fullCfg);
+                }
             }
         });
         
