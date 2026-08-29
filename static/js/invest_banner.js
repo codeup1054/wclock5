@@ -537,6 +537,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                     '-35 day': 'hour',
                     '-7 day': 'hour',
                     '-1 day': 'hour',
+                    '-12 hour': 'fivemin',
                     '-6 hour': 'fivemin',
                     '-3 hour': 'minute',
                     '-1 hour': 'minute'

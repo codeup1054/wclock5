@@ -508,6 +508,21 @@ def api_invest_turnover():
     return resp
 
 
+@app.route("/api/invest/report")
+def api_invest_report():
+    """Дневные строки отчёта: капитал нач/конец, изменение, объём, комиссия, ставка.
+    Агрегация по интервалу и итоги периода — на клиенте."""
+    period = request.args.get('period', '-90 day')
+    data = cached_invest("report", INVEST_DB_PATH, {"period": period},
+                         lambda: invest_repo.read_report(period, db_path=INVEST_DB_PATH))
+    if isinstance(data, dict) and data.get("_error"):
+        return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
+    resp = make_response(jsonify({"period": period, "days": data}))
+    resp.cache_control.max_age = 180
+    resp.cache_control.public = True
+    return resp
+
+
 # === API для тикеров (TGLD@) ===
 TRACKED_TICKERS_DB_PATH = os.path.join(os.path.dirname(__file__), "parsers", "invest", "tracked_tickers.db")
 

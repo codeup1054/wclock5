@@ -785,3 +785,90 @@ def read_turnover(days=90, db_path=None):
     out = [dict(r) for r in rows]
     conn.close()
     return out
+
+
+def read_report(period="-90 day", db_path=None):
+    """Дневные строки отчёта за период (БЕЗ итогов — агрегацию строк по интервалу
+    и итоги периода делает клиент).
+
+    На каждый (день, источник) отдаёт:
+      cap_start / cap_end — первая/последняя часовая свеча дня (portfolio_hourly),
+      volume — объём торгов (turnover_daily buy+sell, фолбэк strategy_summary.turnover),
+      commission — комиссия дня (turnover_daily.commission; фолбэк strategy_summary,
+        иначе расчёт: tinkoff 0.02% объёма, finam тариф «Трейдер»),
+      rate — ставка комиссии % (tinkoff 0.02; finam фактическая commission/объём).
+
+    Дни без данных по капиталу (нет hourly) — cap_start/cap_end = None
+    (ячейки таблицы остаются пустыми).
+    """
+    cutoff = cutoff_epoch(period)
+    conn = connect(db_path or DB_PATH)
+    conn.row_factory = sqlite3.Row
+
+    # Капитал: первая/последняя часовая свеча каждого дня по источнику
+    hourly = conn.execute("""
+        SELECT date(timestamp) AS d, source, ts_epoch, close
+        FROM portfolio_hourly
+        WHERE ts_epoch >= ?
+        ORDER BY ts_epoch ASC
+    """, (cutoff,)).fetchall()
+    cap = {}  # (day, source) -> {"start": .., "end": ..}
+    for h in hourly:
+        if h["close"] is None:
+            continue
+        key = (h["d"], h["source"] or "tinkoff")
+        e = cap.setdefault(key, {"start": None, "end": None, "e0": None, "e1": None})
+        if e["e0"] is None or h["ts_epoch"] < e["e0"]:
+            e["e0"], e["start"] = h["ts_epoch"], h["close"]
+        if e["e1"] is None or h["ts_epoch"] > e["e1"]:
+            e["e1"], e["end"] = h["ts_epoch"], h["close"]
+
+    # Объём/комиссия: turnover_daily
+    vol = {}  # (day, source) -> {"volume": .., "commission": ..}
+    for r in conn.execute(
+            "SELECT day, source, buy, sell, commission FROM turnover_daily"
+            " WHERE day >= ?", (datetime.fromtimestamp(cutoff, tz=timezone.utc).strftime("%Y-%m-%d"),)).fetchall():
+        src = r["source"] or "tinkoff"
+        vol[(r["day"], src)] = {
+            "volume": round((r["buy"] or 0) + (r["sell"] or 0), 2),
+            "commission": r["commission"] or 0.0,
+        }
+
+    # Фолбэк объёма/комиссии: сводки стратегии из Telegram
+    strat = {}
+    for r in conn.execute(
+            "SELECT day, source, turnover, commission FROM strategy_summary"
+            " WHERE day IS NOT NULL AND day != '' AND day >= ?",
+            (datetime.fromtimestamp(cutoff, tz=timezone.utc).strftime("%Y-%m-%d"),)).fetchall():
+        src = r["source"] or "tinkoff"
+        key = (r["day"], src)
+        if r["turnover"]:
+            v = strat.setdefault(key, {"volume": 0.0, "commission": None})
+            v["volume"] = max(v["volume"], float(r["turnover"]))
+            if r["commission"]:
+                v["commission"] = float(r["commission"])
+    conn.close()
+
+    days = {}
+    for (day, src) in set(cap) | set(vol) | set(strat):
+        if day not in days:
+            days[day] = {}
+        c = cap.get((day, src), {})
+        v = vol.get((day, src), {}).get("volume")
+        if v is None:
+            v = strat.get((day, src), {}).get("volume", 0.0) or 0.0
+        comm = vol.get((day, src), {}).get("commission")
+        if comm is None:
+            comm = strat.get((day, src), {}).get("commission")
+        if comm is None:
+            comm = round(v * 0.0002, 2) if src == "tinkoff" else round(finam_commission_estimate(0, v), 2)
+        rate = 0.02 if src == "tinkoff" else (round(comm / v * 100, 4) if v else None)
+        days[day][src] = {
+            "cap_start": c.get("start"),
+            "cap_end": c.get("end"),
+            "volume": round(v, 2),
+            "commission": round(comm, 2),
+            "rate": rate,
+        }
+
+    return {d: days[d] for d in sorted(days)}

@@ -1179,6 +1179,18 @@ body:not(.edit-mode) .resize-handle {
     transition: all 0.2s ease;
 }
 
+#chart_control_panel .interval-group button:focus,
+#chart_control_panel .panel-buttons button:focus,
+.toggle-btn:focus, .interval-btn:focus,
+#edit_mode_btn:focus, #reset_panels_btn:focus, #export_panels_btn:focus, #reload_browser_btn:focus,
+#chart_control_panel .interval-group button:focus-visible,
+#chart_control_panel .panel-buttons button:focus-visible,
+.toggle-btn:focus-visible, .interval-btn:focus-visible,
+#edit_mode_btn:focus-visible, #reset_panels_btn:focus-visible, #export_panels_btn:focus-visible, #reload_browser_btn:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+}
+
 .toggle-btn:hover, .interval-btn:hover, #edit_mode_btn:hover, #reset_panels_btn:hover, #export_panels_btn:hover, #reload_browser_btn:hover {
     background-color: #444;
 }
@@ -1411,6 +1423,175 @@ body.edit-mode .panel-fullscreen-btn {
 
 .close-modal:hover {
     color: var(--accent-yellow, #ffd700);
+}
+
+/* === Отчёт (report.js) === */
+.report-modal-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--bg-color, #1a1a2e);
+    border: 2px solid var(--accent-yellow, #ffd700);
+    border-radius: 12px;
+    padding: 16px 20px;
+    min-width: 360px;
+    max-width: 96%;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+}
+
+.report-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.report-control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.report-control-group > span {
+    color: #cfd2ff;
+    font-size: 0.8rem;
+    margin-right: 2px;
+}
+
+.report-controls .report-int {
+    padding: 2px 8px;
+    font-size: 0.8rem;
+}
+
+#report-csv {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 0.8rem;
+}
+
+.report-status {
+    color: #9aa0c7;
+    font-size: 0.78rem;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 6px;
+}
+
+.report-summary-title,
+.report-table-title {
+    color: var(--accent-yellow, #ffd700);
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin: 8px 0 4px;
+}
+
+.report-summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4px;
+    font-size: 0.8rem;
+}
+
+.report-summary-table th,
+.report-summary-table td {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 3px 8px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.report-summary-table th {
+    background: rgba(255, 215, 0, 0.12);
+    color: #ffd700;
+    font-weight: 600;
+}
+
+.report-summary-table td.r-label {
+    color: #e6e8ff;
+}
+
+.report-summary-table td:nth-child(2) {
+    color: #8fb3ff;
+}
+
+.report-summary-table td:nth-child(3) {
+    color: #6fe3a8;
+}
+
+.report-summary-table .r-sub {
+    color: #8a90b8;
+    font-size: 0.72rem;
+}
+
+.report-summary-table .r-empty {
+    color: #555a7d;
+}
+
+.report-table-wrap {
+    overflow: auto;
+    max-height: 42vh;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    margin-bottom: 6px;
+}
+
+.report-table {
+    border-collapse: collapse;
+    font-size: 0.78rem;
+    width: 100%;
+    min-width: 1200px;
+}
+
+.report-table th,
+.report-table td {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 2px 6px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.report-table th {
+    background: rgba(255, 215, 0, 0.1);
+    color: #ffd700;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+}
+
+.report-table tr:hover td {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.report-table td.r-date {
+    text-align: left;
+    color: #e6e8ff;
+    font-weight: 600;
+}
+
+.report-table th.r-src-f {
+    color: #8fb3ff;
+    text-align: center;
+    background: rgba(143, 179, 255, 0.12);
+}
+
+.report-table th.r-src-t {
+    color: #6fe3a8;
+    text-align: center;
+    background: rgba(111, 227, 168, 0.12);
+}
+
+.report-table td:nth-child(n+3):nth-child(-n+9) {
+    color: #8fb3ff;
+}
+
+.report-table td:nth-child(n+10) {
+    color: #6fe3a8;
 }
 
 .panel-row {

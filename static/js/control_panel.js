@@ -79,6 +79,7 @@ function createControlPanel() {
     { value: '-7 day', label: '1 неделя' },
     { value: '-3 day', label: '3 дня' },
     { value: '-1 day', label: '1.5 дня' },
+    { value: '-12 hour', label: '12 часов' },
     { value: '-6 hour', label: '6 часов' },
     { value: '-3 hour', label: '3 часа' },
     { value: '-1 hour', label: '1 час' }
@@ -98,6 +99,7 @@ function createControlPanel() {
       '-7 day': 'hour',
       '-3 day': 'hour',
       '-1 day': 'hour',
+      '-12 hour': 'fivemin',
       '-6 hour': 'fivemin',
       '-3 hour': 'minute',
       '-1 hour': 'minute'
