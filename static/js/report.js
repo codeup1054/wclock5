@@ -7,6 +7,7 @@
 
   var INTERVALS = [
     { key: 'day', label: 'День' },
+    { key: '3day', label: '3 дня' },
     { key: 'week', label: 'Неделя' },
     { key: 'month', label: 'Месяц' }
   ];
@@ -30,6 +31,11 @@
   function groupKey(date, interval) {
     var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     if (interval === 'day') return iso(d);
+    if (interval === '3day') {
+      var days = Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86400000);
+      var mod = ((days % 3) + 3) % 3;
+      return iso(new Date((days - mod) * 86400000));
+    }
     if (interval === 'week') {
       var dow = (d.getDay() + 6) % 7;
       return iso(addDays(d, -dow));
@@ -193,7 +199,7 @@
       lines.push(r[0] + ';' + r[1](summary.finam) + ';' + r[1](summary.tinkoff) + ';' + r[1](summary.combined));
     });
     lines.push('');
-    lines.push('ДЕТАЛИЗАЦИЯ' + (state.interval === 'day' ? ' (по дням)' : ' (по ' + state.interval + 'ам)'));
+    lines.push('ДЕТАЛИЗАЦИЯ' + (state.interval === 'day' ? ' (по дням)' : state.interval === '3day' ? ' (по 3 дня)' : ' (по ' + state.interval + 'ам)'));
     var flat = [];
     SOURCES.forEach(function (src) {
       ['Начало', 'Конец', 'Изм ₽', 'Изм %', 'Объём ₽', 'Ставка %', 'Комиссия ₽'].forEach(function (h) {
