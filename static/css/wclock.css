@@ -1595,13 +1595,13 @@ body.edit-mode .panel-fullscreen-btn {
 .report-table th.r-src-f {
     color: #8fb3ff;
     text-align: center;
-    background: rgba(143, 179, 255, 0.12);
+    background: rgb(44 57 83 / 81%);
 }
 
 .report-table th.r-src-t {
     color: #6fe3a8;
     text-align: center;
-    background: rgba(111, 227, 168, 0.12);
+    background: rgb(36 65 50 / 92%);
 }
 
 .report-table td:nth-child(n+3):nth-child(-n+9) {
