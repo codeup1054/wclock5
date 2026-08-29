@@ -888,8 +888,14 @@ def read_report(period="-90 day", db_path=None):
         if comm is None:
             comm = s.get("commission")
         if comm is None:
-            comm = round(v * 0.0002, 2) if src == "tinkoff" else round(finam_commission_estimate(0, v), 2)
-        rate = 0.02 if src == "tinkoff" else (round(finam_tier_rate(v) * 100, 4) if v else None)
+            comm = round(v * 0.0002, 2) if src == "tinkoff" else round(finam_commission_estimate(v, 0), 2)
+        if src == "tinkoff":
+            rate = 0.02
+        elif v:
+            # брокерская ставка «Трейдер n6» по брекету + урегулирование сделок МосБиржи
+            rate = round((finam_tier_rate(v) + FINAM_SETTLE_MOEX) * 100, 4)
+        else:
+            rate = None
         days[day][src] = {
             "cap_start": c.get("start"),
             "cap_end": c.get("end"),

@@ -19,7 +19,7 @@
     { key: '-365 day', label: 'Год' }
   ];
 
-  var state = { interval: 'day', period: '-35 day', loading: false, data: null };
+  var state = { interval: 'day', period: '-35 day', loading: false, data: null, rows: null, sort: { key: 'label', src: null, dir: -1 } };
 
   function round2(x) { return Math.round(x * 100) / 100; }
   function iso(d) {
@@ -44,9 +44,11 @@
   }
 
   function fmtDateRange(a, b) { return a === b ? a : a + ' — ' + b; }
-  function fmt(x) { return x == null ? '' : (typeof x === 'number' ? x.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) : x); }
+  function fmt(x, d) { return x == null ? '' : (typeof x === 'number' ? x.toLocaleString('ru-RU', { maximumFractionDigits: d == null ? 2 : d }) : x); }
   function fmtRub(x) { return x == null ? '' : Math.round(x).toLocaleString('ru-RU'); }
   function fmtPct(x) { return x == null ? '' : fmt(x) + '%'; }
+  function fmtPct3(x) { return x == null ? '' : fmt(x, 3) + '%'; }
+  function round3(x) { return Math.round(x * 1000) / 1000; }
   function fmtVal(x) {
     var s = fmtRub(x);
     return x < 0 ? '<span class="r-neg">' + s + '</span>' : s;
@@ -142,13 +144,13 @@
         avgChangePct: cell.days ? round2(cell.changePct / cell.days) : null,
         volume: cell.volume,
         avgVolume: cell.days ? round2(cell.volume / cell.days) : null,
-        rateAvg: rateAvg != null ? rateAvg : (cell.rateN ? round2(cell.rateSum / cell.rateN) : null),
+        rateAvg: rateAvg != null ? rateAvg : (cell.rateN ? round3(cell.rateSum / cell.rateN) : null),
         commission: cell.commission,
         avgCommission: cell.days ? round2(cell.commission / cell.days) : null
       };
     }
     SOURCES.forEach(function (src) { make(src, c[src], null); });
-    make('combined', combinedCell, combinedCell.volume ? round2(combinedCell.commission / combinedCell.volume * 100) : null);
+    make('combined', combinedCell, combinedCell.volume ? round3(combinedCell.commission / combinedCell.volume * 100) : null);
     return out;
   }
 
@@ -173,6 +175,38 @@
   // CSV
   function csvValue(x) { return x == null ? '' : String(x).replace('.', ','); }
 
+  // ─── Сортировка детализации ────────────────────────────────────
+  function colGetter(key, src) {
+    if (key === 'label') return function (r) { return r.start; };
+    if (key === 'days') return function (r) { return r.cells.finam.days; };
+    return function (r) {
+      var c = r.cells[src];
+      if (!c) return null;
+      if (key === 'rate') return c.rateN ? c.rateSum / c.rateN : null;
+      return c[key];
+    };
+  }
+
+  function sortRows() {
+    var s = state.sort, get = colGetter(s.key, s.src);
+    return state.rows.slice().sort(function (a, b) {
+      var av = get(a), bv = get(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === 'number') return (av - bv) * s.dir;
+      return (av < bv ? -1 : av > bv ? 1 : 0) * s.dir;
+    });
+  }
+
+  function applySortIndicator() {
+    var $ths = $('#report-table-wrap th[data-sort]');
+    if (!$ths.length) return;
+    $ths.removeClass('sort-asc sort-desc');
+    $('#report-table-wrap th[data-sort="' + state.sort.key + '"][data-src="' + (state.sort.src || '') + '"]')
+      .addClass(state.sort.dir > 0 ? 'sort-asc' : 'sort-desc');
+  }
+
   function buildCsv(rows, summary) {
     var lines = [];
     lines.push('Отчёт по портфелю');
@@ -191,7 +225,7 @@
       ['Среднее изменение капитала в день, %', function (s) { return csvValue(s.avgChangePct); }],
       ['Объём за период, ₽', function (s) { return csvValue(s.volume); }],
       ['Объём средний в день, ₽', function (s) { return csvValue(s.avgVolume); }],
-      ['Ставка комиссии средняя, %', function (s) { return csvValue(s.rateAvg); }],
+      ['Ставка комиссии средняя, %', function (s) { return csvValue(round3(s.rateAvg)); }],
       ['Комиссия за период, ₽', function (s) { return csvValue(s.commission); }],
       ['Комиссия средняя в день, ₽', function (s) { return csvValue(s.avgCommission); }]
     ];
@@ -214,7 +248,7 @@
         var c = r.cells[src];
         var rate = c.rateN ? round2(c.rateSum / c.rateN) : null;
         line.push(csvValue(c.cap_start), csvValue(c.cap_end), csvValue(c.changeRub), csvValue(c.changePct),
-          csvValue(c.volume), csvValue(rate), csvValue(c.commission));
+          csvValue(c.volume), csvValue(round3(rate)), csvValue(c.commission));
       });
       lines.push(line.join(';'));
     });
@@ -252,7 +286,7 @@
       row('Среднее изменение капитала в день, %', function (s) { return fmtPctVal(s.avgChangePct); }) +
       row('Объём за период, ₽', function (s) { return fmtRub(s.volume); }) +
       row('Объём средний в день, ₽', function (s) { return fmtRub(s.avgVolume); }) +
-      row('Ставка комиссии средняя, %', function (s) { return fmtPct(s.rateAvg); }) +
+      row('Ставка комиссии средняя, %', function (s) { return fmtPct3(s.rateAvg); }) +
       row('Комиссия за период, ₽', function (s) { return fmtRub(s.commission); }) +
       row('Комиссия средняя в день, ₽', function (s) { return fmtRub(s.avgCommission); });
     $tb.html(html);
@@ -269,7 +303,7 @@
         var c = r.cells[src];
         var rate = c.rateN ? round2(c.rateSum / c.rateN) : null;
         line += '<td>' + fmtRub(c.cap_start) + '</td><td>' + fmtRub(c.cap_end) + '</td><td>' + fmtVal(c.changeRub) + '</td>' +
-          '<td>' + fmtPctVal(c.changePct) + '</td><td>' + fmtRub(c.volume) + '</td><td>' + fmtPct(rate) + '</td><td>' + fmtRub(c.commission) + '</td>';
+          '<td>' + fmtPctVal(c.changePct) + '</td><td>' + fmtRub(c.volume) + '</td><td>' + fmtPct3(rate) + '</td><td>' + fmtRub(c.commission) + '</td>';
       });
       return line + '</tr>';
     }).join('');
@@ -289,12 +323,13 @@
       return;
     }
     var summary = buildSummary(state.data);
-    var rows = buildRows(state.data, state.interval);
+    state.rows = buildRows(state.data, state.interval);
     $('#report-status').text('Период: ' + PERIODS.filter(function (p) { return p.key === state.period; })[0].label +
       ' · интервал: ' + INTERVALS.filter(function (i) { return i.key === state.interval; })[0].label +
       ' · дней в периоде: ' + Object.keys(state.data).length);
     renderSummary(summary);
-    renderTable(rows);
+    renderTable(sortRows());
+    applySortIndicator();
   }
 
   function load() {
