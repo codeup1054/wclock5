@@ -39,9 +39,10 @@
 
   function fmtDateRange(a, b) { return a === b ? a : a + ' — ' + b; }
   function fmt(x) { return x == null ? '' : (typeof x === 'number' ? x.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) : x); }
+  function fmtRub(x) { return x == null ? '' : Math.round(x).toLocaleString('ru-RU'); }
   function fmtPct(x) { return x == null ? '' : fmt(x) + '%'; }
   function fmtVal(x) {
-    var s = fmt(x);
+    var s = fmtRub(x);
     return x < 0 ? '<span class="r-neg">' + s + '</span>' : s;
   }
   function fmtPctVal(x) {
@@ -237,17 +238,17 @@
     }
     var html =
       row('Период дат', function (s) { return s.dateRange + ' <span class="r-sub">(' + s.tradeDays + ' торг. дн.)</span>'; }) +
-      row('Капитал на начало, ₽', function (s) { return fmt(s.cap_start); }) +
-      row('Капитал на конец, ₽', function (s) { return fmt(s.cap_end); }) +
+      row('Капитал на начало, ₽', function (s) { return fmtRub(s.cap_start); }) +
+      row('Капитал на конец, ₽', function (s) { return fmtRub(s.cap_end); }) +
       row('Изменение капитала за период, ₽', function (s) { return fmtVal(s.changeRub); }) +
       row('Среднее изменение капитала в день, ₽', function (s) { return fmtVal(s.avgChangeRub); }) +
       row('Изменение капитала за период, %', function (s) { return fmtPctVal(s.changePct); }) +
       row('Среднее изменение капитала в день, %', function (s) { return fmtPctVal(s.avgChangePct); }) +
-      row('Объём за период, ₽', function (s) { return fmt(s.volume); }) +
-      row('Объём средний в день, ₽', function (s) { return fmt(s.avgVolume); }) +
+      row('Объём за период, ₽', function (s) { return fmtRub(s.volume); }) +
+      row('Объём средний в день, ₽', function (s) { return fmtRub(s.avgVolume); }) +
       row('Ставка комиссии средняя, %', function (s) { return fmtPct(s.rateAvg); }) +
-      row('Комиссия за период, ₽', function (s) { return fmt(s.commission); }) +
-      row('Комиссия средняя в день, ₽', function (s) { return fmt(s.avgCommission); });
+      row('Комиссия за период, ₽', function (s) { return fmtRub(s.commission); }) +
+      row('Комиссия средняя в день, ₽', function (s) { return fmtRub(s.avgCommission); });
     $tb.html(html);
   }
 
@@ -261,8 +262,8 @@
       SOURCES.forEach(function (src) {
         var c = r.cells[src];
         var rate = c.rateN ? round2(c.rateSum / c.rateN) : null;
-        line += '<td>' + fmt(c.cap_start) + '</td><td>' + fmt(c.cap_end) + '</td><td>' + fmtVal(c.changeRub) + '</td>' +
-          '<td>' + fmtPctVal(c.changePct) + '</td><td>' + fmt(c.volume) + '</td><td>' + fmtPct(rate) + '</td><td>' + fmt(c.commission) + '</td>';
+        line += '<td>' + fmtRub(c.cap_start) + '</td><td>' + fmtRub(c.cap_end) + '</td><td>' + fmtVal(c.changeRub) + '</td>' +
+          '<td>' + fmtPctVal(c.changePct) + '</td><td>' + fmtRub(c.volume) + '</td><td>' + fmtPct(rate) + '</td><td>' + fmtRub(c.commission) + '</td>';
       });
       return line + '</tr>';
     }).join('');
