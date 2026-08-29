@@ -468,10 +468,9 @@ function createPanelsModal() {
         $content.append($row);
     });
     
-    // Профили панелей — строка после invest_panel
+    // Профили панелей — строка после заголовка ☰ (вставляется самим renderRow)
     if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.renderRow === 'function') {
         window.PanelProfiles.renderRow($content, 'invest_banner_capital');
-        window.PanelProfiles.renderRow($content, 'invest_banner_table');
     }
     
     // Настройки DPI: отдельные слайдеры для инвест-графика и погоды (куки + сервер)
