@@ -196,7 +196,7 @@
     lines.push('ДЕТАЛИЗАЦИЯ' + (state.interval === 'day' ? ' (по дням)' : ' (по ' + state.interval + 'ам)'));
     var flat = [];
     SOURCES.forEach(function (src) {
-      ['кап нач', 'кап кон', 'изм ₽', 'изм %', 'объём ₽', 'ставка %', 'комиссия ₽'].forEach(function (h) {
+      ['Начало', 'Конец', 'Изм ₽', 'Изм %', 'Объём ₽', 'Ставка %', 'Комиссия ₽'].forEach(function (h) {
         flat.push(SRCLABEL[src] + ' ' + h);
       });
     });
@@ -333,8 +333,8 @@
           '<th rowspan="2">Дата</th><th rowspan="2">Дней</th>' +
           '<th colspan="7" class="r-src-f">F (Финам)</th><th colspan="7" class="r-src-t">T (Тинькофф)</th>' +
         '</tr><tr>' +
-          '<th>Кап нач</th><th>Кап кон</th><th>Изм ₽</th><th>Изм %</th><th>Объём ₽</th><th>Ставка %</th><th>Комиссия ₽</th>' +
-          '<th>Кап нач</th><th>Кап кон</th><th>Изм ₽</th><th>Изм %</th><th>Объём ₽</th><th>Ставка %</th><th>Комиссия ₽</th>' +
+          '<th>Начало</th><th>Конец</th><th>Изм ₽</th><th>Изм %</th><th>Объём ₽</th><th>Ставка %</th><th>Комиссия ₽</th>' +
+          '<th>Начало</th><th>Конец</th><th>Изм ₽</th><th>Изм %</th><th>Объём ₽</th><th>Ставка %</th><th>Комиссия ₽</th>' +
         '</tr></thead><tbody id="report-table-tbody"></tbody></table></div>'
       );
       $el.append($content);

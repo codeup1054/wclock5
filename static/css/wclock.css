@@ -1566,7 +1566,7 @@ body.edit-mode .panel-fullscreen-btn {
 }
 
 .report-table th {
-    background: rgba(255, 215, 0, 0.1);
+    background: rgb(45 41 22 / 64%);
     color: #ffd700;
     font-weight: 600;
     position: sticky;
