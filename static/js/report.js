@@ -47,7 +47,7 @@
   function fmt(x, d) { return x == null ? '' : (typeof x === 'number' ? x.toLocaleString('ru-RU', { maximumFractionDigits: d == null ? 2 : d }) : x); }
   function fmtRub(x) { return x == null ? '' : Math.round(x).toLocaleString('ru-RU'); }
   function fmtPct(x) { return x == null ? '' : fmt(x) + '%'; }
-  function fmtPct3(x) { return x == null ? '' : fmt(x, 3) + '%'; }
+  function fmtPct3(x) { return x == null ? '' : (typeof x === 'number' ? x.toLocaleString('ru-RU', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) + '%' : x + '%'); }
   function round3(x) { return Math.round(x * 1000) / 1000; }
   function fmtVal(x) {
     var s = fmtRub(x);
@@ -174,6 +174,7 @@
 
   // CSV
   function csvValue(x) { return x == null ? '' : String(x).replace('.', ','); }
+  function csvRate(x) { return x == null ? '' : x.toFixed(3).replace('.', ','); }
 
   // ─── Сортировка детализации ────────────────────────────────────
   function colGetter(key, src) {
@@ -228,7 +229,7 @@
       ['Среднее изменение капитала в день, %', function (s) { return csvValue(s.avgChangePct); }],
       ['Объём за период, ₽', function (s) { return csvValue(s.volume); }],
       ['Объём средний в день, ₽', function (s) { return csvValue(s.avgVolume); }],
-      ['Ставка комиссии средняя, %', function (s) { return csvValue(round3(s.rateAvg)); }],
+      ['Ставка комиссии средняя, %', function (s) { return csvRate(s.rateAvg); }],
       ['Комиссия за период, ₽', function (s) { return csvValue(s.commission); }],
       ['Комиссия средняя в день, ₽', function (s) { return csvValue(s.avgCommission); }]
     ];
@@ -251,7 +252,7 @@
         var c = r.cells[src];
         var rate = c.rateN ? round2(c.rateSum / c.rateN) : null;
         line.push(csvValue(c.cap_start), csvValue(c.cap_end), csvValue(c.changeRub), csvValue(c.changePct),
-          csvValue(c.volume), csvValue(round3(rate)), csvValue(c.commission));
+          csvValue(c.volume), csvRate(rate), csvValue(c.commission));
       });
       lines.push(line.join(';'));
     });
