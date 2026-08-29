@@ -49,6 +49,21 @@
     return x < 0 ? '<span class="r-neg">' + s + '</span>' : s;
   }
 
+  // Выходные по российскому календарю: сб/вс + нерабочие праздничные дни
+  // (ст.112 ТК РФ) + переносы Правительства (2025-2026).
+  var OFF_MD = ['01-01', '01-02', '01-03', '01-04', '01-05', '01-06', '01-07', '01-08',
+    '02-23', '03-08', '05-01', '05-09', '06-12', '11-04'];
+  var OFF_EXTRA = { '2025-12-31': 1, '2026-01-09': 1, '2026-03-09': 1, '2026-05-11': 1, '2026-12-31': 1 };
+  function isOffDay(dateStr) {
+    if (!dateStr || dateStr.length !== 10) return false;
+    if (OFF_EXTRA[dateStr]) return true;
+    var p = dateStr.split('-');
+    var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+    var dow = d.getDay();
+    if (dow === 0 || dow === 6) return true;
+    return OFF_MD.indexOf(p[1] + '-' + p[2]) !== -1;
+  }
+
   // Агрегация группы записей по одному источнику
   function aggCell(entries, src) {
     var cell = {
@@ -241,7 +256,8 @@
     var $tb = $('#report-table-tbody');
     if (!rows.length) { $tb.html('<tr><td colspan="15">Нет данных</td></tr>'); return; }
     var html = rows.map(function (r) {
-      var line = '<tr><td class="r-date">' + r.label + '</td><td>' + r.cells.finam.days + '</td>';
+      var off = (state.interval === 'day' && isOffDay(r.label)) ? ' class="r-off"' : '';
+      var line = '<tr' + off + '><td class="r-date">' + r.label + '</td><td>' + r.cells.finam.days + '</td>';
       SOURCES.forEach(function (src) {
         var c = r.cells[src];
         var rate = c.rateN ? round2(c.rateSum / c.rateN) : null;

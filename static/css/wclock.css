@@ -1578,6 +1578,14 @@ body.edit-mode .panel-fullscreen-btn {
     background: rgba(255, 255, 255, 0.05);
 }
 
+.report-table tr.r-off {
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.report-table tr.r-off td.r-date {
+    color: #9aa0c2;
+}
+
 .report-table td.r-date {
     text-align: left;
     color: #e6e8ff;
