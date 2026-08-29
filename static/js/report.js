@@ -203,8 +203,11 @@
     var $ths = $('#report-table-wrap th[data-sort]');
     if (!$ths.length) return;
     $ths.removeClass('sort-asc sort-desc');
-    $('#report-table-wrap th[data-sort="' + state.sort.key + '"][data-src="' + (state.sort.src || '') + '"]')
-      .addClass(state.sort.dir > 0 ? 'sort-asc' : 'sort-desc');
+    $('#report-table-wrap th[data-sort]').filter(function () {
+      var t = $(this);
+      return t.attr('data-sort') === state.sort.key &&
+        (t.attr('data-src') || null) === state.sort.src;
+    }).addClass(state.sort.dir > 0 ? 'sort-asc' : 'sort-desc');
   }
 
   function buildCsv(rows, summary) {
@@ -371,11 +374,11 @@
           '<tbody id="report-summary-tbody"></tbody></table>' +
         '<div class="report-table-title">Детализация</div>' +
         '<div class="report-table-wrap"><table class="report-table"><thead><tr>' +
-          '<th rowspan="2">Дата</th><th rowspan="2">Дней</th>' +
+          '<th rowspan="2" data-sort="label">Дата</th><th rowspan="2" data-sort="days">Дней</th>' +
           '<th colspan="7" class="r-src-f">F (Финам)</th><th colspan="7" class="r-src-t">T (Тинькофф)</th>' +
         '</tr><tr>' +
-          '<th>Начало</th><th>Конец</th><th>Изм ₽</th><th>Изм %</th><th>Объём ₽</th><th>Ставка %</th><th>Комиссия ₽</th>' +
-          '<th>Начало</th><th>Конец</th><th>Изм ₽</th><th>Изм %</th><th>Объём ₽</th><th>Ставка %</th><th>Комиссия ₽</th>' +
+          '<th data-sort="cap_start" data-src="finam">Начало</th><th data-sort="cap_end" data-src="finam">Конец</th><th data-sort="changeRub" data-src="finam">Изм ₽</th><th data-sort="changePct" data-src="finam">Изм %</th><th data-sort="volume" data-src="finam">Объём ₽</th><th data-sort="rate" data-src="finam">Ставка %</th><th data-sort="commission" data-src="finam">Комиссия ₽</th>' +
+          '<th data-sort="cap_start" data-src="tinkoff">Начало</th><th data-sort="cap_end" data-src="tinkoff">Конец</th><th data-sort="changeRub" data-src="tinkoff">Изм ₽</th><th data-sort="changePct" data-src="tinkoff">Изм %</th><th data-sort="volume" data-src="tinkoff">Объём ₽</th><th data-sort="rate" data-src="tinkoff">Ставка %</th><th data-sort="commission" data-src="tinkoff">Комиссия ₽</th>' +
         '</tr></thead><tbody id="report-table-tbody"></tbody></table></div>'
       );
       $el.append($content);
@@ -412,7 +415,17 @@
         load();
       });
       $el.find('#report-csv').on('click', function () {
-        if (state.data) exportCsv(buildRows(state.data, state.interval), buildSummary(state.data));
+        if (state.data) exportCsv(sortRows(), buildSummary(state.data));
+      });
+      $el.find('.report-table th[data-sort]').on('click', function () {
+        var key = $(this).attr('data-sort');
+        var src = $(this).attr('data-src') || null;
+        if (state.sort.key === key && state.sort.src === src) {
+          state.sort.dir = -state.sort.dir;
+        } else {
+          state.sort = { key: key, src: src, dir: -1 };
+        }
+        render();
       });
 
       $el.find('.report-int[data-int="' + state.interval + '"]').addClass('active');

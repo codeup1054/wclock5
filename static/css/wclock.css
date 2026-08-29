@@ -246,11 +246,12 @@ body.edit-mode .clock-panel .panel-header {
     left: 1vw;
     top: 38vh;
     min-width: 100px;
+    container-type: inline-size;
 }
 
 #seconds_panel #clock_seconds {
     text-align: center;
-    font-size: 7vw;
+    font-size: 85cqi;
     line-height: 1;
 }
 
@@ -1432,7 +1433,7 @@ body.edit-mode .panel-fullscreen-btn {
     left: 50%;
     transform: translate(-50%, -50%);
     background: var(--bg-color, #1a1a2e);
-    border: 2px solid var(--accent-yellow, #ffd700);
+    border: 2px solid #ffaa0038;
     border-radius: 12px;
     padding: 16px 20px;
     min-width: 360px;
@@ -1440,7 +1441,7 @@ body.edit-mode .panel-fullscreen-btn {
     max-height: 88vh;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.6);
+    /* box-shadow: 0 0 30px rgba(0, 0, 0, 0.6); */
 }
 
 .report-controls {
@@ -1572,6 +1573,21 @@ body.edit-mode .panel-fullscreen-btn {
     position: sticky;
     top: 0;
     z-index: 2;
+}
+
+.report-table th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+}
+
+.report-table th.sort-asc::after {
+    content: ' ▲';
+    font-size: 0.7em;
+}
+
+.report-table th.sort-desc::after {
+    content: ' ▼';
+    font-size: 0.7em;
 }
 
 .report-table tr:hover td {
