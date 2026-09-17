@@ -13,8 +13,8 @@ $(document).ready(function () {
     let _prevClock = null, _prevDay = null, _prevMonth = null, _prevWeekday = null;
 
     function updateClock() {
-        const months = ["january", "february", "march", "april", "may", "june",
-            "july", "august", "september", "october", "november", "december"];
+        const months = ["jan", "feb", "mar", "apr", "may", "jun",
+            "jul", "aug", "sept", "oct", "nov", "dec"];
         const weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
         const now = new Date();
 
@@ -72,9 +72,7 @@ $(document).ready(function () {
     }
 
     // === WEATHER ===
-    window.updateWeatherData = function () {
-        $.getJSON('/api/weather')
-            .done(data => {
+    function renderWeather(data) {
                 log('weather ' + data.fact.datetime.substring(11, 16));
 
                 const fact = data.fact;
@@ -120,9 +118,16 @@ $(document).ready(function () {
                 if (typeof drawWeatherChart === 'function') {
                     drawWeatherChart(data.timeline);
                 }
-            })
-            .fail(() => console.error('Failed to load /api/weather'));
-    };
+            }
+
+            window.renderWeatherData = renderWeather;   // медиатор panel_mediator.js зовёт именно это имя
+
+            window.updateWeatherData = function (arg) {
+                if (arg) { renderWeather(arg); return; }      // payload из медиатора → рендер без GET
+                $.getJSON('/api/weather')
+                    .done(renderWeather)
+                    .fail(() => console.error('Failed to load /api/weather'));
+            };
 
     // === BATTERY ===
     function initBattery() {
@@ -229,8 +234,14 @@ $(document).ready(function () {
 
     // === ИНИЦИАЛИЗАЦИЯ ===
     function initUI() {
-        $('#browser_reload').on('click', () => hardReload());
-        $('#browser_fullscreen').on('click', toggleFullscreen);
+        // Зоны перетаскиваются/ресайзятся в edit-mode — действия кликом не выполняем
+        if (document.body.classList.contains('edit-mode')) {
+            $('#browser_reload').off('click', hardReload);
+            $('#browser_fullscreen').off('click', toggleFullscreen);
+        } else {
+            $('#browser_reload').on('click', () => hardReload());
+            $('#browser_fullscreen').on('click', toggleFullscreen);
+        }
         $('#fullscreen2').on('click', toggleFullscreen);
         // Disable fullscreen toggle on clicks inside weather panel
         $('.fullscreen3').on('click', function (e) {

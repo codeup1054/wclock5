@@ -47,6 +47,7 @@
 
     <!-- Основной модуль -->
     <script src="{{ surl('js/index.js') }}"></script>
+    <script src="{{ surl('js/panel_mediator.js') }}"></script>
 
 </head>
 <body>
@@ -83,6 +84,10 @@
         <!-- Инвестбаннер. Таблица — отдельная перетаскиваемая панель -->
         <div id="invest_banner_table" class="clock-panel" data-chart-scale="1">
             <div id="invest_banner_table_content" class="invest-banner-host"></div>
+        </div>
+        <!-- Инвестбаннер. Итого — отдельная перетаскиваемая панель (только значение) -->
+        <div id="invest_banner_total" class="clock-panel" data-chart-scale="1">
+            <div id="invest_banner_total_content" class="invest-banner-host"></div>
         </div>
         
         <!-- Pressure/Humidity/Temp Panel -->

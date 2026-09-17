@@ -12,6 +12,16 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify, render_template, request, make_response, url_for
 
+
+def _int_or_none(v):
+    """start_ts/end_ts из query — int либо None."""
+    if v is None:
+        return None
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
 # === Инициализация БД ===
 from db_init import init_db
 import invest_repo
@@ -38,6 +48,10 @@ def add_no_cache(response):
         response.cache_control.must_revalidate = True
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '0'
+    elif request.path.startswith('/api/'):
+        response.cache_control.no_store = True
+        response.cache_control.max_age = 0
+        response.headers['Pragma'] = 'no-cache'
     return response
 
 # Версионирование статики по mtime: URL меняется при каждом изменении файла,
@@ -98,9 +112,45 @@ def get_settings():
     cursor.execute("SELECT key, value FROM settings")
     rows = cursor.fetchall()
     conn.close()
-    return {row["key"]: row["value"] for row in rows}
+    result = {row["key"]: row["value"] for row in rows}
+    # Настройки сбора данных инвест-демонов живут в инвест-БД (их читают демоны).
+    result.update(_get_invest_collection_settings())
+    return result
+
+# Ключи настроек, которые хранятся в инвест-БД (демоны читают их оттуда), а не в портальной.
+_INVEST_COLLECTION_KEYS = {"invest_collection_tinkoff_enabled", "invest_collection_finam_enabled"}
+
+def _get_invest_collection_settings():
+    try:
+        conn = sqlite3.connect(INVEST_DB_PATH, timeout=10)
+        conn.execute("PRAGMA busy_timeout = 5000")
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM settings WHERE key IN (?, ?)", tuple(_INVEST_COLLECTION_KEYS))
+        rows = cursor.fetchall()
+        conn.close()
+        return {row[0]: row[1] for row in rows}
+    except Exception:
+        return {}
+
+def _write_invest_collection_settings(updates):
+    try:
+        conn = sqlite3.connect(INVEST_DB_PATH, timeout=10)
+        conn.execute("PRAGMA busy_timeout = 10000")
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            for key, value in updates.items():
+                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"⚠️ Не удалось записать инвест-настройку сбора: {e}", flush=True)
 
 def update_setting(key, value):
+    # Инвест-настройки пишем в инвест-БД, чтобы их видели демоны без перезапуска.
+    if key in _INVEST_COLLECTION_KEYS:
+        _write_invest_collection_settings({key: value})
+        return
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
@@ -117,10 +167,20 @@ def api_weather():
 
 @app.route("/api/charts_data")
 def get_charts_data():
-    import sqlite3
-    from flask import jsonify
+    """Тот же payload, что и секция charts_data медиатора; теперь одна точка
+    истины — хелпер _read_charts_payload (см. ниже)."""
+    conn = get_db_connection()
+    conn.close()
+    return jsonify(_read_charts_payload(db_path=DB_PATH))
 
-    conn = sqlite3.connect(DB_PATH)
+
+def _read_charts_payload(db_path=None):
+    """payload секции charts_data (тот же SQL, что и /api/charts_data).
+    Возврат: list[dict] либо {"_error":…}."""
+    import sqlite3
+
+    db_path = db_path or DB_PATH
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
@@ -165,10 +225,10 @@ def get_charts_data():
         rows = cur.execute(query).fetchall()
         conn.close()
         data = [dict(row) for row in rows]
-        return jsonify(data)
+        return data
     except Exception as e:
         conn.close()
-        return jsonify({"error": str(e)}), 500
+        return {"_error": str(e)}
 
 @app.route('/api/battery', methods=['GET', 'POST'])
 def battery():
@@ -326,6 +386,8 @@ def get_user_settings(device_id):
     rows = cursor.fetchall()
     conn.close()
     settings = {row["key"]: row["value"] for row in rows}
+    # Настройки сбора инвест-демонов живут в инвест-БД.
+    settings.update(_get_invest_collection_settings())
     return jsonify(settings)
 
 
@@ -345,6 +407,10 @@ def save_user_settings(device_id):
         """, (device_id, key, str(value), now))
     conn.commit()
     conn.close()
+    # Инвест-настройки сбора дублируем в инвест-БД, чтобы их видели демоны.
+    invest_updates = {k: v for k, v in data["settings"].items() if k in _INVEST_COLLECTION_KEYS}
+    if invest_updates:
+        _write_invest_collection_settings(invest_updates)
     return jsonify({"status": "ok"})
 
 
@@ -370,6 +436,10 @@ async def get_weather_map_image():
 
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
 
+# In-memory TTL cache для /api/invest/turnover (оборот дня меняется редко,
+# а баннер дёргает эндпоинт каждый тик — 60с; не молотить SQLite на каждый запрос).
+_turnover_cache = {"data": None, "at": 0}
+
 def invest_cache_key(endpoint, **params):
     safe = {"-": "m", ".": "_", "/": "_", " ": "_"}
     key = endpoint
@@ -378,8 +448,16 @@ def invest_cache_key(endpoint, **params):
             key += f"_{k}={str(v).translate(str.maketrans(safe))}"
     return key
 
-def cached_invest(endpoint, db_paths, params, generator):
-    """Lazy cache: serve cached JSON if DB mtimes are older than cache."""
+def cached_invest(endpoint, db_paths, params, generator, ttl=None):
+    """Lazy cache: serve cached JSON if fresh.
+
+    Правило свежести:
+    - ttl задан: кэш жив минимум `ttl` секунд с момента генерации,
+      независимо от mtime БД (БД пишется каждые ~10с днём, а данные
+      меняются раз в бакет, поэтому даже свежий mtime = «нужен рекэш»).
+    - ttl=None: свежесть = кэш новее всех DB (историческое поведение).
+    """
+    import time as _time
     os.makedirs(CACHE_DIR, exist_ok=True)
     cache_file = os.path.join(CACHE_DIR, invest_cache_key(endpoint, **params) + ".json")
     
@@ -389,16 +467,20 @@ def cached_invest(endpoint, db_paths, params, generator):
         if os.path.exists(path):
             db_mtime = max(db_mtime, os.path.getmtime(path))
     
-    # If cache exists and is newer than all DBs → serve cache
-    if os.path.exists(cache_file) and os.path.getmtime(cache_file) >= db_mtime:
-        try:
-            with open(cache_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
+    now = _time.time()
+    # If cache exists and is fresh per TTL (or per DB mtime) → serve cache
+    if os.path.exists(cache_file):
+        cache_mtime = os.path.getmtime(cache_file)
+        fresh = (now - cache_mtime) < ttl if ttl else (cache_mtime >= db_mtime)
+        if fresh:
             try:
-                os.remove(cache_file)
-            except OSError:
-                pass
+                with open(cache_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                try:
+                    os.remove(cache_file)
+                except OSError:
+                    pass
     
     # Generate fresh data
     data = generator()
@@ -435,10 +517,23 @@ def get_invest_db():
 def api_invest_history():
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-30 day')
+    start_ts = _int_or_none(request.args.get('start_ts'))
+    end_ts = _int_or_none(request.args.get('end_ts'))
+    after_ts = _int_or_none(request.args.get('after_ts'))
     bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
 
-    data = cached_invest("history", INVEST_DB_PATH, {"interval": interval, "period": period},
-                         lambda: invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH))
+    t0 = time.time()
+    if after_ts is not None:
+        data = invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH,
+                                        start_epoch=start_ts, end_epoch=end_ts,
+                                        after_ts=after_ts)
+    else:
+        data = cached_invest("history", INVEST_DB_PATH, {"interval": interval, "period": period, "start_ts": start_ts, "end_ts": end_ts},
+                             lambda: invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH, start_epoch=start_ts, end_epoch=end_ts),
+                             ttl=30)
+    elapsed = int((time.time() - t0) * 1000)
+    keys = len(data) if isinstance(data, dict) else 0
+    print(f"[INVEST] history interval={interval} after={after_ts is not None} keys={keys} ms={elapsed}", flush=True)
     if isinstance(data, dict) and data.get("_error"):
         return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
     return jsonify(data)
@@ -447,7 +542,21 @@ def api_invest_history():
 @app.route("/api/invest/turnover")
 def api_invest_turnover():
     """Оборот по источникам. Приоритет — сводки стратегии из Telegram-канала
-    (strategy_summary, за сегодня МСК); фолбэк — сделки счёта из API брокера."""
+    (strategy_summary, за сегодня МСК); фолбэк — сделки счёта из API брокера.
+    Результат кешируется в памяти на 90с — оборот дня меняется редко, а
+    запрос идёт каждый тик баннера (60с) и не должен молотить БД."""
+    now = time.time()
+    ttl = 90
+    hit = _turnover_cache.get("data", None)
+    if hit is not None and (now - _turnover_cache.get("at", 0)) < ttl:
+        resp = make_response(jsonify(hit))
+        resp.cache_control.no_store = True
+        resp.cache_control.no_cache = True
+        resp.cache_control.must_revalidate = True
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+        return resp
+
     import sqlite3
     now_msk = datetime.now(timezone.utc) + timedelta(hours=3)
     today = now_msk.strftime("%Y-%m-%d")
@@ -498,6 +607,10 @@ def api_invest_turnover():
                     d["commission"] = round(total_fb * 0.0002, 2)
                 d["strategy"] = False
                 out[src] = d
+
+    _turnover_cache["data"] = out
+    _turnover_cache["at"] = now
+
     # Add no-cache headers for fresh data
     resp = make_response(jsonify(out))
     resp.cache_control.no_store = True
@@ -520,6 +633,38 @@ def api_invest_report():
     resp = make_response(jsonify({"period": period, "days": data}))
     resp.cache_control.max_age = 180
     resp.cache_control.public = True
+    return resp
+
+
+@app.route("/api/invest/bot_events")
+def api_invest_bot_events():
+    """События бота из каналов стратегии (bot_events):
+    классификация и сводка — на лету в invest_repo.read_bot_events."""
+    period = request.args.get('period', '-35 day')
+    data = cached_invest("bot_events", INVEST_DB_PATH, {"period": period},
+                         lambda: invest_repo.read_bot_events(period, db_path=INVEST_DB_PATH))
+    if isinstance(data, dict) and data.get("_error"):
+        return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
+    resp = make_response(jsonify({"period": period, "events": data["events"], "summary": data["summary"]}))
+    resp.cache_control.max_age = 180
+    resp.cache_control.public = True
+    return resp
+
+
+@app.route("/api/invest/capital")
+def api_invest_capital():
+    """Размер и структура капитала: последний снимок по каждому источнику.
+    {source: {ts, total, cash: {CUR:..}, positions: [{ticker, quantity, price, value}]}}"""
+    data = cached_invest("capital", INVEST_DB_PATH, {},
+                         lambda: invest_repo.read_capital_structure(db_path=INVEST_DB_PATH))
+    if isinstance(data, dict) and data.get("_error"):
+        return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
+    resp = make_response(jsonify(data))
+    resp.cache_control.no_store = True
+    resp.cache_control.no_cache = True
+    resp.cache_control.must_revalidate = True
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
     return resp
 
 
@@ -582,17 +727,48 @@ def api_invest_ticker(ticker):
     return jsonify(data)
 
 
+def _ticker_baseline_points(db_path, figi, horizons):
+    """Базовые цены тикера от ПОЛНОЙ истории (независимо от запрошенного range).
+    horizons — список меток, для каждой возвращает {price, ts_epoch} = последняя цена
+    до границы last_ts - H. Горизонт 'day' = старт последних суток."""
+    import sqlite3 as _sq
+    con = _sq.connect(db_path)
+    con.row_factory = _sq.Row
+    try:
+        row = con.execute("SELECT MAX(ts_epoch) AS last_ts FROM last_prices WHERE figi=?", (figi,)).fetchone()
+        if not row or row["last_ts"] is None:
+            return None
+        last_ts = row["last_ts"]
+        out = {"last_ts": last_ts}
+        for label, horizon in horizons.items():
+            if horizon is None:
+                ts = last_ts - (last_ts % 86400)
+            else:
+                ts = last_ts - int(horizon * 86400)
+            r = con.execute(
+                "SELECT price, ts_epoch FROM last_prices WHERE figi=? AND ts_epoch<=? ORDER BY ts_epoch DESC LIMIT 1",
+                (figi, ts)).fetchone()
+            out[label] = ({"price": round(r["price"], 2), "ts_epoch": r["ts_epoch"]} if r else None)
+        return out
+    finally:
+        con.close()
+
+
 @app.route("/api/invest/tickers")
 def api_invest_tickers():
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-28 day')
+    start_ts = _int_or_none(request.args.get('start_ts'))
+    end_ts = _int_or_none(request.args.get('end_ts'))
     bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
 
     def generate():
         if not os.path.exists(TRACKED_TICKERS_DB_PATH):
             return {"_error": "Ticker DB not found", "_error_code": 404}
-        rows = invest_repo.read_prices(period, db_path=TRACKED_TICKERS_DB_PATH)
-        if not rows:
+        rows = invest_repo.read_prices(period, db_path=TRACKED_TICKERS_DB_PATH, start_epoch=start_ts, end_epoch=end_ts)
+        # Фолбэк на полный диапазон только когда явный from/to НЕ задан,
+        # чтобы тикеры не выходили за границы диапазона портфеля.
+        if not rows and start_ts is None and end_ts is None:
             rows = invest_repo.read_prices(None, db_path=TRACKED_TICKERS_DB_PATH)
 
         ticker_groups = {}
@@ -605,28 +781,46 @@ def api_invest_tickers():
             ticker_groups[figi]["prices"][bucket_key] = {"timestamp": r["timestamp"], "price": round(r["price"], 2)}
 
         result = {}
+        MAX_TICKER_POINTS = 3000
         for figi, group in ticker_groups.items():
             prices = [group["prices"][k] for k in sorted(group["prices"].keys())]
             if not prices:
                 continue
+            if len(prices) > MAX_TICKER_POINTS:
+                step = max(1, (len(prices) + MAX_TICKER_POINTS - 1) // MAX_TICKER_POINTS)
+                decimated = [prices[i] for i in range(0, len(prices), step)]
+                if decimated[-1] != prices[-1]:
+                    decimated.append(prices[-1])
+                prices = decimated
             cp = prices[-1]["price"]
-            today_prices = [p for p in prices if p["timestamp"][:10] >= prices[-1]["timestamp"][:10]]
-            ds = today_prices[0]["price"] if today_prices else cp
-            dc = cp - ds
-            dp = (dc / ds * 100) if ds > 0 else 0
-            ms = prices[0]["price"]
-            mc = cp - ms
-            mp = (mc / ms * 100) if ms > 0 else 0
+
+            bl = _ticker_baseline_points(TRACKED_TICKERS_DB_PATH, figi,
+                                         {"day": None, "week": 7, "month": 30})
+            def _pct_from_base(base):
+                if not base or not base.get("price") or base["price"] <= 0:
+                    return None, None
+                ch = cp - base["price"]
+                return round(ch, 2), round(ch / base["price"] * 100, 2)
+            dy_abs, dy_pct = _pct_from_base(bl["day"] if bl else None)
+            wk_abs, wk_pct = _pct_from_base(bl["week"] if bl else None)
+            mo_abs, mo_pct = _pct_from_base(bl["month"] if bl else None)
+
             result[group["ticker"]] = {
                 "figi": figi, "current_price": cp,
-                "day_change": round(dc, 2), "day_change_pct": round(dp, 2),
-                "month_change": round(mc, 2), "month_change_pct": round(mp, 2),
+                "day_change": dy_abs, "day_change_pct": dy_pct,
+                "week_change": wk_abs, "week_change_pct": wk_pct,
+                "month_change": mo_abs, "month_change_pct": mo_pct,
+                "baseline": bl,
                 "prices": prices
             }
         return result
 
+    t0 = time.time()
     data = cached_invest("tickers", TRACKED_TICKERS_DB_PATH,
-                         {"interval": interval, "period": period}, generate)
+                         {"interval": interval, "period": period, "start_ts": start_ts, "end_ts": end_ts}, generate)
+    elapsed = int((time.time() - t0) * 1000)
+    tkeys = len(data) if isinstance(data, dict) else 0
+    print(f"[INVEST] tickers interval={interval} figis={tkeys} cache={os.path.exists(os.path.join(CACHE_DIR, invest_cache_key('tickers', interval=interval, period=period, start_ts=start_ts, end_ts=end_ts) + '.json'))} ms={elapsed}", flush=True)
     if isinstance(data, dict) and data.get("_error"):
         return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
     return jsonify(data)
@@ -677,10 +871,173 @@ def index():
 # Запуск
 # ================================
 # Запуск
-# ================================
+
+
+
+
+# =========================================================================
+# Медиатор данных — единый POST /api/data_mediator (эпик mediators)
+# Существующие /api/* НЕ трогаем — они остаются fallback'ом для клиента.
+# =========================================================================
+def _read_battery_payload(db_path=DB_PATH, device_id=None, interval="hour",
+                          period_param=None, limit=None):
+    """GET-payload батареи (тот же SQL, что и GET-вeткa /api/battery).
+    Возврат: list[dict] либо {"_error":…} — без jsonify."""
+    import sqlite3
+
+    if not device_id:
+        return {"_error": "device_id_local required"}
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        period_map = {"day": "-56 day", "hour": "-14 day", "minute": "-2 day"}
+        period = period_param if period_param else period_map.get(interval, "-14 day")
+        limit_map = {"day": 5000, "hour": 3000, "minute": 600}
+        limit = limit if limit is not None else limit_map.get(interval, 3000)
+
+        cur.execute(f"""
+            SELECT
+                strftime('%Y-%m-%d %H:%M', datetime) AS minute_group,
+                AVG(battery_level) AS avg_level
+            FROM battery_logs
+            WHERE device_id = ? AND datetime >= datetime('now', '{period}')
+            GROUP BY (strftime('%s', datetime) / 600)
+            ORDER BY minute_group DESC
+            LIMIT ?
+        """, (device_id, limit))
+        rows = cur.fetchall()
+        conn.close()
+        return [{"datetime": r[0], "battery_level": r[1]} for r in rows]
+    except Exception as e:
+        return {"_error": str(e)}
+
+
+def _write_battery_payload(db_path=DB_PATH, device_id=None, battery_level=None):
+    """POST-payload батареи (тот же SQL, что и POST в /api/battery).
+    Возврат: {"ok":True} либо {"_error":…} — без jsonify."""
+    import sqlite3
+    try:
+        battery_level = int(battery_level)
+        if not (0 <= battery_level <= 100):
+            return {"_error": "value must be integer 0-100"}
+    except (TypeError, ValueError):
+        return {"_error": "value must be integer 0-100"}
+    if not device_id:
+        return {"_error": "device_id_local required"}
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT OR REPLACE INTO battery_logs (datetime, device_id, battery_level) "
+            "VALUES (datetime('now'), ?, ?)", (device_id, battery_level))
+        conn.commit()
+        conn.close()
+        return {"ok": True}
+    except Exception as e:
+        return {"_error": str(e)}
+
+
+# Стабильные токены секций (SHA-256 sort_keys JSON; invest.history — _latest_epoch).
+def _stable_token(payload):
+    import hashlib, json as _json
+    if payload is None:
+        payload = {}
+    blob = _json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                       separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()[:16]
+
+
+# Карта reader'ов секций медиатора (чистые payload без jsonify).
+_DATA_MEDIATOR_READERS = {
+    "weather": lambda p: get_weather(),
+    "charts_data": lambda p: _read_charts_payload(db_path=DB_PATH),
+    "battery.history": lambda p: _read_battery_payload(
+        db_path=DB_PATH,
+        device_id=p.get("device_id") if isinstance(p, dict) else None,
+        interval=(p or {}).get("interval", "hour"),
+        period_param=(p or {}).get("period"),
+        limit=(p or {}).get("limit")),
+    "settings": lambda p: get_settings(),
+}
+
+# Карта writer'ов (battery) + интервалы записи (сек).
+_DATA_MEDIATOR_WRITERS = {
+    "battery": lambda p: _write_battery_payload(
+        db_path=DB_PATH,
+        device_id=(p or {}).get("device_id"),
+        battery_level=(p or {}).get("value")),
+}
+_DATA_MEDIATOR_WRITE_INTERVAL = {"battery": 60}
+
+
+@app.route("/api/data_mediator", methods=["POST"])
+def api_data_mediator():
+    """Единый медиатор данных: дельта по секциям через токены.
+    body:
+      {"v": {"weather": токен, ...},              # токены клиента
+       "params": {"weather": {..}, ...},          # необязат. параметры секций
+       "write": {"battery": {"device_id":.., "value":..}}}  # записи
+    ответ:
+      {"changed": {"sect": payload},              # секции, где токен изменился
+       "tokens": {"sect": токен},                 # актуальные токены
+       "ts": мск, "writes": {"battery": {applied/skipped, reason}}}
+    """
+    body = request.get_json(silent=True) or {}
+    v = body.get("v") or {}
+    params = body.get("params") or {}
+    write_payloads = body.get("write") or {}
+
+    # Контракт: пустой слой v = клиент «с нуля» → вернуть ВСЕ известные
+    # секции (client-токен «неизвестен» = пустая строка).
+    if not v:
+        v = {sect: "" for sect in _DATA_MEDIATOR_READERS}
+
+    changed, tokens = {}, {}
+    for sect, client_tok in v.items():
+        reader = _DATA_MEDIATOR_READERS.get(sect)
+        if reader is None:
+            changed[sect] = {"_error": f"unknown section: {sect}"}
+            tokens[sect] = _stable_token(changed[sect])
+            continue
+        try:
+            payload = reader(params.get(sect, {}) if isinstance(params, dict) else {})
+            tok = _stable_token(payload)
+            tokens[sect] = tok
+            if tok != client_tok:
+                changed[sect] = payload
+        except Exception as e:
+            err = {"_error": str(e)}
+            changed[sect] = err
+            tokens[sect] = _stable_token(err)
+
+    writes = {}
+    for sect, payload in (write_payloads.items() if isinstance(write_payloads, dict) else []):
+        writer = _DATA_MEDIATOR_WRITERS.get(sect)
+        if writer is None:
+            writes[sect] = {"applied": False, "skipped": True,
+                            "reason": f"no writer for section: {sect}"}
+            continue
+        try:
+            res = writer(payload if isinstance(payload, dict) else {})
+            if isinstance(res, dict) and res.get("_error"):
+                writes[sect] = {"applied": False, "skipped": False, "reason": res["_error"]}
+            else:
+                writes[sect] = {"applied": True, "skipped": False, "reason": None}
+        except Exception as e:
+            writes[sect] = {"applied": False, "skipped": False, "reason": str(e)}
+
+    return jsonify({
+        "changed": changed,
+        "tokens": tokens,
+        "writes": writes,
+        "ts": (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+
 
 if __name__ == "__main__":
     print("🚀 Запуск сервера Flask...")
     PORT = int(os.environ.get("PORT", "5001")) 
     print(f"🌐 Порт: {PORT}")
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)
