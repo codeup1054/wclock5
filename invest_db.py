@@ -65,7 +65,11 @@ def init_invest_db():
         )
     ''')
 
-    for key, value in {"INVEST_UPDATE_INTERVAL": 300}.items():
+    for key, value in {
+        "INVEST_UPDATE_INTERVAL": 300,
+        "invest_collection_tinkoff_enabled": 1,
+        "invest_collection_finam_enabled": 1,
+    }.items():
         cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
 
     conn.commit()

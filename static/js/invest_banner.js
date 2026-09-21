@@ -263,6 +263,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     let mediatorHistoryAt = 0;        // ts последней доставки истории
     let turnoverDetails = null;       // детализация оборота (invest.turnover_details)
     let turnoverDetailsAt = 0;        // ts последней доставки детализации
+    let lastDataEpoch = 0;            // истинный ts последнего снапшота (_latest_epoch)
     const MEDIATOR_HISTORY_TTL_MS = 70000;
 
     function historyIntervalFor(period) {
@@ -319,11 +320,35 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     function onMediatorHistory(payload) {
         if (!payload || typeof payload !== 'object') return;
+        if (payload._latest_epoch != null) lastDataEpoch = Number(payload._latest_epoch);
+        const cache = window.InvestHistoryCache;
+        const p = mediatorHistoryParams();
+        if (payload._tail && cache && cache.applyMediatorTail) {
+            // Хвост (дельта) медиатора: мёрджим в полный кэш, чтобы рендер
+            // видел целую историю (в changed уходит только последний бакет).
+            const merged = cache.applyMediatorTail(p.interval, p.period, p.start_ts, p.end_ts, payload);
+            if (merged) {
+                mediatorHistory = merged;
+                mediatorHistoryAt = Date.now();
+                maybeRenderFromMediator();
+                return;
+            }
+            // Редкий edge: хвост пришёл, а полного кэша нет — берём полный через GET.
+            cache.get(p.interval, p.period, p.start_ts, p.end_ts)
+                .then(function(d) {
+                    mediatorHistory = d;
+                    mediatorHistoryAt = Date.now();
+                    maybeRenderFromMediator();
+                })
+                .catch(function() {
+                    mediatorHistoryAt = Date.now();
+                });
+            return;
+        }
         mediatorHistory = payload;
         mediatorHistoryAt = Date.now();
-        if (window.InvestHistoryCache && window.InvestHistoryCache.primeFromMediator) {
-            const p = mediatorHistoryParams();
-            window.InvestHistoryCache.primeFromMediator(p.interval, p.period, p.start_ts, p.end_ts, payload);
+        if (cache && cache.primeFromMediator) {
+            cache.primeFromMediator(p.interval, p.period, p.start_ts, p.end_ts, payload);
         }
         maybeRenderFromMediator();
     }
@@ -436,22 +461,81 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         </tr>`;
     }
 
-    // Полупрозрачное время последнего обновления (левый нижний угол панели).
-    function updateBannerFreshness() {
-        var now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // Метка в углу панели: время ПОСЛЕДНИХ ДАННЫХ (последний снапшот), МСК.
+    // Метка живёт СВОЕЙ жизнью и не зависит от результата рендера: тикер
+    // читает последний payload секции invest.history прямо из медиатора, а
+    // эпоха считается как МОНОТОННЫЙ максимум всех источников (медиатор +
+    // переданное окно + _med-кэш хелпера). Это чинит заморозку метки в
+    // GET-fallback/чат-путях, где lastDataEpoch не обновлялся.
+    let lastShownEpoch = 0;
+
+    function epochFromData(data) {
+        let maxE = 0;
+        if (!data) return maxE;
+        for (const k in data) {
+            if (k.charAt(0) === '_') continue;
+            const e = Date.parse(k) / 1000;
+            if (!isNaN(e) && e > maxE) maxE = e;
+        }
+        return maxE;
+    }
+
+    function collectFreshnessEpoch(historyData) {
+        let epoch = 0;
+        if (historyData) {
+            if (historyData._latest_epoch != null) {
+                const me = Number(historyData._latest_epoch);
+                if (!isNaN(me) && me > epoch) epoch = me;
+            }
+            const be = epochFromData(historyData);
+            if (be > epoch) epoch = be;
+        }
+        if (lastDataEpoch > epoch) epoch = lastDataEpoch;
+        const med = window.InvestHistoryCache && window.InvestHistoryCache._med;
+        if (med && med.data) {
+            const me2 = epochFromData(med.data);
+            if (me2 > epoch) epoch = me2;
+        }
+        return epoch;
+    }
+
+    function renderFreshnessLabel(epoch) {
+        if (!epoch) return;
+        const d = new Date(epoch * 1000 + 3 * 3600 * 1000);
+        const pad = function(n) { return (n < 10 ? '0' : '') + n; };
+        const txt = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
         ['invest_banner_capital', 'invest_banner_table', 'invest_banner_total'].forEach(function(panelId) {
-            var panel = document.getElementById(panelId);
+            const panel = document.getElementById(panelId);
             if (!panel) return;
-            var key = panelId.replace('invest_banner_', '');
-            var el = document.getElementById('banner_freshness_' + key);
+            const key = panelId.replace('invest_banner_', '');
+            let el = document.getElementById('banner_freshness_' + key);
             if (!el) {
                 el = document.createElement('div');
                 el.id = 'banner_freshness_' + key;
                 el.style.cssText = 'position:absolute;bottom:2px;left:4px;font-size:11px;color:#888;z-index:15;font-family:helvetica,arial,sans-serif;pointer-events:none;opacity:0.45;white-space:nowrap;';
                 panel.appendChild(el);
             }
-            el.textContent = now;
+            el.textContent = txt;
         });
+    }
+
+    function setBannerFreshness(historyData) {
+        const epoch = collectFreshnessEpoch(historyData);
+        if (!epoch || epoch <= lastShownEpoch) return;
+        lastShownEpoch = epoch;
+        renderFreshnessLabel(epoch);
+    }
+
+    // Альтернатива pro компонента рендера для метки свежести.
+    // Явный старт-тикер: читает последний payload медиатора раз в 3 с и
+    // двигает метку, даже если renderBanner упал или данные едут GET-путём.
+    function startDataFreshnessTicker() {
+        if (window.__bannerFreshnessTick) clearInterval(window.__bannerFreshnessTick);
+        window.__bannerFreshnessTick = setInterval(function() {
+            const pm = window.PanelMediator;
+            const latest = pm && typeof pm.getLatest === 'function' && pm.getLatest('invest.history');
+            setBannerFreshness(latest || null);
+        }, 3000);
     }
 
     function renderBanner(historyData, dynData) {
@@ -680,7 +764,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const tBuild = performance.now();
         if ($capHost.length) $capHost.html(capHtml);
         if ($tblHost.length) $tblHost.html(tblHtml);
-        updateBannerFreshness();
+        setBannerFreshness(dynData || historyData);
         const t1 = performance.now();
         console.log('[InvestBanner] renderBanner build', (tBuild - t0).toFixed(2) + 'ms', '| dom-set', (t1 - tBuild).toFixed(2) + 'ms', '| total', (t1 - t0).toFixed(2) + 'ms');
         console.log('[InvestBanner] Banner rendered, sources:', presentSources, 'capital:', totals, 'assets:', portfolioRows.map(r => r.assets.length),
@@ -790,18 +874,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
     }
 
-    function startFreshnessTicker() {
-        if (!window.__bannerFreshnessTicker) {
-            window.__bannerFreshnessTicker = setInterval(updateBannerFreshness, 1000);
-            updateBannerFreshness();
-        }
-    }
-
     function init() {
         console.log('[InvestBanner] init called');
 
         setupMediator();
-        startFreshnessTicker();
+        startDataFreshnessTicker();
         updateInvestBanner();
     }
 

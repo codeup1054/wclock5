@@ -144,8 +144,8 @@ function aggregateData(timestamps, values, interval, labelMode) {
 
     const sortedKeys = Object.keys(aggregated).sort((a, b) => Number(a) - Number(b));
     
-    const resultValues = [];
-    const resultTimestamps = [];
+    let resultValues = [];
+    let resultTimestamps = [];
 
     let lastValidValue = null;
     let intervalMs = 3600000;
@@ -164,12 +164,6 @@ function aggregateData(timestamps, values, interval, labelMode) {
         if (currentValue === null || isNaN(currentValue)) {
             if (lastValidValue !== null) {
                 currentValue = lastValidValue;
-            }
-        } else if (currentValue === 0) {
-            if (lastValidValue !== null) {
-                currentValue = lastValidValue;
-            } else {
-                lastValidValue = 0;
             }
         } else {
             lastValidValue = currentValue;
@@ -193,6 +187,26 @@ function aggregateData(timestamps, values, interval, labelMode) {
         resultValues.push(currentValue);
         resultTimestamps.push(group.timestamp);
     });
+
+    // Ограничиваем число точек: при ручном выборе мелкого интервала (minute/fivemin)
+    // на длинном периоде агрегация раздувается (десятки тысяч точек) и блокирует
+    // главный поток >30с (график/портфели не отрисовываются). Прореживаем равномерно.
+    var MAX_AGG_POINTS = 3000;
+    if (resultValues.length > MAX_AGG_POINTS) {
+        var step = Math.ceil(resultValues.length / MAX_AGG_POINTS);
+        var dsV = [], dsT = [];
+        for (var si = 0; si < resultValues.length; si += step) {
+            dsV.push(resultValues[si]);
+            dsT.push(resultTimestamps[si]);
+        }
+        var lastV = resultValues[resultValues.length - 1];
+        if (dsV[dsV.length - 1] !== lastV) {
+            dsV.push(lastV);
+            dsT.push(resultTimestamps[resultTimestamps.length - 1]);
+        }
+        resultValues = dsV;
+        resultTimestamps = dsT;
+    }
 
     // Build labels based on mode
     const timeLabels = resultTimestamps.map(d => {
@@ -298,3 +312,219 @@ function aggregateTgoldData(prices, portfolioTimestamps, interval) {
     
     return { data: resultData };
 }
+
+// ============================================================
+// InvestHistoryCache — delta-capable history cache
+// ============================================================
+// Full response cached for FULL_TTL_MS; between full loads only
+// changed buckets (live tail) are fetched via ?after_ts=.
+// Server returns: { <iso_ts>: items, _prev, _api_errors, _latest_epoch, _count }
+// Client canonicalizes: max 1 key per interval-bucket (last snapshot wins).
+window.InvestHistoryCache = (function() {
+    var FULL_TTL_MS = 10 * 60 * 1000;
+    var MAX_ENTRIES = 4;
+    var MEDIATOR_TTL_MS = 70000;   // чуть больше 60с опроса медиатора
+    var INTERVAL_MS = { minute: 60000, fivemin: 300000, twentymin: 1200000, hour: 3600000, sixhour: 21600000, day: 86400000 };
+
+    var _entries = {};  // key -> { data, latestEpoch, loadedAt }
+    var _pending = null; // { promise, key }
+    var _med = null;    // { key, data, latestEpoch, at } — свежее full-полно из медиатора
+
+    function cacheKey(interval, apiPeriod, startTs, endTs) {
+        return interval + '|' + apiPeriod + '|' + (startTs || '') + '|' + (endTs || '');
+    }
+
+    function evictIfNeeded() {
+        // LRU-эвктикция: держим небольшой словарь кэшей (баннер + чарт + диапазоны)
+        var keys = Object.keys(_entries);
+        if (keys.length < MAX_ENTRIES) return;
+        var oldest = null, oldestKey = null;
+        for (var i = 0; i < keys.length; i++) {
+            var e = _entries[keys[i]];
+            if (!oldest || e.loadedAt < oldest.loadedAt) { oldest = e; oldestKey = keys[i]; }
+        }
+        if (oldestKey) delete _entries[oldestKey];
+    }
+
+    function bucketBoundary(epochSec, interval) {
+        var ms = INTERVAL_MS[interval] || 3600000;
+        return Math.floor((epochSec * 1000) / ms) * ms;
+    }
+
+    // One key per bucket: keep key with max epoch per bucket
+    function canonicalize(raw, interval) {
+        var buckets = {}; // boundary_ms → [ { key, epoch } ]
+        var clean = {};
+        var i, k, epoch, b;
+        for (k in raw) {
+            if (k.charAt(0) === '_') { clean[k] = raw[k]; continue; }
+            epoch = Date.parse(k) / 1000;
+            if (isNaN(epoch)) continue;
+            b = bucketBoundary(epoch, interval);
+            if (!buckets[b]) buckets[b] = [];
+            buckets[b].push({ key: k, epoch: epoch });
+        }
+        for (b in buckets) {
+            var arr = buckets[b].sort(function(a, c) { return a.epoch - c.epoch; });
+            var last = arr[arr.length - 1];
+            clean[last.key] = raw[last.key];
+        }
+        return clean;
+    }
+
+    // Merge delta into cached (replace same-bucket old keys, append new, union _api_errors)
+    function mergeDelta(cached, delta, interval) {
+        var merged = {};
+        var k, dk, eEpoch, dEpoch, ek, eB, dB;
+        for (k in cached) { if (k.charAt(0) !== '_') merged[k] = cached[k]; }
+        for (dk in delta) {
+            if (dk.charAt(0) === '_') continue;
+            dEpoch = Date.parse(dk) / 1000;
+            if (isNaN(dEpoch)) continue;
+            dB = bucketBoundary(dEpoch, interval);
+            for (ek in merged) {
+                eEpoch = Date.parse(ek) / 1000;
+                if (!isNaN(eEpoch) && bucketBoundary(eEpoch, interval) === dB && eEpoch < dEpoch) {
+                    delete merged[ek];
+                }
+            }
+            merged[dk] = delta[dk];
+        }
+        if (delta._prev) merged._prev = delta._prev;
+        else if (cached._prev) merged._prev = cached._prev;
+        // Union _api_errors (dedup by ts_epoch)
+        var seen = {};
+        if (cached._api_errors) for (var i = 0; i < cached._api_errors.length; i++) seen[cached._api_errors[i].ts_epoch] = cached._api_errors[i];
+        if (delta._api_errors) for (var i = 0; i < delta._api_errors.length; i++) seen[delta._api_errors[i].ts_epoch] = delta._api_errors[i];
+        merged._api_errors = Object.values(seen);
+        return merged;
+    }
+
+    function buildUrl(interval, apiPeriod, startTs, endTs, afterTs) {
+        var u = '/api/invest/history?interval=' + encodeURIComponent(interval) +
+                '&period=' + encodeURIComponent(apiPeriod);
+        if (startTs) u += '&start_ts=' + encodeURIComponent(startTs);
+        if (endTs)   u += '&end_ts='   + encodeURIComponent(endTs);
+        if (afterTs != null) u += '&after_ts=' + afterTs;
+        return u;
+    }
+
+    function doFull(interval, apiPeriod, startTs, endTs) {
+        return fetch(buildUrl(interval, apiPeriod, startTs, endTs, null), { cache: 'no-store' })
+            .then(function(r) { if (!r.ok) throw new Error('history ' + r.status); return r.json(); })
+            .then(function(raw) {
+                var maxE = 0;
+                for (var k in raw) { if (k.charAt(0) === '_') continue; var e = Date.parse(k) / 1000; if (e > maxE) maxE = e; }
+                return { data: canonicalize(raw, interval), latestEpoch: maxE || null };
+            });
+    }
+
+    function doDelta(interval, apiPeriod, startTs, endTs, afterTs) {
+        return fetch(buildUrl(interval, apiPeriod, startTs, endTs, afterTs), { cache: 'no-store' })
+            .then(function(r) { if (!r.ok) throw new Error('history ' + r.status); return r.json(); })
+            .then(function(d) { return { delta: d, serverLatest: d._latest_epoch || null }; });
+    }
+
+    function get(interval, apiPeriod, startTs, endTs) {
+        var key = cacheKey(interval, apiPeriod, startTs, endTs);
+        var now = Date.now();
+        var entry = _entries[key];
+        var needFull = !entry || (now - entry.loadedAt) > FULL_TTL_MS;
+
+        // Медиатор — источник полной истории: если полный payload секции
+        // invest.history пришёл недавно (текущий опрос ≤ 60с), отдаём его
+        // без GET-запросов. При застое медиатора > TTL — обычный full/delta.
+        if (_med && _med.key === key && (now - _med.at) < MEDIATOR_TTL_MS) {
+            return Promise.resolve(_med.data);
+        }
+
+        if (_pending && _pending.key === key) return _pending.promise;
+
+        evictIfNeeded();
+
+        var promise;
+        if (needFull) {
+            promise = doFull(interval, apiPeriod, startTs, endTs)
+                .then(function(r) {
+                    var e = { data: r.data, latestEpoch: r.latestEpoch, loadedAt: Date.now() };
+                    _entries[key] = e;
+                    _pending = null; return e.data;
+                })
+                .catch(function(e) { _pending = null; throw e; });
+        } else {
+            promise = doDelta(interval, apiPeriod, startTs, endTs, entry.latestEpoch)
+                .then(function(r) {
+                    if (r.serverLatest != null && r.serverLatest < entry.latestEpoch) {
+                        // Desync: server behind → full reload
+                        return doFull(interval, apiPeriod, startTs, endTs).then(function(r2) {
+                            var e2 = { data: r2.data, latestEpoch: r2.latestEpoch, loadedAt: Date.now() };
+                            _entries[key] = e2;
+                            _pending = null; return e2.data;
+                        });
+                    }
+                    entry.data = mergeDelta(entry.data, r.delta, interval);
+                    if (r.serverLatest != null && r.serverLatest > entry.latestEpoch) entry.latestEpoch = r.serverLatest;
+                    entry.loadedAt = Date.now();
+                    _pending = null;
+                    return entry.data;
+                })
+                .catch(function(e) { _pending = null; throw e; });
+        }
+        _pending = { promise: promise, key: key };
+        return promise;
+    }
+
+    function invalidate() { _entries = {}; _pending = null; }
+
+    // Полный payload из медиатора (секция invest.history): кладём в _med
+    // и в обычный кэш — get() ниже отдаёт его без GET, пока медиатор свежий.
+    function primeFromMediator(interval, apiPeriod, startTs, endTs, raw) {
+        var key = cacheKey(interval, apiPeriod, startTs, endTs);
+        var data = canonicalize(raw || {}, interval);
+        var maxE = 0;
+        if (raw && raw._latest_epoch != null) {
+            var me = Number(raw._latest_epoch);
+            if (!isNaN(me)) maxE = me;
+        } else {
+            for (var k in raw) {
+                if (k.charAt(0) === '_') continue;
+                var e = Date.parse(k) / 1000;
+                if (!isNaN(e) && e > maxE) maxE = e;
+            }
+        }
+        _med = { key: key, data: data, latestEpoch: maxE, at: Date.now() };
+        _entries[key] = { data: data, latestEpoch: maxE, loadedAt: Date.now() };
+        _pending = null;
+        return data;
+    }
+
+    // Хвост (дельта) из медиатора секции invest.history (_tail): мёрджим в
+    // уже загруженный полный кэш, чтобы рендер всегда видел целую историю.
+    // Если полного нет (не с чем мёрджить) — возвращаем null: вызывающий
+    // должен взять полный через get().
+    function applyMediatorTail(interval, apiPeriod, startTs, endTs, delta) {
+        var key = cacheKey(interval, apiPeriod, startTs, endTs);
+        var entry = _entries[key];
+        if (!entry || !entry.data) return null;
+        var merged = mergeDelta(entry.data, delta || {}, interval);
+        var maxE = 0;
+        if (delta && delta._latest_epoch != null) {
+            var me = Number(delta._latest_epoch);
+            if (!isNaN(me)) maxE = me;
+        } else {
+            for (var k in delta) {
+                if (k.charAt(0) === '_') continue;
+                var e = Date.parse(k) / 1000;
+                if (!isNaN(e) && e > maxE) maxE = e;
+            }
+        }
+        entry.data = merged;
+        if (maxE > entry.latestEpoch) entry.latestEpoch = maxE;   // монотонно
+        entry.loadedAt = Date.now();
+        _med = { key: key, data: merged, latestEpoch: entry.latestEpoch, at: Date.now() };
+        _pending = null;
+        return merged;
+    }
+
+    return { get: get, invalidate: invalidate, primeFromMediator: primeFromMediator, applyMediatorTail: applyMediatorTail };
+})();

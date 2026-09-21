@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from invest_db import init_invest_db
-from invest_repo import Snapshot, Position, write_snapshot, apply_retention, current_interval, init_trades_tables, upsert_trades
+from invest_repo import Snapshot, Position, write_snapshot, maybe_fold_raw, current_interval, init_trades_tables, upsert_trades
 
 # Загружаем .env из корневой директории проекта
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -73,17 +73,27 @@ def money_to_float(m):
             return 0.0
     return int(m.get("units", 0)) + int(m.get("nano", 0)) / 1e9
 
-# --- Чтение интервала из БД ---
-def get_invest_interval():
+# --- Чтение настроек из инвест-БД ---
+def get_setting_value(key, default=None):
     conn = sqlite3.connect(DB_PATH)
     conn.execute("PRAGMA busy_timeout = 5000")
-    cursor = conn.cursor()
-    cursor.execute("SELECT value FROM settings WHERE key = 'INVEST_UPDATE_INTERVAL'")
-    row = cursor.fetchone()
-    conn.close()
-    if row:
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row[0] if row else default
+    finally:
+        conn.close()
+
+# Сбор данных через Tinkoff API включён?
+def collection_enabled():
+    return get_setting_value("invest_collection_tinkoff_enabled", "1") != "0"
+
+def get_invest_interval():
+    row = get_setting_value("INVEST_UPDATE_INTERVAL", None)
+    if row is not None:
         try:
-            interval = max(60, int(row[0]))  # минимум 60 сек (1 минута)
+            interval = max(60, int(row))  # минимум 60 сек (1 минута)
             return interval
         except (ValueError, TypeError):
             pass
@@ -125,7 +135,7 @@ def fetch_portfolio():
     finally:
         conn.close()
 
-MIN_POSITIONS = 2  # минимум позиций для сохранения (чтобы не писать неполные снепшоты)
+MIN_POSITIONS = 0  # барьер отключён: пишем снепшоты при любом количестве позиций
 
 # --- Сохранение через mediation-слой ---
 def save_to_sqlite(positions):
@@ -304,43 +314,56 @@ def main():
     # Инициализация БД
     init_db()
 
-    iteration = 0
+    last_trades_sync = 0
+    verbose = True
     while not shutdown:
-        iteration += 1
-        try:
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{now_str}] 🔄 Начало цикла обновления портфеля...", flush=True)
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            data = fetch_portfolio()
-            positions = data.get("positions", [])
-            total = save_to_sqlite(positions)
+        # Сбор данных можно отключить из UI (настройка живёт в инвест-БД).
+        if not collection_enabled():
+            if verbose:
+                print(f"[{now_str}] ⏸️ Сбор данных через Tinkoff API отключён — цикл пропущен", flush=True)
+        else:
+            try:
+                if verbose:
+                    print(f"[{now_str}] 🔄 Начало цикла обновления портфеля...", flush=True)
 
-            if total is None:
-                print(f"[{now_str}] ⏭️ Снепшот пропущен (неполные данные)", flush=True)
-            else:
-                print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
+                data = fetch_portfolio()
+                positions = data.get("positions", [])
+                total = save_to_sqlite(positions)
 
-            # Агрегация старых данных: каждый 10-й цикл
-            if iteration % 10 == 0:
-                apply_retention()
+                if total is None:
+                    print(f"[{now_str}] ⏭️ Снепшот пропущен (неполные данные)", flush=True)
+                elif verbose:
+                    print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
 
-            # Сделки/оборот: каждый 12-й цикл (~2 мин)
-            if iteration % 12 == 1:
-                sync_trades()
+                # Сделки/оборот: не чаще раза в 2 мин (time-based, чтобы при
+                # 1с-цикле пика не дёргать API брокера каждые ~12 итераций)
+                if time.time() - last_trades_sync >= 120:
+                    last_trades_sync = time.time()
+                    sync_trades()
 
-        except Exception as e:
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{now_str}] ❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", flush=True)
-            print("Подробности:", flush=True)
-            traceback.print_exc()
-            print("-" * 60, flush=True)
+            except Exception as e:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{now_str}] ❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", flush=True)
+                print("Подробности:", flush=True)
+                traceback.print_exc()
+                print("-" * 60, flush=True)
 
         if shutdown:
             break
 
-        # Адаптивный интервал: 10с днём (08:00–24:00 МСК), ночью — базовый из настроек
+        # Схлопывание секунд → минутные свечи раз в минуту. Вне ветки сбора:
+        # folding пишет бакеты ВСЕХ источников (в т.ч. finam), даже когда
+        # сбор Tinkoff API отключён из UI — иначе сырьё растёт без схлопывания.
+        maybe_fold_raw()
+
+        # Адаптивный интервал: пик 10:00–19:00 МСК — 1с, вне пика — 60с.
+        # Рутинные принты при 1с-кадденции душили бы логи — печатаем их вне пика.
         interval = current_interval(base=get_invest_interval())
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⏳ Ожидание {interval} секунд до следующего запроса...", flush=True)
+        verbose = interval >= 10
+        if verbose:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⏳ Ожидание {interval} секунд до следующего запроса...", flush=True)
         
         # Постепенный sleep с проверкой shutdown каждую секунду
         for _ in range(interval):

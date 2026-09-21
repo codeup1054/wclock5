@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import json
+import re
 import sqlite3
 import traceback
 from datetime import datetime, timedelta, timezone
@@ -49,6 +50,107 @@ if not FINAM_SECRET or not FINAM_ACCOUNT_ID:
 
 # === Путь к БД — рядом с этим файлом ===
 DB_PATH = os.path.join(os.path.dirname(__file__), "invest_portfolio.db")
+QUOTE_DB_PATH = os.path.join(os.path.dirname(__file__), "tracked_tickers.db")
+
+# === Spike-фильтр цен позиций Finam ===
+# Защита от разовых аномалий цены из API брокера (напр. TGLD 15.26 при отсутствии
+# торгов). Если цена одного тикера за один тик ушла больше SPIKE_PCT% и при этом
+# противоречит котировочному источнику (tracked_tickers.last_prices) — считаем цену
+# спайком, заменяем на предыдущую и регистрируем событие в bot_events (API Finam).
+SPIKE_PCT = 2.0
+_prev_price = {}          # ticker -> last approved price
+_spike_logged = {}        # ticker -> epoch (мин) последнего лога, для дедупликации
+
+
+def _quote_price(ticker):
+    """Последняя котировка тикера из tracked_tickers.db (last_prices). Возвращает
+    цену или None. Тикер Finam (TGLD@@RUSX) нормализуется до котировочного (TGLD@)."""
+    q = _normalize_symbol(ticker)
+    conn = sqlite3.connect(QUOTE_DB_PATH, timeout=10)
+    try:
+        row = conn.execute(
+            "SELECT price FROM last_prices WHERE ticker=? ORDER BY ts_epoch DESC LIMIT 1",
+            (q,)).fetchone()
+        if row and row[0]:
+            return float(row[0])
+        # фолбэк по figi, если тикер в котировках пустой ('')
+        row = conn.execute(
+            "SELECT price FROM last_prices WHERE figi=? AND ticker!='' ORDER BY ts_epoch DESC LIMIT 1",
+            (q,)).fetchone()
+        return float(row[0]) if row and row[0] else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def _normalize_symbol(s):
+    """Финансовый символ Finam (напр. 'TGLD@@RUSX', 'LQDT@RUSX') → котировочный
+    тикер (напр. 'TGLD@'): убираем суффикс рынка и сжимаем серию '@'."""
+    if not s:
+        return s
+    t = re.sub(r"RUSX$", "", s)
+    t = re.sub(r"@+", "@", t)
+    return t
+
+
+def _log_spike(ticker, old_price, new_price, quote_price):
+    """Записать событие-аномалию в bot_events (источник API Finam)."""
+    now = time.time()
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    try:
+        text = (f"[spike] {ticker}: цена позиции скачком {old_price} → {new_price} "
+                f"({abs(new_price - old_price) / old_price * 100 if old_price else 0:.2f}%), "
+                f"котировка {quote_price}. Торгов нет — цена заменена на предыдущую. Источник: API Finam")
+        conn.execute(
+            "INSERT INTO bot_events (msg_id, chat, ts_epoch, update_type, text, raw)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(chat, msg_id) DO UPDATE SET"
+            " ts_epoch=excluded.ts_epoch, text=excluded.text, raw=excluded.raw",
+            (-int(now // 60), "API Finam", int(now), "spike", text[:4000], text[:4000]))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def filter_position_price_spikes(positions):
+    """Заменить аномальную цену позиции на предыдущую, если скачок > SPIKE_PCT%
+    И противоречит котировочному источнику. Возвращает исправленный список."""
+    out = []
+    for p in positions:
+        ticker = p.get("ticker") or p.get("name")
+        is_currency = (p.get("instrument_type") == "Currency")
+        new_p = float(p["price"] or 0)
+        if is_currency or new_p <= 0 or not ticker:
+            # Валюту/кэш и невалидные цены не фильтруем
+            _prev_price[ticker] = new_p if new_p > 0 else _prev_price.get(ticker)
+            out.append(p)
+            continue
+
+        prev_p = _prev_price.get(ticker)
+        quote_p = _quote_price(ticker)
+
+        ref_p = prev_p if (prev_p and prev_p > 0) else quote_p
+        if ref_p and ref_p > 0 and new_p != ref_p:
+            pct = abs(new_p - ref_p) / ref_p * 100
+            contradicts = (quote_p and quote_p > 0
+                           and abs(new_p - quote_p) / quote_p * 100 > SPIKE_PCT)
+            if pct > SPIKE_PCT and contradicts:
+                if _spike_logged.get(ticker) != int(time.time() // 60):
+                    _spike_logged[ticker] = int(time.time() // 60)
+                    _log_spike(ticker, ref_p, new_p, quote_p)
+                print(f"⚠️ [spike] {ticker}: цена {new_p} заменена на {ref_p} "
+                      f"(котировка {quote_p}, отклонение {pct:.2f}%)", flush=True)
+                # Заменяем только цену и value, остальное без изменений
+                p["price"] = ref_p
+                p["value"] = float(p["quantity"]) * ref_p
+                out.append(p)
+                _prev_price[ticker] = ref_p
+                continue
+
+        _prev_price[ticker] = new_p
+        out.append(p)
+    return out
 
 # === Кэш JWT ===
 _jwt = None
@@ -142,8 +244,9 @@ def map_positions(data):
             "value": value,
         })
 
-    # Кэш: денежные средства по валютам — СУММИРУЕМ все записи (свободные + «Ожидания по сделкам»).
-    # Без этого портфель задваивается: покупка по о/р уже учтена в positions, а отрицательный кэш её снимает.
+    # Кэш: денежные средства по валютам — СУММИРУЕМ все записи (свободные +
+    # «Ожидания по сделкам»). Итог может быть отрицательным (списанная комиссия,
+    # долг) — такой кэш тоже сохраняем, иначе total завышается относительно equity.
     cash_by_currency = {}
     for c in data.get("cash") or []:
         currency = c.get("currency_code") or "RUB"
@@ -152,8 +255,6 @@ def map_positions(data):
             cash_by_currency[currency] = cash_by_currency.get(currency, 0) + amount
 
     for currency, amount in cash_by_currency.items():
-        if amount <= 0:
-            continue
         if currency.upper() == "RUB":
             positions.append({
                 "instrument_type": "Currency",
@@ -166,7 +267,7 @@ def map_positions(data):
 
     return positions
 
-MIN_POSITIONS = 1  # для Finam всегда есть кэш (RUB) + позиции
+MIN_POSITIONS = 0  # барьер отключён: пишем снепшоты при любом количестве позиций
 
 # --- Сохранение через mediation-слой ---
 def save_to_sqlite(positions):
@@ -280,13 +381,43 @@ def map_trades(trades):
 
 
 def sync_trades():
-    """Раз в ~2 минуты: подтянуть новые сделки в БД."""
+    """Раз в ~2 минуты: подтянуть новые сделки в БД. При 5xx/таймауте API — ретрай
+    с короткими паузами, затем тихий выход до следующего цикла."""
     try:
-        added = upsert_trades(map_trades(fetch_trades(days=3)))
+        trades = fetch_trades(days=3)
+    except Exception as e:
+        # Транзиентные 5xx/таймауты API Finam: ретрай через 5 и 30 сек
+        time.sleep(5)
+        try:
+            trades = fetch_trades(days=3)
+        except Exception as e2:
+            print(f"⚠️ finam sync_trades (retry): {e2}", flush=True)
+            time.sleep(30)
+            try:
+                trades = fetch_trades(days=3)
+            except Exception as e3:
+                print(f"⚠️ finam sync_trades: {e3}", flush=True)
+                return
+    try:
+        added = upsert_trades(map_trades(trades))
         if added:
             print(f"💰 Новых сделок Finam: {added}", flush=True)
     except Exception as e:
-        print(f"⚠️ finam sync_trades: {e}", flush=True)
+        print(f"⚠️ finam sync_trades (upsert): {e}", flush=True)
+
+
+def finam_collection_enabled():
+    """Сбор данных через Finam API включён? (настройка хранится в инвест-БД)."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute("PRAGMA busy_timeout = 5000")
+        try:
+            row = conn.execute("SELECT value FROM settings WHERE key = 'invest_collection_finam_enabled'").fetchone()
+            return row[0] != "0" if row else True
+        finally:
+            conn.close()
+    except Exception:
+        return True
 
 
 def main():
@@ -297,43 +428,56 @@ def main():
 
     init_db()
 
-    iteration = 0
+    last_trades_sync = 0
+    verbose = True
     while not shutdown:
-        iteration += 1
-        try:
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{now_str}] 🔄 Начало цикла обновления портфеля Finam...", flush=True)
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-            data = fetch_portfolio()
-            positions = map_positions(data)
-            total = save_to_sqlite(positions)
+        # Сбор данных можно отключить из UI (настройка живёт в инвест-БД).
+        if not finam_collection_enabled():
+            if verbose:
+                print(f"[{now_str}] ⏸️ Сбор данных через Finam API отключён — цикл пропущен", flush=True)
+        else:
+            try:
+                if verbose:
+                    print(f"[{now_str}] 🔄 Начало цикла обновления портфеля Finam...", flush=True)
 
-            if total is None:
-                print(f"[{now_str}] ⏭️ Снепшот пропущен (неполные данные)", flush=True)
-            else:
-                print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
+                data = fetch_portfolio()
+                positions = map_positions(data)
+                positions = filter_position_price_spikes(positions)
+                total = save_to_sqlite(positions)
 
-            # Агрегация старых данных: каждый 10-й цикл
-            if iteration % 10 == 0:
-                apply_retention()
+                if total is None:
+                    print(f"[{now_str}] ⏭️ Снепшот пропущен (неполные данные)", flush=True)
+                elif verbose:
+                    print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
 
-            # Сделки/оборот: каждый 12-й цикл (~2 мин)
-            if iteration % 12 == 1:
-                sync_trades()
+                # Агрегация старых данных выполняется только в tinkoff-демоне,
+                # чтобы избежать гонки двух write-транзакций за одну SQLite-БД.
+                # (В этой БД retention делает tinkoff_invest_daemon.py)
 
-        except Exception as e:
-            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            print(f"[{now_str}] ❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", flush=True)
-            print("Подробности:", flush=True)
-            traceback.print_exc()
-            print("-" * 60, flush=True)
+                # Сделки/оборот: не чаще раза в 2 мин (time-based, чтобы при
+                # 1с-цикле пика не дёргать API брокера каждые ~12 итераций)
+                if time.time() - last_trades_sync >= 120:
+                    last_trades_sync = time.time()
+                    sync_trades()
+
+            except Exception as e:
+                now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{now_str}] ❌ КРИТИЧЕСКАЯ ОШИБКА: {e}", flush=True)
+                print("Подробности:", flush=True)
+                traceback.print_exc()
+                print("-" * 60, flush=True)
 
         if shutdown:
             break
 
-        # Адаптивный интервал: 10с днём (08:00–24:00 МСК), ночью — базовый из env
+        # Адаптивный интервал: пик 10:00–19:00 МСК — 1с, вне пика — 60с.
+        # Рутинные принты при 1с-кадденции душили бы логи — печатаем их вне пика.
         interval = current_interval(base=UPDATE_INTERVAL_SEC)
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⏳ Ожидание {interval} секунд до следующего запроса...", flush=True)
+        verbose = interval >= 10
+        if verbose:
+            print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] ⏳ Ожидание {interval} секунд до следующего запроса...", flush=True)
 
         for _ in range(interval):
             if shutdown:

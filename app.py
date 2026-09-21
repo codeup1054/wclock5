@@ -520,17 +520,9 @@ def api_invest_history():
     start_ts = _int_or_none(request.args.get('start_ts'))
     end_ts = _int_or_none(request.args.get('end_ts'))
     after_ts = _int_or_none(request.args.get('after_ts'))
-    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
 
     t0 = time.time()
-    if after_ts is not None:
-        data = invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH,
-                                        start_epoch=start_ts, end_epoch=end_ts,
-                                        after_ts=after_ts)
-    else:
-        data = cached_invest("history", INVEST_DB_PATH, {"interval": interval, "period": period, "start_ts": start_ts, "end_ts": end_ts},
-                             lambda: invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH, start_epoch=start_ts, end_epoch=end_ts),
-                             ttl=30)
+    data = _invest_history_payload(interval, period, start_ts, end_ts, after_ts)
     elapsed = int((time.time() - t0) * 1000)
     keys = len(data) if isinstance(data, dict) else 0
     print(f"[INVEST] history interval={interval} after={after_ts is not None} keys={keys} ms={elapsed}", flush=True)
@@ -545,74 +537,7 @@ def api_invest_turnover():
     (strategy_summary, за сегодня МСК); фолбэк — сделки счёта из API брокера.
     Результат кешируется в памяти на 90с — оборот дня меняется редко, а
     запрос идёт каждый тик баннера (60с) и не должен молотить БД."""
-    now = time.time()
-    ttl = 90
-    hit = _turnover_cache.get("data", None)
-    if hit is not None and (now - _turnover_cache.get("at", 0)) < ttl:
-        resp = make_response(jsonify(hit))
-        resp.cache_control.no_store = True
-        resp.cache_control.no_cache = True
-        resp.cache_control.must_revalidate = True
-        resp.headers['Pragma'] = 'no-cache'
-        resp.headers['Expires'] = '0'
-        return resp
-
-    import sqlite3
-    now_msk = datetime.now(timezone.utc) + timedelta(hours=3)
-    today = now_msk.strftime("%Y-%m-%d")
-    out = {}
-    try:
-        con = sqlite3.connect(INVEST_DB_PATH)
-        con.row_factory = sqlite3.Row
-        rows = con.execute(
-            "SELECT source, capital, turnover FROM strategy_summary"
-            " WHERE day=? ORDER BY id DESC", (today,)).fetchall()
-        seen = set()
-        for r in rows:
-            if r["source"] in seen:
-                continue
-            seen.add(r["source"])
-            total = r["turnover"] or 0
-            # Комиссия: Тинвест — 0,02% от оборота; Финам — тариф «Трейдер n6»
-            # (брекетная ставка МосБиржи; стратегия торгует TGLD на MOEX)
-            if r["source"] == "tinkoff":
-                comm = round(total * 0.0002, 2)
-            elif r["source"] == "finam":
-                # Стратегия Финам торгует на СПБ Бирже:
-                # брекетная ставка + урегулирование СПБ 0,01%
-                comm = round(invest_repo.finam_commission_estimate(0, total), 2)
-            else:
-                comm = None
-            out[r["source"]] = {
-                "total": total,
-                "buy": 0, "sell": 0,
-                "commission": comm,
-                "capital": r["capital"],
-                "strategy": True,
-            }
-        con.close()
-    except sqlite3.Error:
-        pass
-    # Фолбэк: все сделки счёта с начала суток (UTC-полночь)
-    missing = {"tinkoff", "finam"} - set(out)
-    if missing:
-        since = int(datetime.now(timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0).timestamp())
-        for src, d in invest_repo.read_turnover_since(since, db_path=INVEST_DB_PATH).items():
-            if src in missing:
-                total_fb = d.get("total", 0)
-                if src == "finam":
-                    d["commission"] = round(invest_repo.finam_commission_estimate(0, total_fb), 2)
-                elif src == "tinkoff":
-                    d["commission"] = round(total_fb * 0.0002, 2)
-                d["strategy"] = False
-                out[src] = d
-
-    _turnover_cache["data"] = out
-    _turnover_cache["at"] = now
-
-    # Add no-cache headers for fresh data
-    resp = make_response(jsonify(out))
+    resp = make_response(jsonify(_invest_turnover_payload()))
     resp.cache_control.no_store = True
     resp.cache_control.no_cache = True
     resp.cache_control.must_revalidate = True
@@ -760,64 +685,9 @@ def api_invest_tickers():
     period = request.args.get('period', '-28 day')
     start_ts = _int_or_none(request.args.get('start_ts'))
     end_ts = _int_or_none(request.args.get('end_ts'))
-    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
-
-    def generate():
-        if not os.path.exists(TRACKED_TICKERS_DB_PATH):
-            return {"_error": "Ticker DB not found", "_error_code": 404}
-        rows = invest_repo.read_prices(period, db_path=TRACKED_TICKERS_DB_PATH, start_epoch=start_ts, end_epoch=end_ts)
-        # Фолбэк на полный диапазон только когда явный from/to НЕ задан,
-        # чтобы тикеры не выходили за границы диапазона портфеля.
-        if not rows and start_ts is None and end_ts is None:
-            rows = invest_repo.read_prices(None, db_path=TRACKED_TICKERS_DB_PATH)
-
-        ticker_groups = {}
-        for r in rows:
-            figi = r["figi"]
-            if figi not in ticker_groups:
-                ticker_groups[figi] = {"ticker": r["ticker"] or figi, "class_code": r["class_code"], "prices": {}}
-            dt = datetime.fromisoformat(r["timestamp"].replace('Z', '+00:00'))
-            bucket_key = str(int(dt.timestamp() / bucket_size) * bucket_size)
-            ticker_groups[figi]["prices"][bucket_key] = {"timestamp": r["timestamp"], "price": round(r["price"], 2)}
-
-        result = {}
-        MAX_TICKER_POINTS = 3000
-        for figi, group in ticker_groups.items():
-            prices = [group["prices"][k] for k in sorted(group["prices"].keys())]
-            if not prices:
-                continue
-            if len(prices) > MAX_TICKER_POINTS:
-                step = max(1, (len(prices) + MAX_TICKER_POINTS - 1) // MAX_TICKER_POINTS)
-                decimated = [prices[i] for i in range(0, len(prices), step)]
-                if decimated[-1] != prices[-1]:
-                    decimated.append(prices[-1])
-                prices = decimated
-            cp = prices[-1]["price"]
-
-            bl = _ticker_baseline_points(TRACKED_TICKERS_DB_PATH, figi,
-                                         {"day": None, "week": 7, "month": 30})
-            def _pct_from_base(base):
-                if not base or not base.get("price") or base["price"] <= 0:
-                    return None, None
-                ch = cp - base["price"]
-                return round(ch, 2), round(ch / base["price"] * 100, 2)
-            dy_abs, dy_pct = _pct_from_base(bl["day"] if bl else None)
-            wk_abs, wk_pct = _pct_from_base(bl["week"] if bl else None)
-            mo_abs, mo_pct = _pct_from_base(bl["month"] if bl else None)
-
-            result[group["ticker"]] = {
-                "figi": figi, "current_price": cp,
-                "day_change": dy_abs, "day_change_pct": dy_pct,
-                "week_change": wk_abs, "week_change_pct": wk_pct,
-                "month_change": mo_abs, "month_change_pct": mo_pct,
-                "baseline": bl,
-                "prices": prices
-            }
-        return result
 
     t0 = time.time()
-    data = cached_invest("tickers", TRACKED_TICKERS_DB_PATH,
-                         {"interval": interval, "period": period, "start_ts": start_ts, "end_ts": end_ts}, generate)
+    data = _invest_tickers_payload(interval, period, start_ts, end_ts)
     elapsed = int((time.time() - t0) * 1000)
     tkeys = len(data) if isinstance(data, dict) else 0
     print(f"[INVEST] tickers interval={interval} figis={tkeys} cache={os.path.exists(os.path.join(CACHE_DIR, invest_cache_key('tickers', interval=interval, period=period, start_ts=start_ts, end_ts=end_ts) + '.json'))} ms={elapsed}", flush=True)
@@ -938,6 +808,218 @@ def _write_battery_payload(db_path=DB_PATH, device_id=None, battery_level=None):
         return {"_error": str(e)}
 
 
+# ---- Invest payload-хелперы медиатора (общие с /api/invest/*) ----
+def _invest_history_payload(interval="hour", period="-30 day", start_ts=None,
+                            end_ts=None, after_ts=None):
+    """Полный payload истории капитала (тот же путь, что GET /api/invest/history)."""
+    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600,
+                   'sixhour': 21600, 'day': 86400}.get(interval, 3600)
+    base = {"interval": interval, "period": period, "start_ts": start_ts, "end_ts": end_ts}
+    if after_ts is not None:
+        return invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH,
+                                        start_epoch=start_ts, end_epoch=end_ts,
+                                        after_ts=after_ts)
+    return cached_invest("history", INVEST_DB_PATH, base,
+                         lambda: invest_repo.read_history(period, bucket_size, db_path=INVEST_DB_PATH,
+                                                          start_epoch=start_ts, end_epoch=end_ts),
+                         ttl=30)
+
+
+def _invest_tickers_payload(interval="hour", period="-28 day", start_ts=None, end_ts=None):
+    """Полный payload тикеров (тот же путь, что GET /api/invest/tickers)."""
+    bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600,
+                   'sixhour': 21600, 'day': 86400}.get(interval, 3600)
+
+    def generate():
+        if not os.path.exists(TRACKED_TICKERS_DB_PATH):
+            return {"_error": "Ticker DB not found", "_error_code": 404}
+        rows = invest_repo.read_prices(period, db_path=TRACKED_TICKERS_DB_PATH,
+                                       start_epoch=start_ts, end_epoch=end_ts)
+        # Фолбэк на полный диапазон только когда явный from/to НЕ задан,
+        # чтобы тикеры не выходили за границы диапазона портфеля.
+        if not rows and start_ts is None and end_ts is None:
+            rows = invest_repo.read_prices(None, db_path=TRACKED_TICKERS_DB_PATH)
+
+        ticker_groups = {}
+        for r in rows:
+            figi = r["figi"]
+            if figi not in ticker_groups:
+                ticker_groups[figi] = {"ticker": r["ticker"] or figi,
+                                       "class_code": r["class_code"], "prices": {}}
+            dt = datetime.fromisoformat(r["timestamp"].replace('Z', '+00:00'))
+            bucket_key = str(int(dt.timestamp() / bucket_size) * bucket_size)
+            ticker_groups[figi]["prices"][bucket_key] = {
+                "timestamp": r["timestamp"], "price": round(r["price"], 2)}
+
+        result = {}
+        MAX_TICKER_POINTS = 3000
+        for figi, group in ticker_groups.items():
+            prices = [group["prices"][k] for k in sorted(group["prices"].keys())]
+            if not prices:
+                continue
+            if len(prices) > MAX_TICKER_POINTS:
+                step = max(1, (len(prices) + MAX_TICKER_POINTS - 1) // MAX_TICKER_POINTS)
+                decimated = [prices[i] for i in range(0, len(prices), step)]
+                if decimated[-1] != prices[-1]:
+                    decimated.append(prices[-1])
+                prices = decimated
+            cp = prices[-1]["price"]
+
+            bl = _ticker_baseline_points(TRACKED_TICKERS_DB_PATH, figi,
+                                         {"day": None, "week": 7, "month": 30})
+
+            def _pct_from_base(base):
+                if not base or not base.get("price") or base["price"] <= 0:
+                    return None, None
+                ch = cp - base["price"]
+                return round(ch, 2), round(ch / base["price"] * 100, 2)
+
+            dy_abs, dy_pct = _pct_from_base(bl["day"] if bl else None)
+            wk_abs, wk_pct = _pct_from_base(bl["week"] if bl else None)
+            mo_abs, mo_pct = _pct_from_base(bl["month"] if bl else None)
+
+            result[group["ticker"]] = {
+                "figi": figi, "current_price": cp,
+                "day_change": dy_abs, "day_change_pct": dy_pct,
+                "week_change": wk_abs, "week_change_pct": wk_pct,
+                "month_change": mo_abs, "month_change_pct": mo_pct,
+                "baseline": bl,
+                "prices": prices
+            }
+        return result
+
+    return cached_invest("tickers", TRACKED_TICKERS_DB_PATH,
+                         {"interval": interval, "period": period,
+                          "start_ts": start_ts, "end_ts": end_ts}, generate,
+                         ttl=30)
+
+
+def _invest_turnover_payload():
+    """Оборот по источникам (кеш 90с) — общий для /api/invest/turnover и медиатора."""
+    now = time.time()
+    ttl = 90
+    hit = _turnover_cache.get("data", None)
+    if hit is not None and (now - _turnover_cache.get("at", 0)) < ttl:
+        return hit
+
+    import sqlite3
+    now_msk = datetime.now(timezone.utc) + timedelta(hours=3)
+    today = now_msk.strftime("%Y-%m-%d")
+    out = {}
+    try:
+        con = sqlite3.connect(INVEST_DB_PATH)
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            "SELECT source, capital, turnover FROM strategy_summary"
+            " WHERE day=? ORDER BY id DESC", (today,)).fetchall()
+        seen = set()
+        for r in rows:
+            if r["source"] in seen:
+                continue
+            seen.add(r["source"])
+            total = r["turnover"] or 0
+            # Комиссия: Тинвест — 0,02% от оборота; Финам — тариф «Трейдер n6»
+            # (брекетная ставка МосБиржи; стратегия торгует TGLD на MOEX)
+            if r["source"] == "tinkoff":
+                comm = round(total * 0.0002, 2)
+            elif r["source"] == "finam":
+                # Стратегия Финам торгует на СПБ Бирже:
+                # брекетная ставка + урегулирование СПБ 0,01%
+                comm = round(invest_repo.finam_commission_estimate(0, total), 2)
+            else:
+                comm = None
+            out[r["source"]] = {
+                "total": total,
+                "buy": 0, "sell": 0,
+                "commission": comm,
+                "capital": r["capital"],
+                "strategy": True,
+            }
+        con.close()
+    except sqlite3.Error:
+        pass
+    # Фолбэк: все сделки счёта с начала суток (UTC-полночь)
+    missing = {"tinkoff", "finam"} - set(out)
+    if missing:
+        since = int(datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0).timestamp())
+        for src, d in invest_repo.read_turnover_since(since, db_path=INVEST_DB_PATH).items():
+            if src in missing:
+                total_fb = d.get("total", 0)
+                if src == "finam":
+                    d["commission"] = round(invest_repo.finam_commission_estimate(0, total_fb), 2)
+                elif src == "tinkoff":
+                    d["commission"] = round(total_fb * 0.0002, 2)
+                d["strategy"] = False
+                out[src] = d
+
+    _turnover_cache["data"] = out
+    _turnover_cache["at"] = now
+    return out
+
+
+def _invest_turnover_details_payload():
+    """Детализация оборота за сегодня: total/капитал из strategy_summary +
+    база/ставка/комиссия/поручения из сообщения «Тариф процентный» (bot_events).
+    Используется секцией медиатора invest.turnover_details."""
+    import re
+
+    def _num(t, pat):
+        m = re.search(pat, t)
+        if not m:
+            return None
+        try:
+            return float(re.sub(r"[^\d.]", "", m.group(1)))
+        except ValueError:
+            return None
+
+    now_msk = datetime.now(timezone.utc) + timedelta(hours=3)
+    today = now_msk.strftime("%Y-%m-%d")
+    out = {}
+    try:
+        con = sqlite3.connect(INVEST_DB_PATH)
+        con.row_factory = sqlite3.Row
+        for chat_like, src in (("%Финам%", "finam"), ("%Т-Инвест%", "tinkoff")):
+            d = {"day": today, "turnover": None, "capital": None, "commission": None,
+                 "base": None, "session": None, "evening": None, "orders": None,
+                 "rate_percent": None, "fee_per_order": None, "strategy": False}
+            row = con.execute(
+                "SELECT capital, turnover, commission FROM strategy_summary"
+                " WHERE source=? AND day=? ORDER BY id DESC LIMIT 1",
+                (src, today)).fetchone()
+            if row:
+                d["strategy"] = True
+                d["turnover"] = row["turnover"]
+                d["capital"] = row["capital"]
+                d["commission"] = row["commission"]
+            # Сообщение «✅ Тариф процентный … за <сегодня>» из канала брокера.
+            evs = con.execute(
+                "SELECT text FROM bot_events WHERE chat LIKE ?"
+                " AND text LIKE '%Тариф процентный%' ORDER BY ts_epoch DESC LIMIT 30",
+                (chat_like,)).fetchall()
+            for ev in evs:
+                txt = ev["text"] or ""
+                tm = re.search(r"\bза\s+(\d{4}-\d{2}-\d{2})\b", txt)
+                if not tm or tm.group(1) != today:
+                    continue
+                d["commission"] = _num(txt, r"Комиссия\s*([\d' ]+?)₽") or d["commission"]
+                d["base"] = _num(txt, r"при\s+базе\s*([\d' ]+?)₽")
+                d["session"] = _num(txt, r"сессия\s*([\d' ]+?)\s*\+")
+                d["evening"] = _num(txt, r"вечер\s+прошлого\s+дня\s*([\d' ]+?)\)")
+                mo = re.search(r"(\d+)\s+исполненных\s+поручени", txt)
+                d["orders"] = int(mo.group(1)) if mo else None
+                mr = re.search(r"Ставка\s+([\d.]+)\s*%", txt)
+                d["rate_percent"] = float(mr.group(1)) if mr else None
+                mf = re.search(r"([\d.,]+)₽\s+на\s+поручение", txt)
+                d["fee_per_order"] = float(mf.group(1).replace(",", ".")) if mf else None
+                break
+            out[src] = d
+        con.close()
+    except sqlite3.Error:
+        pass
+    return out
+
+
 # Стабильные токены секций (SHA-256 sort_keys JSON; invest.history — _latest_epoch).
 def _stable_token(payload):
     import hashlib, json as _json
@@ -946,6 +1028,14 @@ def _stable_token(payload):
     blob = _json.dumps(payload, ensure_ascii=False, sort_keys=True,
                        separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(blob).hexdigest()[:16]
+
+
+def _section_token(sect, payload):
+    """Токен секции: для invest.history — `_latest_epoch` (дельта), для
+    остальных — стабильный hash payload."""
+    if sect == "invest.history" and isinstance(payload, dict) and payload.get("_latest_epoch") is not None:
+        return str(payload["_latest_epoch"])
+    return _stable_token(payload)
 
 
 # Карта reader'ов секций медиатора (чистые payload без jsonify).
@@ -958,6 +1048,19 @@ _DATA_MEDIATOR_READERS = {
         interval=(p or {}).get("interval", "hour"),
         period_param=(p or {}).get("period"),
         limit=(p or {}).get("limit")),
+    "invest.history": lambda p: _invest_history_payload(
+        interval=(p or {}).get("interval", "hour"),
+        period=(p or {}).get("period", "-30 day"),
+        start_ts=(p or {}).get("start_ts"),
+        end_ts=(p or {}).get("end_ts"),
+        after_ts=(p or {}).get("after_ts")),
+    "invest.tickers": lambda p: _invest_tickers_payload(
+        interval=(p or {}).get("interval", "hour"),
+        period=(p or {}).get("period", "-28 day"),
+        start_ts=(p or {}).get("start_ts"),
+        end_ts=(p or {}).get("end_ts")),
+    "invest.turnover": lambda p: _invest_turnover_payload(),
+    "invest.turnover_details": lambda p: _invest_turnover_details_payload(),
     "settings": lambda p: get_settings(),
 }
 
@@ -997,19 +1100,37 @@ def api_data_mediator():
     for sect, client_tok in v.items():
         reader = _DATA_MEDIATOR_READERS.get(sect)
         if reader is None:
-            changed[sect] = {"_error": f"unknown section: {sect}"}
-            tokens[sect] = _stable_token(changed[sect])
+            err = {"_error": f"unknown section: {sect}"}
+            err_tok = _stable_token(err)
+            tokens[sect] = err_tok
+            if err_tok != client_tok:
+                changed[sect] = err
             continue
         try:
-            payload = reader(params.get(sect, {}) if isinstance(params, dict) else {})
-            tok = _stable_token(payload)
+            sect_params = params.get(sect, {}) if isinstance(params, dict) else {}
+            if not isinstance(sect_params, dict):
+                sect_params = {}
+            else:
+                sect_params = dict(sect_params)
+            tail_mode = (sect == "invest.history" and client_tok
+                         and str(client_tok).isdigit() and int(client_tok) > 0)
+            if tail_mode:
+                # Дельта: клиент уже знает _latest_epoch (токен секции) → читаем
+                # только хвост после него, а не весь массив истории.
+                sect_params["after_ts"] = int(client_tok)
+            payload = reader(sect_params)
+            if tail_mode and isinstance(payload, dict) and not payload.get("_error"):
+                payload["_tail"] = True
+            tok = _section_token(sect, payload)
             tokens[sect] = tok
             if tok != client_tok:
                 changed[sect] = payload
         except Exception as e:
             err = {"_error": str(e)}
-            changed[sect] = err
-            tokens[sect] = _stable_token(err)
+            err_tok = _stable_token(err)
+            tokens[sect] = err_tok
+            if err_tok != client_tok:
+                changed[sect] = err
 
     writes = {}
     for sect, payload in (write_payloads.items() if isinstance(write_payloads, dict) else []):
