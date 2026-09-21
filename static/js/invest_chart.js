@@ -9,11 +9,14 @@
 
     let investChart = null;
     let isUpdating = false;
+    let pendingUpdate = false;
     let initAttempts = 0;
     let dailyGrowthMarks = [];
     let dailyBars = [];
     let resizeTimeout = null;
     let updateTimeout = null;
+    let _pendingXHR = null;
+    let _lastTimestamps = null;
 
     const MAX_INIT_ATTEMPTS = 15;
     const INIT_ATTEMPT_DELAY = 200;
@@ -33,13 +36,13 @@
             color: '#FFD700',
             yAxisID: 'y_tgold',
             tickColor: '#ffd9007e',
-            tickFormat: function(v) { return v.toFixed(1); },
+            tickFormat: function(v) { return v.toFixed(2); },
             borderWidth: 0.75,
             borderDash: [],
             pointRadius: 0,
             hidden: false,
             aggregation: 'last',
-            axisPosition: 'left',
+            axisPosition: 'right',
             maxTicksLimit: 6,
         },
         'XAU/USD': {
@@ -47,7 +50,7 @@
             color: '#cc7722',
             yAxisID: 'y_xau',
             tickColor: '#cc7722',
-            tickFormat: function(v) { return v >= 1000 ? (v / 1000).toFixed(1) + '\u043A' : v.toFixed(0); },
+            tickFormat: function(v) { return (v / 1000).toFixed(3); },
             borderWidth: 0.75,
             borderDash: [1, 1],
             pointRadius: 0,
@@ -150,8 +153,16 @@
     }
 
     function buildScales(portfolioMin, portfolioMax, showTime, finamMin, finamMax) {
-        var portfolioRange = portfolioMax - portfolioMin;
-        var portfolioPadding = portfolioRange > 0 ? portfolioRange * 0.1 : Math.max(portfolioMax * 0.1, 1000);
+        // Синхронизация ₽-осей: общий диапазон по максимуму обоих портфелей,
+        // чтобы абсолютные значения Tinkoff и Finam можно было сравнивать
+        // напрямую (max(max_T, max_F), min(min_T, min_F) + запас).
+        var haveFinam = finamMax > 0 && finamMin != null && isFinite(finamMin);
+        var commonMin = haveFinam ? Math.min(portfolioMin, finamMin) : portfolioMin;
+        var commonMax = haveFinam ? Math.max(portfolioMax, finamMax) : portfolioMax;
+        var commonRange = commonMax - commonMin;
+        var commonPadding = commonRange > 0 ? commonRange * 0.1 : Math.max(commonMax * 0.1, 1000);
+        var axisMin = Math.max(0, commonMin - commonPadding);
+        var axisMax = Math.max(commonMax + commonPadding, commonMin + 100);
 
         var xTickColor = function(ctx) {
             if (showTime) return '#ffd900';
@@ -238,8 +249,8 @@
             y_portfolio: {
                 position: 'right',
                 stacked: false,
-                min: Math.max(0, portfolioMin - portfolioPadding),
-                max: Math.max(portfolioMax + portfolioPadding, portfolioMin + 100),
+                min: axisMin,
+                max: axisMax,
                 display: true,
                 ticks: {
                     beginAtZero: false,
@@ -263,15 +274,14 @@
             }
         };
 
-        // Отдельная правая ось для капитала Finam (розовые метки), если есть данные
+        // Отдельная правая ось для капитала Finam (розовые метки), если есть данные.
+        // Диапазон тот же (синхронизирован), что и у Tinkoff — для сравнения абсолютов.
         if (finamMax > 0) {
-            var finamRange = finamMax - finamMin;
-            var finamPadding = finamRange > 0 ? finamRange * 0.1 : Math.max(finamMax * 0.1, 100);
             scales.y_finam = {
                 position: 'right',
                 stacked: false,
-                min: Math.max(0, finamMin - finamPadding),
-                max: Math.max(finamMax + finamPadding, finamMin + 100),
+                min: axisMin,
+                max: axisMax,
                 display: true,
                 ticks: {
                     beginAtZero: false,
@@ -427,6 +437,11 @@
             if (found) {
                 lastValid = sum;
                 values.push(sum);
+                // Источник присутствует в бакете, но share-блока нет => позиций
+                // TMON/LQDT в этот момент нет — обнуляем, а не переносим устаревшее
+                // (иначе штриховка TMON/LQDT видна в торговую сессию без позиций).
+                if (tm === null) tm = 0;
+                if (lq === null) lq = 0;
             } else {
                 values.push(lastValid !== null ? lastValid : null);
             }
@@ -474,7 +489,7 @@
             lqdt: 'rgba(220, 100, 140, 0.8)'
         };
         var FILL_ALPHA = 0;
-        var HATCH_ALPHA = 0.35;
+        var HATCH_ALPHA = 0.45;
         var SPACING = 16;
         var LINE_W = 1;
 
@@ -495,8 +510,8 @@
         }
 
         var _patternCache = {};
-        function hatchPattern(color, angleDeg) {
-            var key = color + '|' + angleDeg;
+        function hatchPattern(color, angleDeg, alpha) {
+            var key = color + '|' + angleDeg + '|' + alpha;
             if (_patternCache[key]) return _patternCache[key];
             var dpr = (window.devicePixelRatio || 1) / 4;
             var rad = angleDeg * Math.PI / 180;
@@ -510,7 +525,7 @@
             var ctx = c.getContext('2d');
             ctx.scale(dpr, dpr);
             ctx.clearRect(0, 0, tileW, tileH);
-            ctx.strokeStyle = rgba(color, HATCH_ALPHA);
+            ctx.strokeStyle = rgba(color, alpha != null ? alpha : HATCH_ALPHA);
             ctx.lineWidth = 1;
             var normalX = -sin;
             var normalY = cos;
@@ -527,8 +542,8 @@
             return _patternCache[key];
         }
 
-        function makeLayer(name, pctArr, color, stack, axisId, dashed, hatchDir) {
-            var bg = hatchPattern(color, hatchDir);
+        function makeLayer(name, pctArr, color, stack, axisId, dashed, hatchDir, hatchAlpha) {
+            var bg = hatchPattern(color, hatchDir, hatchAlpha);
             return {
                 label: name,
                 data: pctArr,
@@ -537,10 +552,10 @@
                 borderWidth: 0.5,
                 borderDash: [],
                 tension: chartTension(0.2),
-                fill: true,
+                fill: '-1',
                 pointRadius: 0,
                 pointHoverRadius: 0,
-                spanGaps: true,
+                spanGaps: false,
                 yAxisID: axisId || 'y_tgld',
                 stack: stack
             };
@@ -554,19 +569,21 @@
         var tgldPct = [], tmonPct = [], lqdtPct = [];
         for (var i = 0; i < len; i++) {
             tgldPct.push((tgldArr[i] || 0) * 100);
-            tmonPct.push((tmonArr[i] || 0) * 100);
-            lqdtPct.push((lqdtArr[i] || 0) * 100);
+            // 0 (не null): в стеке LQDT база = TGLD+TMON, штриховка идёт к уровню
+            // нижестоящего слоя, а не к нулю; spanGaps:false обрывает заливку на нулях
+            tmonPct.push(tmonArr[i] > 0 ? tmonArr[i] * 100 : 0);
+            lqdtPct.push(lqdtArr[i] > 0 ? lqdtArr[i] * 100 : 0);
         }
-        ds.push(makeLayer('\u0422:LQDT', lqdtPct, TICKER_COLORS.lqdt, 'tf', null, false, -45));
-        ds.push(makeLayer('\u0422:TMON', tmonPct, TICKER_COLORS.tmon, 'tf', null, false, -45));
         ds.push({
             label: '\u0422:TGLD', data: tgldPct,
             borderColor: rgba(TICKER_COLORS.tgld, 0.5),
-            backgroundColor: rgba(TICKER_COLORS.tgld, 0.05),
+            backgroundColor: rgba(TICKER_COLORS.tgld, 0.30),
             borderWidth: 0.5, borderDash: [], tension: chartTension(0.2),
-            fill: true, pointRadius: 0, pointHoverRadius: 0,
+            fill: { target: 'origin' }, pointRadius: 0, pointHoverRadius: 0,
             spanGaps: true, yAxisID: 'y_tgld', stack: 'tf'
         });
+        ds.push(makeLayer('\u0422:TMON', tmonPct, TICKER_COLORS.tmon, 'tf', null, false, -45));
+        ds.push(makeLayer('\u0422:LQDT', lqdtPct, TICKER_COLORS.lqdt, 'tf', null, false, -45, 0.99));
 
         if (includeFinam) {
             var ftgldArr = finamAgg['tgld'];
@@ -576,19 +593,18 @@
             var fTgldPct = [], fTmonPct = [], fLqdtPct = [];
             for (var i = 0; i < fLen; i++) {
                 fTgldPct.push((ftgldArr[i] || 0) * 100);
-                fTmonPct.push((ftmonArr[i] || 0) * 100);
-                fLqdtPct.push((flqdtArr[i] || 0) * 100);
+                fTmonPct.push(ftmonArr[i] > 0 ? ftmonArr[i] * 100 : 0);
+                fLqdtPct.push(flqdtArr[i] > 0 ? flqdtArr[i] * 100 : 0);
             }
-            ds.push(makeLayer('\u0424:LQDT', fLqdtPct, TICKER_COLORS.lqdt, 'fn', 'y_tgld_finam', true, 45));
-            ds.push(makeLayer('\u0424:TMON', fTmonPct, TICKER_COLORS.tmon, 'fn', 'y_tgld_finam', true, 45));
             ds.push({
                 label: '\u0424:TGLD', data: fTgldPct,
-                borderColor: rgba('#5b6ee8', 0.5),
-                backgroundColor: rgba('#5b6ee8', 0.05),
+                borderColor: 'rgba(74,123,216,0.9)',
+                backgroundColor: 'rgba(74,123,216,0.12)',
                 borderWidth: 0.5, borderDash: [], tension: chartTension(0.2),
-                fill: true, pointRadius: 0, pointHoverRadius: 0,
+                fill: { target: 'origin' }, pointRadius: 0, pointHoverRadius: 0,
                 spanGaps: true, yAxisID: 'y_tgld_finam', stack: 'fn'
-            });
+            });            ds.push(makeLayer('\u0424:TMON', fTmonPct, TICKER_COLORS.tmon, 'fn', 'y_tgld_finam', true, 45));
+            ds.push(makeLayer('\u0424:LQDT', fLqdtPct, TICKER_COLORS.lqdt, 'fn', 'y_tgld_finam', true, 45, 0.99));
         }
 
         return ds;
@@ -598,18 +614,33 @@
     // TICKER DATA LOADER — replaces loadTgoldToChart
     // ================================================================
 
+    // Tickers cache: котировки агрегируются в бакеты (20мин/1ч), поэтому
+    // свежесть 30с достаточна — не грузить 200kB каждый тик.
+    var _tickerCache = { key: null, data: null, at: 0 };
+    var TICKER_CACHE_TTL_MS = 30000;
+
     window.loadTickersToChart = function(chart, portfolioTimestamps) {
         if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
 
         var interval = window.currentInterval || 'hour';
         var tPeriod = getSetting('invest_panel_period', '-35 day');
         var tApiPeriod = tPeriod === '-1 day' ? '-1.5 day' : tPeriod;
+        var tStart = getSetting('invest_panel_start_ts', null);
+        var tEnd = getSetting('invest_panel_end_ts', null);
+        var tRangeQs = '';
+        if (tStart) tRangeQs = '&start_ts=' + encodeURIComponent(tStart) + (tEnd ? ('&end_ts=' + encodeURIComponent(tEnd)) : '');
 
-        $.getJSON('/api/invest/tickers?interval=' + interval + '&period=' + encodeURIComponent(tApiPeriod))
-            .done(function(tickersData) {
-                if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
+        var cacheKey = interval + '|' + tApiPeriod + '|' + (tStart||'') + '|' + (tEnd||'');
+        var now = Date.now();
+        var useCache = (_tickerCache.key === cacheKey && _tickerCache.data && (now - _tickerCache.at) < TICKER_CACHE_TTL_MS);
 
-                var legendState = getLegendState();
+        function applyTickers(tickersData) {
+            if (typeof window.__investTickerCache === 'undefined') window.__investTickerCache = {};
+            window.__investTickerCache.data = tickersData;
+            window.__investTickerCache.at = Date.now();
+            if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
+
+            var legendState = getLegendState();
 
                 Object.keys(TICKER_REGISTRY).forEach(function(key) {
                     var cfg = TICKER_REGISTRY[key];
@@ -650,17 +681,110 @@
                                 yAxisID: cfg.yAxisID
                             });
                         }
-                    } catch (e) {
-                        console.error('[InvestPlot] ' + key + ' error:', e);
-                    }
-                });
+} catch (e) {
+                    console.error('[InvestPlot] ' + key + ' error:', e);
+                }
+            });
 
-                try {
+            // Период-метки TGLD (слева, как у портфеля): стартовая цена без %,
+            // финальная с %-м изменением. Вычисляем из фактических цен тикера.
+            try {
+                var tgldTicker = tickersData && tickersData['TGLD@'];
+                if (tgldTicker && tgldTicker.prices && tgldTicker.prices.length > 0) {
+                    var ppt = tgldTicker.prices;
+                    var tgldInit = null, tgldFinal = null;
+                    for (var pi = 0; pi < ppt.length; pi++) {
+                        var pv = Number(ppt[pi].price);
+                        if (isNaN(pv) || pv <= 0) continue;
+                        if (tgldInit === null) tgldInit = pv;
+                        tgldFinal = pv;
+                    }
+                    if (tgldInit !== null && tgldFinal !== null) {
+                        var tgldDelta = tgldInit > 0 ? ((tgldFinal - tgldInit) / tgldInit) * 100 : 0;
+                        var tglSrc = {
+                            label: 'TGLD',
+                            initialValue: tgldInit,
+                            finalValue: tgldFinal,
+                            delta: tgldDelta,
+                            yAxisID: 'y_tgold',
+                            color: '#FFD700',
+                            decimals: 2
+                        };
+                        var ps = (chart._periodSources || []).filter(function(x) { return x.label !== 'TGLD'; });
+                        ps.push(tglSrc);
+                        chart._periodSources = ps;
+                    }
+                }
+            } catch (e) {
+                console.error('[InvestPlot] TGLD period labels error:', e);
+            }
+
+            // Период-метки XAU (слева, как у портфеля): стартовая цена без %,
+            // финальная с %-м изменением, из фактических цен тикера.
+            try {
+                var xauTicker = tickersData && tickersData['XAU/USD'];
+                if (xauTicker && xauTicker.prices && xauTicker.prices.length > 0) {
+                    var pxau = xauTicker.prices;
+                    var xauInit = null, xauFinal = null;
+                    for (var xi = 0; xi < pxau.length; xi++) {
+                        var xv = Number(pxau[xi].price);
+                        if (isNaN(xv) || xv <= 0) continue;
+                        if (xauInit === null) xauInit = xv;
+                        xauFinal = xv;
+                    }
+                    if (xauInit !== null && xauFinal !== null) {
+                        var xauDelta = xauInit > 0 ? ((xauFinal - xauInit) / xauInit) * 100 : 0;
+                        var xauSrc = {
+                            label: 'XAU',
+                            initialValue: xauInit,
+                            finalValue: xauFinal,
+                            delta: xauDelta,
+                            yAxisID: 'y_xau',
+                            color: '#cc7722',
+                            fmt: function(v) { return (v / 1000).toFixed(3); }
+                        };
+                        var psx = (chart._periodSources || []).filter(function(x) { return x.label !== 'XAU'; });
+                        psx.push(xauSrc);
+                        chart._periodSources = psx;
+                    }
+                }
+            } catch (e) {
+                console.error('[InvestPlot] XAU period labels error:', e);
+            }
+
+try {
                     chart.resize();
                     chart.update('none');
                 } catch (e) {
                     console.error('[InvestPlot] Chart update error:', e);
                 }
+        }
+
+        // Медиатор: если секция invest.tickers свежее собственного кэша — берём её.
+        // Тикеры приходят полным payload прямо из /api/data_mediator (без GET).
+        if (window.PanelMediator && typeof window.PanelMediator.healthy === 'function' &&
+                window.PanelMediator.healthy() && window.PanelMediator.getLatest) {
+            var medTickers = window.PanelMediator.getLatest('invest.tickers');
+            if (medTickers && typeof medTickers === 'object' && !medTickers._error) {
+                _tickerCache.key = cacheKey;
+                _tickerCache.data = medTickers;
+                _tickerCache.at = Date.now();
+                applyTickers(medTickers);
+                return;
+            }
+        }
+
+        if (useCache) {
+            applyTickers(_tickerCache.data);
+            return;
+        }
+
+        $.getJSON('/api/invest/tickers?interval=' + interval + '&period=' + encodeURIComponent(tApiPeriod) + tRangeQs + '&_=' + Date.now())
+            .done(function(tickersData) {
+                _tickerCache.key = cacheKey;
+                _tickerCache.data = tickersData;
+                _tickerCache.at = Date.now();
+                applyTickers(tickersData);
             })
             .fail(function(xhr, status, error) {
                 console.error('[InvestPlot] Error loading tickers:', error, xhr.status);
@@ -711,21 +835,30 @@
             var color = s.color || '#2cba99';
 
             function fmt(v) {
-                if (v >= 1e6) return (v / 1e6).toFixed(3).replace('.', ',') + 'М';
-                if (v >= 1e3) return (v / 1e3).toFixed(3).replace('.', ',') + 'К';
-                return String(Math.round(v));
+                if (s.fmt) return s.fmt(v);
+                if (s.decimals != null) return Number(v).toFixed(s.decimals);
+                if (Math.abs(v) < 100) return String(Math.round(v));
+                return (v / 1e3).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
             }
 
-            var LABEL_RIGHT_X = chartArea.left + 78;
+            // Левый край числовых меток левых осей (например XAU). Маркеры капитала
+            // стартуем с того же края, чтобы они были максимально слева.
+            var leftAxisEdge = 0;
+            var xauScale = scales['y_xau'] || scales['y_tgld'];
+            if (xauScale && xauScale.left != null) {
+                leftAxisEdge = xauScale.left;
+            } else {
+                leftAxisEdge = chartArea.left;
+            }
+            var LABEL_RIGHT_X = leftAxisEdge;
             var initialY = yScale.getPixelForValue(s.posInitial != null ? s.posInitial : initialVal);
             if (!isFinite(initialY)) initialY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
-            var initDeltaStr = s.prevDelta != null ? (s.prevDelta >= 0 ? ' +' + s.prevDelta.toFixed(2) + '%' : ' ' + s.prevDelta.toFixed(2) + '%') : '';
-            labels.push({ x: LABEL_RIGHT_X, y: initialY, text: fmt(initialVal) + initDeltaStr, align: 'right', color: color, source: i });
+            labels.push({ x: LABEL_RIGHT_X, y: initialY, text: fmt(initialVal), align: 'left', color: color, source: i });
 
             var finalY = yScale.getPixelForValue(s.posFinal != null ? s.posFinal : finalVal);
             if (!isFinite(finalY)) finalY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
             var deltaStr = delta >= 0 ? ' +' + delta.toFixed(2) + '%' : ' ' + delta.toFixed(2) + '%';
-            labels.push({ x: LABEL_RIGHT_X, y: finalY, text: fmt(finalVal) + deltaStr, align: 'right', color: color, delta: delta, source: i });
+            labels.push({ x: LABEL_RIGHT_X, y: finalY, text: fmt(finalVal) + deltaStr, align: 'left', color: color, delta: delta, source: i });
         }
 
         var MIN_GAP = 14;
@@ -741,13 +874,14 @@
 
         for (var k = 0; k < labels.length; k++) {
             var lb = labels[k];
-            ctx.font = "bold 11px sans-serif";
+            var fontSize = 16;
+            ctx.font = "bold " + fontSize + "px sans-serif";
             ctx.textAlign = lb.align;
             var tw = ctx.measureText(lb.text).width;
             var pad = 4;
             var bx = lb.align === 'right' ? lb.x - tw - pad : lb.x - pad;
-            var by = lb.y - 11;
-            var bh = 15;
+            var by = lb.y - 16;
+            var bh = 21;
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
             ctx.fillRect(bx, by, tw + pad * 2, bh);
             ctx.fillStyle = lb.color;
@@ -779,7 +913,14 @@
             }
 
             var existingChart = Chart.getChart(canvas);
-            if (existingChart) existingChart.destroy();
+            if (existingChart) {
+                if (existingChart._legendClickHandler) {
+                    canvas.removeEventListener('click', existingChart._legendClickHandler);
+                }
+                if (existingChart._legendDragCleanup) existingChart._legendDragCleanup();
+                if (existingChart._investZoomCleanup) existingChart._investZoomCleanup();
+                existingChart.destroy();
+            }
             canvas.width = 0;
             canvas.height = 0;
 
@@ -808,6 +949,17 @@
                     if (midnightPlugin) plugins.push(midnightPlugin);
                 } catch (e) {
                     console.error('[InvestPlot] MidnightLines plugin init error:', e);
+                }
+            }
+
+            if (window.ApiErrorLinesPlugin) {
+                try {
+                    var apiErrorPlugin = window.initChartPlugin(
+                        window.ApiErrorLinesPlugin(null), { enabled: true }
+                    );
+                    if (apiErrorPlugin) plugins.push(apiErrorPlugin);
+                } catch (e) {
+                    console.error('[InvestPlot] ApiErrorLines plugin init error:', e);
                 }
             }
 
@@ -907,7 +1059,7 @@
             };
 
             var chart = new Chart(ctx, config);
-            chart.canvas.addEventListener('click', function(event) {
+            chart._legendClickHandler = function(event) {
                 if (hitRect(chart._resetZoomRect, event, canvas)) {
                     resetInvestZoom(chart);
                     return;
@@ -921,13 +1073,15 @@
                     return;
                 }
                 toggleLegendDataset(chart, event);
-            });
+            };
+            chart.canvas.addEventListener('click', chart._legendClickHandler);
             chart._legendPos = getLegendPos();
             attachLegendDrag(chart);
             attachInvestZoom(chart);
             chart._extrema = extrema;
             chart._dailyGrowthMarks = dailyGrowthMarks;
             chart._midnightTimestamps = chartData.timestamps;
+            chart._apiErrors = chartData._apiErrors;
             chart._currentInterval = currentInterval;
             chart._labelMode = labelMode;
             chart._periodSources = periodSources;
@@ -943,22 +1097,44 @@
     // MAIN UPDATE FLOW
     // ================================================================
 
+    // Запускает отложенный re-render после завершения текущего update,
+    // чтобы не терять смену интервала/диапазона, пришедшую во время рендера.
+    function runPendingUpdate() {
+        if (!pendingUpdate) return;
+        pendingUpdate = false;
+        setTimeout(updateInvestPlot, 10);
+    }
+
     function updateInvestPlot() {
         var savedView = getSetting('chartView');
         if (savedView === 'energy') {
             console.log('[InvestPlot] Battery chart active, skip update');
-            return;
-        }
+            return;        }
 
         if (isUpdating) {
-            console.warn('[InvestPlot] Update already in progress, skipping');
+            // Coalescing: не пропускаем, а запрашиваем повторный рендер сразу
+            // после завершения текущего — чтобы смена интервала/диапазона
+            // не терялась (иначе график «сжимается» по X до перезагрузки).
+            pendingUpdate = true;
+            console.warn('[InvestPlot] Update in progress, queued rerun');
             return;
         }
         isUpdating = true;
 
+        if (_pendingXHR) {
+            try { _pendingXHR.abort(); } catch(e) {}
+            _pendingXHR = null;
+            console.log('[InvestPlot] Aborted stale XHR');
+        }
+
         var updateTimeoutId = setTimeout(function() {
+            _pendingXHR = null;
             isUpdating = false;
             console.warn('[InvestPlot] Timeout 30s, isUpdating reset');
+            if (_lastTimestamps && _lastTimestamps.length > 0) {
+                showDataFreshness(_lastTimestamps);
+            }
+            runPendingUpdate();
         }, 30000);
 
         var canvasCheck = checkCanvas();
@@ -999,29 +1175,36 @@
 
         var currentInterval = window.currentInterval || 'hour';
         var period = getSetting('invest_panel_period', '-35 day');
+        var startTs = getSetting('invest_panel_start_ts', null);
+        var endTs = getSetting('invest_panel_end_ts', null);
 
         // For '1 day' period, request 1.5 days of data from API
         var apiPeriod = period === '-1 day' ? '-1.5 day' : period;
 
-        // Fetch history + tickers in parallel
-        var historyUrl = '/api/invest/history?interval=' + currentInterval + '&period=' + encodeURIComponent(apiPeriod);
-        var tickersUrl = '/api/invest/tickers?interval=' + currentInterval + '&period=' + encodeURIComponent(apiPeriod);
+        // Fetch history (tickers грузятся отдельно в loadTickersToChart).
+        // Инкрементальный кэш: первый раз — полный ответ, дальше — только
+        // изменённый хвост (?after_ts), сервер отдаёт 1 бакет вместо 227KB.
+        var controller = new AbortController();
+        var fetchTimeout = setTimeout(function() { controller.abort(); }, 15000);
+        _pendingXHR = { abort: function() { controller.abort(); } };
 
-        $.when(
-            $.getJSON(historyUrl),
-            $.getJSON(tickersUrl)
-        ).done(function(historyResult, tickersResult) {
-            var rawData = historyResult[0];
-            var tickersData = tickersResult[0];
+        window.InvestHistoryCache.get(currentInterval, apiPeriod, startTs, endTs)
+            .then(function(results) {
+        clearTimeout(fetchTimeout);
+        if (controller.aborted) { throw new Error('aborted'); }
+        _pendingXHR = null;
+        try {
+            var rawData = results;
 
             if (!rawData || Object.keys(rawData).length === 0) {
                 console.warn('[InvestPlot] No data for investment chart');
-                isUpdating = false;
-                clearTimeout(updateTimeoutId);
                 return;
             }
 
-            var timestamps = Object.keys(rawData).filter(function(k) { return k !== '_prev'; }).sort();
+            // Тайминги: сеть уже завершена; замеряем JS-рендер (агрегация + chart.update)
+            var __tAgg = performance.now();
+
+            var timestamps = Object.keys(rawData).filter(function(k) { return k.charAt(0) !== '_'; }).sort();
 
             // Portfolio values
             var portfolioValues = [];
@@ -1042,6 +1225,7 @@
             }
 
             showDataFreshness(timestamps);
+            _lastTimestamps = timestamps;
             updateSourceBadge(rawData);
 
             // Aggregation
@@ -1165,8 +1349,32 @@
                 scales.y_portfolio.position = 'left';
             }
 
-            // Скрытая авто-ось для нормированных рядов (%)
-            scales.y_pct = { position: 'right', display: false };
+            // Скрытая авто-ось для нормированных рядов (%). Даём явный симметричный
+            // диапазон с запасом, иначе при малом разбросе % Chart.js схлопывает ось
+            // и линии Tinkoff,%/Finam,% выглядят горизонтальными.
+            var pctValues = tinkoffPct.concat(finamPct).filter(function(v) { return v != null && isFinite(v); });
+            var pctMaxAbs = 0;
+            for (var pi = 0; pi < pctValues.length; pi++) {
+                var av = Math.abs(pctValues[pi]);
+                if (av > pctMaxAbs) pctMaxAbs = av;
+            }
+            var pctBound = Math.max(pctMaxAbs * 1.15, 0.2);
+            scales.y_pct = {
+                position: 'right',
+                display: true,
+                min: -pctBound,
+                max: pctBound,
+                ticks: {
+                    display: true,
+                    callback: function(v) { return v.toFixed(2); },
+                    color: '#c9c9c9',
+                    font: { size: dpiFont(10) },
+                    autoSkip: true,
+                    maxTicksLimit: 6
+                },
+                grid: { display: false },
+                title: { display: false }
+            };
 
             var finamAxis = finamMax > 0 ? 'y_finam' : 'y_portfolio';
 
@@ -1199,7 +1407,7 @@
                     data: tinkoffSeries,
                     borderColor: '#2cba99',
                     backgroundColor: 'rgba(25, 150, 89, 0.15)',
-                    borderWidth: 2,
+                    borderWidth: 0.7,
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1213,7 +1421,7 @@
                     data: finamSeries,
                     borderColor: '#5b6ee8',
                     backgroundColor: 'rgba(91, 110, 232, 0.12)',
-                    borderWidth: 2,
+                    borderWidth: 0.7,
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1304,8 +1512,8 @@
             datasets.push({
                 label: '100%',
                 data: labels.map(function() { return 100; }),
-                borderColor: 'rgba(220, 60, 60, 0.7)',
-                borderDash: [4, 3],
+                borderColor: 'rgba(255, 255, 255, 0.85)',
+                borderDash: [8, 6],
                 borderWidth: 0.5,
                 fill: false,
                 pointRadius: 0,
@@ -1322,6 +1530,7 @@
                 investChart._extrema = extrema;
                 investChart._midnightTimestamps = aggregatedTimestamps;
                 investChart._labelMode = labelMode;
+                investChart._apiErrors = rawData._api_errors;
                 investChart.data.labels = labels;
 
                 // Update period label sources
@@ -1374,8 +1583,8 @@
                 investChart.data.datasets.push({
                     label: '100%',
                     data: labels.map(function() { return 100; }),
-                    borderColor: 'rgba(220, 60, 60, 0.7)',
-                    borderDash: [4, 3],
+                    borderColor: 'rgba(255, 255, 255, 0.85)',
+                    borderDash: [8, 6],
                     borderWidth: 0.5,
                     fill: false,
                     pointRadius: 0,
@@ -1387,28 +1596,55 @@
 
                 // Load ticker data into chart
                 window.loadTickersToChart(investChart, aggregatedTimestamps);
+
+                // Повторно применить скрытость серий из легенды: при регулярном
+                // обновлении стек-датасеты TGLD/TMON/LQDT пересоздаются, и их
+                // hidden сбрасывается — отключённые серии снова рисуются.
+                applyLegendState(investChart);
+
+                // Пересчитать min/max ₽-осей по свежим данным, чтобы обновлённые
+                // ряды вписывались в поле чарта (иначе при росте графика он уходит
+                // за верх шкалы — раньше шкала фиксировалась до F5/перерисовки).
+                recomputePortfolioAxis(investChart);
+
+                investChart.update('none');
             } else {
                 investChart = createChart(canvas, {
                     labels: labels,
                     datasets: datasets,
                     timestamps: aggregatedTimestamps,
-                    scales: scales
+                    scales: scales,
+                    _apiErrors: rawData._api_errors
                 }, extrema, labelMode, periodSources);
 
                 if (!investChart) {
                     console.error('[InvestPlot] Failed to create chart');
                 } else {
                     applyLegendState(investChart);
+                    recomputePortfolioAxis(investChart);
                     window.loadTickersToChart(investChart, aggregatedTimestamps);
                 }
             }
 
+        } catch (e) {
+            console.error('[InvestPlot] .done() error:', e);
+        } finally {
+            console.log('[InvestPlot] JS-render', (performance.now() - __tAgg).toFixed(1) + 'ms', '| labels', (labels || []).length);
+            _pendingXHR = null;
             isUpdating = false;
             clearTimeout(updateTimeoutId);
-        }).fail(function(xhr, status, error) {
-            console.error('[InvestPlot] Error loading data:', status, error, 'HTTP:', xhr.status);
+            runPendingUpdate();
+        }
+        }).catch(function(err) {
+            console.error('[InvestPlot] Error loading data:', err);
+            clearTimeout(fetchTimeout);
+            _pendingXHR = null;
             isUpdating = false;
             clearTimeout(updateTimeoutId);
+            if (_lastTimestamps && _lastTimestamps.length > 0) {
+                showDataFreshness(_lastTimestamps);
+            }
+            runPendingUpdate();
         });
     }
 
@@ -1579,14 +1815,14 @@
         }
     };
 
-    // === Legend state persistence (cookies) ===
-    var LEGEND_STATE_COOKIE = 'wclock_invest_legend';
-    var LEGEND_COLLAPSE_COOKIE = 'wclock_invest_legend_collapsed';
+    // === Legend state persistence (localStorage) ===
+    var LEGEND_STATE_KEY = 'wclock_invest_legend';
+    var LEGEND_COLLAPSE_KEY = 'wclock_invest_legend_collapsed';
 
     function getLegendState() {
         try {
-            var m = document.cookie.match(new RegExp('(?:^|; )' + LEGEND_STATE_COOKIE + '=([^;]*)'));
-            return m ? JSON.parse(decodeURIComponent(m[1])) : {};
+            var raw = localStorage.getItem(LEGEND_STATE_KEY);
+            return raw ? JSON.parse(raw) : {};
         } catch (e) {
             return {};
         }
@@ -1594,14 +1830,12 @@
 
     function isLegendCollapsed() {
         try {
-            var m = document.cookie.match(new RegExp('(?:^|; )' + LEGEND_COLLAPSE_COOKIE + '=([^;]*)'));
-            return m ? m[1] === '1' : false;
+            return localStorage.getItem(LEGEND_COLLAPSE_KEY) === '1';
         } catch (e) { return false; }
     }
 
     function setLegendCollapsed(v) {
-        document.cookie = LEGEND_COLLAPSE_COOKIE + '=' + (v ? '1' : '0') +
-            '; path=/; max-age=31536000; SameSite=Lax';
+        try { localStorage.setItem(LEGEND_COLLAPSE_KEY, v ? '1' : '0'); } catch (e) {}
     }
 
     function applyLegendState(chart) {
@@ -1626,11 +1860,12 @@
                 var ds = chart.data.datasets[i];
                 if (ds && ds.label) state[ds.label] = ds.hidden === true;
             }
-            document.cookie = LEGEND_STATE_COOKIE + '=' + encodeURIComponent(JSON.stringify(state)) + '; path=/; max-age=31536000';
+            localStorage.setItem(LEGEND_STATE_KEY, JSON.stringify(state));
         } catch (e) {}
     }
 
     function toggleLegendDataset(chart, event) {
+        if (!chart || !chart.canvas) return;
         var rect = chart.canvas.getBoundingClientRect();
         var x = event.clientX - rect.left;
         var y = event.clientY - rect.top;
@@ -1651,10 +1886,47 @@
                 var ds = chart.data.datasets[a.datasetIndex];
                 if (!ds) return;
                 ds.hidden = !ds.hidden;
+                recomputePortfolioAxis(chart);
                 chart.update();
                 saveLegendState();
                 return;
             }
+        }
+    }
+
+    // Пересчитывает ₽-оси (y_portfolio / y_finam) по видимым в легенде сериям,
+    // чтобы скрытая «Tinkoff, ₽» (или «Finam, ₽») не влияла на диапазон.
+    function recomputePortfolioAxis(chart) {
+        if (!chart || !chart.data || !chart.data.datasets) return;
+        var RB_LABELS = {
+            'Tinkoff, \u20BD': 'y_portfolio',
+            'Finam, \u20BD': 'y_finam'
+        };
+        var hasFinamAxis = false;
+        var values = [];
+        for (var i = 0; i < chart.data.datasets.length; i++) {
+            var ds = chart.data.datasets[i];
+            if (!ds || !ds.label || !ds.data) continue;
+            if (!RB_LABELS.hasOwnProperty(ds.label)) continue;
+            if (ds.hidden === true) continue;
+            if (RB_LABELS[ds.label] === 'y_finam') hasFinamAxis = true;
+            for (var d = 0; d < ds.data.length; d++) {
+                var v = Number(ds.data[d]);
+                if (v != null && !isNaN(v) && v > 0) values.push(v);
+            }
+        }
+        if (values.length === 0) return;
+        var lo = Math.min.apply(null, values);
+        var hi = Math.max.apply(null, values);
+        var range = hi - lo;
+        var pad = range > 0 ? range * 0.1 : Math.max(hi * 0.1, 1000);
+        var axisMin = Math.max(0, lo - pad);
+        var axisMax = Math.max(hi + pad, lo + 100);
+
+        if (chart.options && chart.options.scales) {
+            var s = chart.options.scales;
+            if (s.y_portfolio) { s.y_portfolio.min = axisMin; s.y_portfolio.max = axisMax; }
+            if (s.y_finam) { s.y_finam.min = axisMin; s.y_finam.max = axisMax; }
         }
     }
 
@@ -1678,7 +1950,12 @@
     }
 
     function attachLegendDrag(chart) {
-        if (_legendDragBound || !chart || !chart.canvas) return;
+        if (!chart || !chart.canvas) return;
+
+        if (_legendDragBound && chart._legendDragCleanup) {
+            chart._legendDragCleanup();
+        }
+
         _legendDragBound = true;
         var canvas = chart.canvas;
         var dragging = false, moved = false, lastX = 0, lastY = 0;
@@ -1692,7 +1969,7 @@
             return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
         }
 
-        canvas.addEventListener('pointerdown', function(e) {
+        var onPointerDown = function(e) {
             if (!hitLegend(e)) return;
             dragging = true;
             moved = false;
@@ -1700,9 +1977,9 @@
             lastX = e.clientX;
             lastY = e.clientY;
             e.preventDefault();
-        });
+        };
 
-        window.addEventListener('pointermove', function(e) {
+        var onWindowPointerMove = function(e) {
             if (!dragging) return;
             var dx = e.clientX - lastX;
             var dy = e.clientY - lastY;
@@ -1716,16 +1993,28 @@
             chart.draw();
             lastX = e.clientX;
             lastY = e.clientY;
-        });
+        };
 
-        window.addEventListener('pointerup', function() {
+        var onWindowPointerUp = function() {
             if (dragging && moved && chart._legendPos) saveLegendPos(chart._legendPos);
             dragging = false;
-        });
+        };
 
-        canvas.addEventListener('pointermove', function(e) {
+        var onCanvasPointerMove = function(e) {
             if (!dragging) canvas.style.cursor = hitLegend(e) ? 'move' : '';
-        });
+        };
+
+        canvas.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onWindowPointerMove);
+        window.addEventListener('pointerup', onWindowPointerUp);
+        canvas.addEventListener('pointermove', onCanvasPointerMove);
+
+        chart._legendDragCleanup = function() {
+            canvas.removeEventListener('pointerdown', onPointerDown);
+            window.removeEventListener('pointermove', onWindowPointerMove);
+            window.removeEventListener('pointerup', onWindowPointerUp);
+            canvas.removeEventListener('pointermove', onCanvasPointerMove);
+        };
     }
 
     // === Свой X-zoom: drag-выделение + своя кнопка Reset Zoom ===
@@ -1787,12 +2076,17 @@
     var _investZoomBound = false;
 
     function attachInvestZoom(chart) {
-        if (_investZoomBound || !chart || !chart.canvas) return;
+        if (!chart || !chart.canvas) return;
+
+        if (_investZoomBound && chart._investZoomCleanup) {
+            chart._investZoomCleanup();
+        }
+
         _investZoomBound = true;
         var canvas = chart.canvas;
         var sel = null;
 
-        canvas.addEventListener('pointerdown', function(e) {
+        var onPointerDown = function(e) {
             var rect = canvas.getBoundingClientRect();
             var x = e.clientX - rect.left;
             var y = e.clientY - rect.top;
@@ -1803,17 +2097,17 @@
             sel = { x0: x, x1: x };
             chart._zoomSel = sel;
             e.preventDefault();
-        });
+        };
 
-        window.addEventListener('pointermove', function(e) {
+        var onWindowPointerMove = function(e) {
             if (!sel) return;
             var rect = canvas.getBoundingClientRect();
             var x = Math.min(Math.max(e.clientX - rect.left, chart.chartArea.left), chart.chartArea.right);
             sel.x1 = x;
             chart.draw();
-        });
+        };
 
-        window.addEventListener('pointerup', function() {
+        var onWindowPointerUp = function() {
             if (!sel) return;
             var dragged = Math.abs(sel.x1 - sel.x0) > 8;
             if (dragged && chart.data.labels && chart.data.labels.length > 2) {
@@ -1835,7 +2129,17 @@
             chart._zoomSel = null;
             sel = null;
             chart.draw();
-        });
+        };
+
+        canvas.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onWindowPointerMove);
+        window.addEventListener('pointerup', onWindowPointerUp);
+
+        chart._investZoomCleanup = function() {
+            canvas.removeEventListener('pointerdown', onPointerDown);
+            window.removeEventListener('pointermove', onWindowPointerMove);
+            window.removeEventListener('pointerup', onWindowPointerUp);
+        };
     }
 
     window.dailyGrowthLabelsPlugin = {
@@ -1973,8 +2277,10 @@
         if (!latestDt || isNaN(latestDt.getTime())) return;
         var ageMs = Date.now() - latestDt.getTime();
         var ageMin = Math.floor(ageMs / 60000);
-        var maxAgeMin = currentInterval === 'minute' ? 3 : currentInterval === 'day' ? 120 : 10;
-        var timeStr = latestDt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        var interval = window.currentInterval || 'hour';
+        var maxAgeMin = interval === 'minute' ? 3 : interval === 'day' ? 120 : 10;
+        console.log('[InvestPlot] freshness:', latestRaw, 'age=' + ageMin + 'm', 'interval=' + interval, 'maxAge=' + maxAgeMin);
+        var timeStr = latestDt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         if (ageMin > maxAgeMin) {
             el.innerHTML = '\u26A0 ' + timeStr + ' (' + ageMin + '\u043C\u0438\u043D)';
             el.style.color = '#f44336';
@@ -2007,6 +2313,11 @@
     $(document).ready(function() {
         init();
         $(window).on('resize.investPlot', resizeCharts);
+        setInterval(function() {
+            if (_lastTimestamps && _lastTimestamps.length > 0) {
+                showDataFreshness(_lastTimestamps);
+            }
+        }, 30000);
     });
 
     $(document).on('panelViewChange', function(e, data) {

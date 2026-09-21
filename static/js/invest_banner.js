@@ -5,7 +5,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 (function($) {
     'use strict';
 
-    let tickersData = {};
+    let tickersData = {};            // актуальный payload секции invest.tickers
+    let lastTickersData = {};        // последние удачные тикеры — ассет-строки не мигают
     let refHistory = null;   // фиксированный срез hour/-8day для статичных колонок (сутки/неделя)
 
     const COLORS = {
@@ -111,14 +112,25 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const now = new Date();
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
+        // Базовое значение = первая точка СЕГОДНЯ (даже если источник пуст / 0),
+        // иначе изменение «с начала суток» для опустевшего источника (T) съедало бы
+        // весь исторический капитал, хотя движения за сегодня не было.
+        let todaySeen = false;
+        let zeroBaseline = null;
         for (const ts of timestamps) {
+            if (new Date(ts) < todayStart) continue;
             const entry = historyData[ts];
-            if (new Date(ts) >= todayStart && Array.isArray(entry)) {
-                const v = sumEntryBySource(entry, source);
-                if (v > 0) return v;
-            }
+            if (!Array.isArray(entry)) continue;
+            todaySeen = true;
+            const v = sumEntryBySource(entry, source);
+            if (zeroBaseline === null) zeroBaseline = v; // первая точка сегодня (может быть 0)
+            if (v > 0) return v;                          // первое положительное значение дня
         }
-        
+
+        // Если сегодня есть снепшоты — базой служит первая точка сегодня (в т.ч. 0).
+        if (todaySeen && zeroBaseline !== null) return zeroBaseline;
+
+        // Если сегодня ещё нет снепшотов — берём последнюю положительную точку прошлого дня.
         const yesterdayEnd = new Date(todayStart.getTime() - 1);
         for (let i = timestamps.length - 1; i >= 0; i--) {
             const entry = historyData[timestamps[i]];
@@ -162,29 +174,72 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return Array.isArray(firstEntry) ? sumEntryBySource(firstEntry, source) : 0;
     }
 
-    function findTickerBaseline(prices, lookbackMs) {
-        if (!prices || prices.length < 2) return null;
-        const now = new Date(prices[prices.length - 1].timestamp);
-        const target = new Date(now.getTime() - lookbackMs);
-        let closest = null;
-        let minDiff = Infinity;
-        for (let i = 0; i < prices.length; i++) {
-            const diff = Math.abs(new Date(prices[i].timestamp).getTime() - target.getTime());
-            if (diff < minDiff) {
-                minDiff = diff;
-                closest = prices[i];
-            }
+    // Выбранный в period-trigger интервал графика: явный диапазон (start_ts/end_ts)
+    // или относительный период (invest_panel_period). Возвращает начало окна в мс.
+    function resolveRangeStartMs() {
+        const start = getSetting('invest_panel_start_ts', null);
+        if (start) {
+            const s = parseInt(start, 10);
+            if (!isNaN(s)) return s * 1000;
         }
-        return closest;
+        const period = getSetting('invest_panel_period', '-35 day');
+        return Date.now() - calculatePeriodMs(period);
     }
 
-    function loadTickersData(callback, period) {
-        const p = period || getSetting('invest_panel_period', '-35 day');
+    // Базовое значение для «изменения за период» = первая точка внутри выбранного
+    // окна (даже если источник там пуст/0 — тогда изменение = разница от этого уровня).
+    // Окно берётся из period-trigger графика, как и на самом графике.
+    function calculateRangeBaselineTotal(historyData, timestamps, rangeStartMs, source) {
+        let seen = false;
+        let zeroBaseline = null;
+        for (const ts of timestamps) {
+            const t = new Date(ts).getTime();
+            if (t < rangeStartMs) continue;
+            const entry = historyData[ts];
+            if (!Array.isArray(entry)) continue;
+            seen = true;
+            const v = sumEntryBySource(entry, source);
+            if (zeroBaseline === null) zeroBaseline = v;
+            if (v > 0) return v;
+        }
+        if (seen && zeroBaseline !== null) return zeroBaseline;
+
+        // Внутри окна данных нет — откат к последней точке перед окном.
+        for (let i = timestamps.length - 1; i >= 0; i--) {
+            const entry = historyData[timestamps[i]];
+            if (new Date(timestamps[i]).getTime() < rangeStartMs && Array.isArray(entry)) {
+                const v = sumEntryBySource(entry, source);
+                if (v > 0) return v;
+            }
+        }
+        const firstEntry = historyData[timestamps[0]];
+        return Array.isArray(firstEntry) ? sumEntryBySource(firstEntry, source) : 0;
+    }
+
+    const TICKER_CACHE_TTL_MS = 3 * 60 * 1000;
+
+    // Берём тикеры из общего кэша графика (window.__investTickerCache), если он свежий.
+    // Иначе грузим свои. Полные day/week/month проценты приходят с сервера (baseline),
+    // поэтому период загрузки не важен для корректности изменений.
+    function loadTickersData(callback) {
+        const cached = window.__investTickerCache;
+        if (cached && cached.data && (Date.now() - cached.at) < TICKER_CACHE_TTL_MS) {
+            tickersData = cached.data;
+            lastTickersData = cached.data;
+            if (callback) callback();
+            return;
+        }
+        const p = getSetting('invest_panel_period', '-35 day');
         const apiPeriod = p === '-1 day' ? '-1.5 day' : p;
-        $.getJSON('/api/invest/tickers?period=' + encodeURIComponent(apiPeriod))
+        const sTs = getSetting('invest_panel_start_ts', null);
+        const eTs = getSetting('invest_panel_end_ts', null);
+        let rangeQs = '';
+        if (sTs) rangeQs = '&start_ts=' + encodeURIComponent(sTs) + (eTs ? ('&end_ts=' + encodeURIComponent(eTs)) : '');
+        $.getJSON('/api/invest/tickers?period=' + encodeURIComponent(apiPeriod) + rangeQs)
             .done(function(data) {
-                if (data && !data.error) {
+                if (data && !data.error && Object.keys(data).length > 0) {
                     tickersData = data;
+                    lastTickersData = data;
                     console.log('[InvestBanner] Tickers loaded:', Object.keys(data));
                 } else {
                     console.warn('[InvestBanner] Tickers: no data');
@@ -200,6 +255,104 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     // === Обороты сделок (заполняется из /api/invest/turnover) ===
     let turnoverData = null;
+    // Хеш последнего отрисованного баннера: при совпадении DOM не перерисовываем.
+    let _lastBannerHash = null;
+
+    // === Медиатор: подписки на invest-секции (panel_mediator.js) ===
+    let mediatorHistory = null;       // полный payload invest.history (текущее окно)
+    let mediatorHistoryAt = 0;        // ts последней доставки истории
+    let turnoverDetails = null;       // детализация оборота (invest.turnover_details)
+    let turnoverDetailsAt = 0;        // ts последней доставки детализации
+    const MEDIATOR_HISTORY_TTL_MS = 70000;
+
+    function historyIntervalFor(period) {
+        return {
+            '-90 day': 'day', '-35 day': 'hour', '-7 day': 'hour', '-1 day': 'hour',
+            '-12 hour': 'fivemin', '-6 hour': 'fivemin', '-3 hour': 'minute', '-1 hour': 'minute'
+        }[period] || 'hour';
+    }
+
+    // Параметры секции invest.history — совпадают с окном самого баннера.
+    function mediatorHistoryParams() {
+        const period = getSetting('invest_panel_period', '-35 day');
+        const params = { interval: historyIntervalFor(period), period: period };
+        const sTs = getSetting('invest_panel_start_ts', null);
+        const eTs = getSetting('invest_panel_end_ts', null);
+        if (sTs) params.start_ts = sTs;
+        if (eTs) params.end_ts = eTs;
+        return params;
+    }
+
+    function mediatorTickersParams() {
+        const p = getSetting('invest_panel_period', '-35 day');
+        const apiPeriod = p === '-1 day' ? '-1.5 day' : p;
+        const params = { period: apiPeriod };
+        const sTs = getSetting('invest_panel_start_ts', null);
+        const eTs = getSetting('invest_panel_end_ts', null);
+        if (sTs) params.start_ts = sTs;
+        if (eTs) params.end_ts = eTs;
+        return params;
+    }
+
+    function onMediatorTickers(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        tickersData = payload;
+        if (payload && Object.keys(payload).length > 0) lastTickersData = payload;
+        if (typeof window.__investTickerCache === 'undefined') window.__investTickerCache = {};
+        window.__investTickerCache.data = payload;
+        window.__investTickerCache.at = Date.now();
+        maybeRenderFromMediator();
+    }
+
+    function onMediatorTurnover(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        turnoverData = payload;
+        maybeRenderFromMediator();
+    }
+
+    function onMediatorTurnoverDetails(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        turnoverDetails = payload;
+        turnoverDetailsAt = Date.now();
+        maybeRenderFromMediator();
+    }
+
+    function onMediatorHistory(payload) {
+        if (!payload || typeof payload !== 'object') return;
+        mediatorHistory = payload;
+        mediatorHistoryAt = Date.now();
+        if (window.InvestHistoryCache && window.InvestHistoryCache.primeFromMediator) {
+            const p = mediatorHistoryParams();
+            window.InvestHistoryCache.primeFromMediator(p.interval, p.period, p.start_ts, p.end_ts, payload);
+        }
+        maybeRenderFromMediator();
+    }
+
+    // Рендер из актуальных данных медиатора (статические колонки — refHistory 10 мин).
+    function maybeRenderFromMediator() {
+        if (!mediatorHistory || Object.keys(mediatorHistory).length === 0) return;
+        const render = function() {
+            renderBanner(refHistory || mediatorHistory, mediatorHistory);
+        };
+        if (!refHistory) loadRefHistory(render); else render();
+    }
+
+    // Медиатор живой и обслуживает текущее окно истории — GET-слой не нужен.
+    function mediatorCanServe() {
+        const pm = window.PanelMediator;
+        if (!pm || typeof pm.healthy !== 'function' || !pm.healthy()) return false;
+        if (!mediatorHistory) return false;
+        return (Date.now() - mediatorHistoryAt) < MEDIATOR_HISTORY_TTL_MS;
+    }
+
+    function setupMediator() {
+        const pm = window.PanelMediator;
+        if (!pm || typeof pm.subscribe !== 'function') return;
+        pm.subscribe('invest.tickers', onMediatorTickers, { params: mediatorTickersParams });
+        pm.subscribe('invest.turnover', onMediatorTurnover, { params: null });
+        pm.subscribe('invest.turnover_details', onMediatorTurnoverDetails, { params: null });
+        pm.subscribe('invest.history', onMediatorHistory, { params: mediatorHistoryParams });
+    }
 
     function formatCompactRub(n) {
         if (n >= 1000000) return (n / 1000000).toFixed(1).replace('.', ',') + 'М';
@@ -208,28 +361,6 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             return (k >= 100 ? Math.round(k).toString() : k.toFixed(k >= 10 ? 1 : 2)).replace('.', ',') + 'к';
         }
         return String(Math.round(n));
-    }
-
-    const FINAM_TIERS = [
-        { cap: 1_000_000,   rate: 0.025,  label: 'до 1 млн' },
-        { cap: 5_000_000,   rate: 0.015,  label: '1–5 млн' },
-        { cap: 30_000_000,  rate: 0.01,   label: '5–30 млн' },
-        { cap: 100_000_000, rate: 0.005,  label: '30–100 млн' },
-        { cap: 250_000_000, rate: 0.0025, label: '100–250 млн' },
-        { cap: Infinity,    rate: 0.001,  label: '> 250 млн' },
-    ];
-
-    function buildFinamTariffTip(total) {
-        const rows = FINAM_TIERS.map(function(t) {
-            const cls = total <= t.cap ? ' class="finam-tariff-active"' : '';
-            const arrow = total <= t.cap ? ' ←' : '';
-            return '<tr' + cls + '><td>' + t.label + '</td><td>' + t.rate.toFixed(3).replace('.', ',') + ' %' + arrow + '</td></tr>';
-        }).join('');
-        return '<div class="finam-tariff-css-tip">' +
-            '<b>Finam «Трейдер n6» — ставка брокера</b>' +
-            '<table><tbody>' + rows + '</tbody></table>' +
-            '<span class="finam-tariff-note">+ урегулирование: СПБ 0,01 %</span>' +
-            '</div>';
     }
 
     function renderTurnoverBlock(source, capital) {
@@ -245,100 +376,55 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const pct = total > 0 ? comm / total * 100 : 0;
         const pctStr = pct > 0 ? Number(pct.toPrecision(3)).toString().replace('.', ',') : '0';
         const sourceClass = source === 'tinkoff' ? ' tinvest' : ' finam';
-        const tipAttr = source === 'finam'
-            ? ` data-tariff-tip="${encodeURIComponent(buildFinamTariffTip(total))}"`
-            : '';
-        return `<table class="banner-turnover-block${sourceClass}"><tr>` +
+        // Тултип из детализации оборота (секция медиатора invest.turnover_details).
+        const d = (turnoverDetails && turnoverDetails[source]) || {};
+        let title = '';
+        if ((d.base || d.orders || d.rate_percent) &&
+            (Date.now() - turnoverDetailsAt) < 12 * 60 * 60 * 1000) {
+            const bits = [];
+            if (d.base) bits.push('база ' + formatCompactRub(d.base));
+            if (d.session) bits.push('сессия ' + formatCompactRub(d.session));
+            if (d.evening) bits.push('вечер ' + formatCompactRub(d.evening));
+            if (d.rate_percent) bits.push('ставка ' + String(d.rate_percent).replace('.', ',') + '%');
+            if (d.orders) bits.push(d.orders + ' поручений');
+            if (d.fee_per_order) bits.push(String(d.fee_per_order).replace('.', ',') + '₽/поруч');
+            if (bits.length) title = ' title="' + bits.join(' · ') + '"';
+        }
+        return `<table class="banner-turnover-block${sourceClass}"${title}><tr>` +
             `<td>x${xStr}</td><td class="tb-col2">${formatCompactRub(total)}</td></tr>` +
-            `<tr><td class="finam-tariff-hover"${tipAttr}>${pctStr} %</td><td class="tb-col2">${formatCompactRub(comm)}</td></tr>` +
+            `<tr><td>${pctStr} %</td><td class="tb-col2">${formatCompactRub(comm)}</td></tr>` +
             `</table>`;
     }
 
-    // ================================================================
-    // TARIFF TOOLTIP — вынесен в <body>, чтобы его не перекрывали панели
-    // ================================================================
-    (function initTariffTip() {
-        if (window.__tariffTipInit) return;
-        window.__tariffTipInit = true;
-        var tipEl = null;
-        var CELL_SEL = '.finam-tariff-hover[data-tariff-tip]';
-
-        // Над ячейкой может лежать невидимый оверлей (#browser_reload),
-        // поэтому ищем ячейку геометрически, а не через e.target
-        function cellAt(x, y) {
-            var cells = document.querySelectorAll(CELL_SEL);
-            for (var i = 0; i < cells.length; i++) {
-                var r = cells[i].getBoundingClientRect();
-                if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return cells[i];
-            }
-            return null;
-        }
-
-        function hide() {
-            if (tipEl) { tipEl.remove(); tipEl = null; }
-        }
-        function showFor(cell, e) {
-            hide();
-            tipEl = document.createElement('div');
-            tipEl.className = 'finam-tariff-css-tip';
-            try {
-                tipEl.innerHTML = decodeURIComponent(cell.getAttribute('data-tariff-tip'));
-            } catch (err) {
-                tipEl.innerHTML = cell.getAttribute('data-tariff-tip');
-            }
-            tipEl._cell = cell;
-            document.body.appendChild(tipEl);
-            move(e);
-        }
-        function move(e) {
-            if (!tipEl) return;
-            const r = tipEl.getBoundingClientRect();
-            let x = e.clientX + 14, y = e.clientY + 14;
-            if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
-            if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 14;
-            tipEl.style.left = x + 'px';
-            tipEl.style.top = y + 'px';
-        }
-
-        document.addEventListener('mousemove', function(e) {
-            const cell = cellAt(e.clientX, e.clientY);
-            if (cell) {
-                if (!tipEl || !tipEl.isConnected || tipEl._cell !== cell) showFor(cell, e);
-                else move(e);
-            } else {
-                hide();
-            }
-        });
-        document.addEventListener('wheel', hide, { passive: true });
-        document.addEventListener('touchstart', hide, { passive: true });
-        window.addEventListener('blur', hide);
-    })();
-
     function renderAssetRow(ticker, color, label) {
-        const t = tickersData[ticker];
-        if (!t) return '';
+        const t = tickersData[ticker] || lastTickersData[ticker];
+        if (!t) return '';           // данных нет — строку не рисуем (доедут из первого полного опроса)
         const price = t.current_price || 0;
         const dayAbs = t.day_change || 0;
         const dayPct = t.day_change_pct || 0;
-        const period = getSetting('invest_panel_period', '-35 day');
-        const periodMs = calculatePeriodMs(period);
 
-        const weekBase = findTickerBaseline(t.prices, 7 * 86400000);
-        const weekAbs = weekBase && weekBase.price ? price - weekBase.price : null;
-        const weekPct = weekBase && weekBase.price ? (weekAbs / weekBase.price * 100) : null;
+        const weekAbs = (t.week_change !== null && t.week_change !== undefined) ? t.week_change : null;
+        const weekPct = (t.week_change_pct !== null && t.week_change_pct !== undefined) ? t.week_change_pct : null;
 
-        const periodBase = findTickerBaseline(t.prices, periodMs);
-        const periodAbs = periodBase && periodBase.price ? price - periodBase.price : null;
-        const periodPct = periodBase && periodBase.price ? (periodAbs / periodBase.price * 100) : null;
+        // «Период» = начало выбранного пользователем интервала (первая точка
+        // загруженного диапазона), а не фиксированный месяц. Серверный baseline
+        // 'month' (30 дней) здесь не используется.
+        let periodAbs = null;
+        let periodPct = null;
+        const firstPrice = (t.prices && t.prices.length) ? Number(t.prices[0].price) : null;
+        if (firstPrice != null && firstPrice > 0 && t.current_price > 0) {
+            periodAbs = t.current_price - firstPrice;
+            periodPct = periodAbs / firstPrice * 100;
+        }
 
         const dayClass = dayPct >= 0 ? 'change-positive' : 'change-negative';
         const weekClass = weekPct !== null ? (weekPct >= 0 ? 'change-positive' : 'change-negative') : '';
         const periodClass = periodPct !== null ? (periodPct >= 0 ? 'change-positive' : 'change-negative') : '';
-        const absColor = (v) => v >= 0 ? COLORS.positive : COLORS.negative;
 
         const absStyle = 'opacity:0.2';
+        const rowCls = 'banner-row-asset ' + label.toLowerCase();
 
-        return `<tr>
+        return `<tr class="${rowCls}">
             <td class="banner-td-empty"></td>
             <td class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
             <td class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
@@ -346,18 +432,46 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             <td class="banner-td-pct ${weekClass}">${weekPct !== null ? formatPercent(weekPct) : '—'}</td>
             <td class="banner-td-change ${weekClass}" style="${absStyle}">${weekAbs !== null ? formatTickerAbs(weekAbs) : '—'}</td>
             <td class="banner-td-pct ${periodClass}">${periodPct !== null ? formatPercent(periodPct) : '—'}</td>
+            <td class="banner-td-change ${periodClass}" style="${absStyle}">${periodAbs !== null ? formatTickerAbs(periodAbs) : '—'}</td>
         </tr>`;
+    }
+
+    // Полупрозрачное время последнего обновления (левый нижний угол панели).
+    function updateBannerFreshness() {
+        var now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        ['invest_banner_capital', 'invest_banner_table', 'invest_banner_total'].forEach(function(panelId) {
+            var panel = document.getElementById(panelId);
+            if (!panel) return;
+            var key = panelId.replace('invest_banner_', '');
+            var el = document.getElementById('banner_freshness_' + key);
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'banner_freshness_' + key;
+                el.style.cssText = 'position:absolute;bottom:2px;left:4px;font-size:11px;color:#888;z-index:15;font-family:helvetica,arial,sans-serif;pointer-events:none;opacity:0.45;white-space:nowrap;';
+                panel.appendChild(el);
+            }
+            el.textContent = now;
+        });
     }
 
     function renderBanner(historyData, dynData) {
         console.log('[renderBanner] called, turnoverData=', !!turnoverData, 'keys=', turnoverData ? Object.keys(turnoverData) : 'null');
+        const t0 = performance.now();
         const $capHost = $('#invest_banner_capital_content');
         const $tblHost = $('#invest_banner_table_content');
+        const $totalHost = $('#invest_banner_total_content');
+
+        // Отдельная панель «Итого» считается видимой, если у неё не display:none.
+        function isTotalPanelVisible() {
+            const p = document.getElementById('invest_banner_total');
+            return !!p && p.style.display !== 'none' && getComputedStyle(p).display !== 'none';
+        }
 
         function emptyState(msg) {
             const cls = msg.startsWith('Ошибка') ? ' error' : '';
             if ($capHost.length) $capHost.html(`<div class="banner-message${cls}">${msg}</div>`);
             if ($tblHost.length) $tblHost.html(`<div class="banner-message${cls}">${msg}</div>`);
+            if ($totalHost.length) $totalHost.html(`<div class="banner-message${cls}">${msg}</div>`);
         }
 
         if (!historyData || Object.keys(historyData).length === 0) {
@@ -365,7 +479,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             return;
         }
 
-        const timestamps = Object.keys(historyData).filter(k => k !== '_prev').sort();
+        const timestamps = Object.keys(historyData).filter(k => k.charAt(0) !== '_').sort();
         if (timestamps.length === 0) {
             emptyState('Нет данных');
             return;
@@ -380,21 +494,34 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
 
         const totals = portfolioTotalsBySource(latestPositions);
-        const presentSources = ['finam', 'tinkoff'].filter(s => totals[s] > 0);
+        const COLLECTION_KEY = { finam: 'invest_collection_finam_enabled', tinkoff: 'invest_collection_tinkoff_enabled' };
+        const collectionEnabled = function(src) {
+            const key = COLLECTION_KEY[src];
+            // Если настройки нет — считаем сбор включённым.
+            return !key || getSetting(key, '1') !== '0';
+        };
+        // Источник показываем, если у него есть данные в последней точке + сумма >= 0,
+        // И сбор данных через API для него не отключён в настройках.
+        const presentSources = ['finam', 'tinkoff'].filter(s => Object.prototype.hasOwnProperty.call(totals, s) && collectionEnabled(s));
 
         const period = getSetting('invest_panel_period', '-35 day');
-        const periodMs = calculatePeriodMs(period);
 
-        // Динамический датасет выбранного периода — только для колонок 5-6
+        // Динамический датасет выбранного периода — только для колонок 5-6.
+        // Окно периода берём из period-trigger графика (выбранный диапазон),
+        // чтобы колонки «за период» совпадали с тем, что показано на графике.
+        const rangeStartMs = resolveRangeStartMs();
         const dynHistory = dynData || historyData;
-        const dynTimestamps = Object.keys(dynHistory).sort();
+        const dynTimestamps = Object.keys(dynHistory).filter(k => k.charAt(0) !== '_').sort();
+        const rangeBaselineTotal = function(src) {
+            return calculateRangeBaselineTotal(dynHistory, dynTimestamps, rangeStartMs, src);
+        };
 
         // Показатели по каждому портфелю отдельно
         const portfolioRows = presentSources.map(function(src) {
             const currentTotal = totals[src];
             const baselineTotal = calculateBaselineTotal(historyData, timestamps, src);
             const baselineWeekTotal = calculateWeekBaselineTotal(historyData, timestamps, src);
-            const baselinePeriodTotal = calculatePeriodBaselineTotal(dynHistory, dynTimestamps, periodMs, src);
+            const baselinePeriodTotal = rangeBaselineTotal(src);
             const absChange = currentTotal - baselineTotal;
             const pctChange = baselineTotal !== 0 ? (absChange / baselineTotal * 100) : 0;
             const absChangeWeek = currentTotal - baselineWeekTotal;
@@ -421,6 +548,26 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             };
         });
 
+        // === Хеш входных данных: если не изменился — DOM не перерисовываем.
+        // Полный repaint (.html() каждый тик 60с) — лишний, когда данные статичны.
+        const hashBits = [
+            historyData._prev ? 'prev' : 'np',
+            presentSources.join(','),
+            portfolioRows.map(r => r.currentTotal.toFixed(2) + '|' + r.absChange.toFixed(2) + '|' + r.pctChange.toFixed(2) + '|' + r.pctChangeWeek.toFixed(2) + '|' + r.pctChangePeriod.toFixed(2)).join(';'),
+            (turnoverData ? Object.keys(turnoverData).sort().map(k => k + ':' + (turnoverData[k].total || 0) + ':' + (turnoverData[k].commission || 0)).join(';') : ''),
+            (tickersData ? Object.keys(tickersData).sort().map(k => { const t = tickersData[k]; return k + ':' + (t.current_price || 0) + ':' + (t.day_change_pct || 0); }).join(';') : ''),
+            rangeStartMs.toString()
+        ].join('|');
+        if (hashBits === _lastBannerHash) {
+            console.log('[InvestBanner] Данные не изменились — DOM пропущен');
+            return;
+        }
+        _lastBannerHash = hashBits;
+        console.log('[InvestBanner] render inputs: present=' + presentSources.join(',') +
+            ' tickersRows=' + ['TGLD@', 'TMON@', 'XAU/USD'].map(function(k) { return (tickersData && tickersData[k]) ? 1 : 0; }).join('/') +
+            ' histKey=' + (historyData === refHistory ? 'refHistory' : 'window') +
+            ' baseTs=' + (timestamps[timestamps.length - 1] || '?'));
+
         let capHtml = '';
         let tblHtml = '';
 
@@ -434,26 +581,38 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === ASSETS BARS: капитал слева + бары справа ===
         if (portfolioRows.length > 0) {
             const totalCapital = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
+            // Отдельная панель «Итого»: только значение, без подписей.
+            if ($totalHost.length) {
+                $totalHost.html(`<div class="banner-total-only">${formatCurrency(totalCapital)}</div>`);
+            }
             capHtml += `<div class="banner-assets-row">`;
-            capHtml += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
+            // Инлайн «Итого» в панели Капитала показываем только когда отдельная
+            // панель «Итого» скрыта и активны 2+ источника (иначе — дублирование/избыточность).
+            if (!isTotalPanelVisible() && portfolioRows.length > 1) {
+                capHtml += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
+            }
             capHtml += `<div class="banner-assets" id="invest-assets-bars">`;
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;
                 capHtml += `<div class="asset-row">`;
                 capHtml += `<span class="asset-row-label" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;min-width:18px;">${row.marker}</span>`;
                 capHtml += `<div class="asset-bar-container">`;
-                row.assets.forEach(function(asset, index) {
-                    let color = COLORS.assetColors[index % COLORS.assetColors.length];
-                    if (asset.ticker.includes('TGLD')) color = '#efad05';
-                    else if (asset.ticker.includes('TMON')) color = COLORS.coral;
-                    else if (asset.ticker.includes('RUB') || asset.name.includes('Руб')) color = COLORS.rubTicker;
+                row.assets.forEach(function(asset) {
+                    // Класс по типу актива — цвет/прозрачность задаётся в wclock.css,
+                    // чтобы не дублировать альфу в JS-копиях баннера.
+                    let barClass = '';
+                    if (asset.ticker.includes('TGLD')) barClass = 'asset-bar-tgld';
+                    else if (asset.ticker.includes('TMON')) barClass = 'asset-bar-tmon';
+                    else if (asset.ticker.includes('LQDT')) barClass = 'asset-bar-lqdt';
+                    else if (asset.ticker.includes('RUB') || asset.name.includes('Руб')) barClass = 'asset-bar-rub';
+                    else barClass = 'asset-bar-other';
 
                     let assetTitle = asset.name;
                     if (assetTitle.includes('TGLD')) assetTitle = 'Золото (TGLD)';
                     else if (assetTitle.includes('TMON')) assetTitle = 'Обл. Минфин (TMON)';
                     else if (assetTitle.includes('RUB')) assetTitle = 'Рубль';
 
-                    capHtml += `<span class="asset-bar" title="${assetTitle}" style="width: ${Math.max(asset.percent, 1)}%; background-color: ${color};"><span class="asset-bar-label">${asset.percent.toFixed(1)}%</span></span>`;
+                    capHtml += `<span class="asset-bar ${barClass}" title="${assetTitle} — ${formatCurrency(asset.percent / 100 * row.currentTotal)} ₽" style="width: ${Math.max(asset.percent, 1)}%;"><span class="asset-bar-label">${asset.percent.toFixed(1)}%</span></span>`;
                 });
                 capHtml += `</div>`;
                 capHtml += `</div>`;
@@ -465,8 +624,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === TABLE: banner-row-portfolio — T+F итого + строки по источникам ===
         tblHtml += `<table class="banner-table" id="invest-banner-table"><tbody>`;
 
-        // --- T+F итого (первая строка) ---
-        if (portfolioRows.length > 0) {
+        // --- T+F итого (первая строка): только когда активны 2+ источника ---
+        if (portfolioRows.length > 1) {
             var tfCurrent = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
 
             function sumBaselineForAll(hist, stamps, srcArr, fn) {
@@ -475,7 +634,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfBase = sumBaselineForAll(historyData, timestamps, presentSources, calculateBaselineTotal);
             var tfBaseWeek = sumBaselineForAll(historyData, timestamps, presentSources, calculateWeekBaselineTotal);
             var tfBasePeriod = sumBaselineForAll(dynHistory, dynTimestamps, presentSources, function(h, s, src) {
-                return calculatePeriodBaselineTotal(h, s, periodMs, src);
+                return calculateRangeBaselineTotal(h, s, rangeStartMs, src);
             });
 
             var tfAbs = tfCurrent - tfBase;
@@ -489,7 +648,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
 
             tblHtml += `<tr class="banner-row-portfolio-total">
-            <td class="banner-td-num" style="color:#999;font-size:10px;min-width:16px;text-align:left;">T+F</td>
+            <td class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;">T+F</td>
             <td class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
             <td class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
             <td class="banner-td-change ${tfWeekCls}">${formatChange(tfAbsW)}</td>
@@ -500,31 +659,44 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
 
         portfolioRows.forEach(function(row) {
-            tblHtml += `<tr class="${row.cssClass}" style="opacity:0.7;">
-            <td class="banner-td-num" style="color:${row.color};font-size:10px;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
-            <td class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
+            const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
+            tblHtml += `<tr class="${row.cssClass}" style="opacity:${rowOpacity};">
+            <td class="banner-td-num" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
+            <td class="banner-td-num" style="color:${row.color};text-align:right;">${(row.currentTotal / 1e3).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}</td>
             <td class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
-            <td class="banner-td-change ${row.weekChangeClass}">${formatChange(row.absChangeWeek)}</td>
+            <td class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
             <td class="banner-td-pct ${row.weekChangeClass}">${formatPercent(row.pctChangeWeek)}</td>
-            <td class="banner-td-change ${row.periodChangeClass}">${formatChange(row.absChangePeriod)}</td>
+            <td class="banner-td-change ${row.weekChangeClass}">${formatChange(row.absChangeWeek)}</td>
             <td class="banner-td-pct ${row.periodChangeClass}">${formatPercent(row.pctChangePeriod)}</td>
+            <td class="banner-td-change ${row.periodChangeClass}">${formatChange(row.absChangePeriod)}</td>
         </tr>`;
         });
 
         tblHtml += renderAssetRow('TGLD@', COLORS.tgold, 'TGLD');
-        tblHtml += renderAssetRow('TMON@', '#e74c3c', 'TMON');
         tblHtml += renderAssetRow('XAU/USD', '#cc7722', 'XAU');
 
         tblHtml += `</tbody></table>`;
 
+        const tBuild = performance.now();
         if ($capHost.length) $capHost.html(capHtml);
         if ($tblHost.length) $tblHost.html(tblHtml);
-        console.log('[InvestBanner] Banner rendered, sources:', presentSources, 'capital:', totals, 'assets:', portfolioRows.map(r => r.assets.length));
+        updateBannerFreshness();
+        const t1 = performance.now();
+        console.log('[InvestBanner] renderBanner build', (tBuild - t0).toFixed(2) + 'ms', '| dom-set', (t1 - tBuild).toFixed(2) + 'ms', '| total', (t1 - t0).toFixed(2) + 'ms');
+        console.log('[InvestBanner] Banner rendered, sources:', presentSources, 'capital:', totals, 'assets:', portfolioRows.map(r => r.assets.length),
+            'inLastTs', (Array.isArray(dynHistory[dynTimestamps[dynTimestamps.length - 1]]) ? dynHistory[dynTimestamps[dynTimestamps.length - 1]].map(function(p) { return p && p.source; }) : 'n/a'));
     }
 
+    let refHistoryLoadedAt = 0;
+    const REF_HISTORY_TTL_MS = 10 * 60 * 1000;
+
     function loadRefHistory(callback) {
+        if (refHistory && (Date.now() - refHistoryLoadedAt) < REF_HISTORY_TTL_MS) {
+            if (callback) callback();
+            return;
+        }
         $.getJSON('/api/invest/history?interval=hour&period=-8%20day')
-            .done(function(d) { refHistory = d; })
+            .done(function(d) { refHistory = d; refHistoryLoadedAt = Date.now(); })
             .fail(function() { console.warn('[InvestBanner] ref history failed'); })
             .always(function() { if (callback) callback(); });
     }
@@ -532,48 +704,104 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     function updateInvestBanner() {
         console.log('[InvestBanner] updateInvestBanner called');
 
+        const cap = document.getElementById('invest_banner_capital');
+        const tbl = document.getElementById('invest_banner_table');
+        if ((!cap || cap.style.display === 'none') && (!tbl || tbl.style.display === 'none')) {
+            return;
+        }
+
+        // Медиатор живой и обслуживает текущее окно — рендер из его данных,
+        // прямые GET не нужны. Иначе — fallback: старый параллельный fetch.
+        if (mediatorCanServe()) {
+            maybeRenderFromMediator();
+            return;
+        }
+
         const midnight = new Date();
         midnight.setHours(0, 0, 0, 0);
         const cacheBust = '&_=' + Date.now();
         const turnoverUrl = '/api/invest/turnover?since=' + Math.floor(midnight.getTime() / 1000) + cacheBust;
 
-        function renderWithTurnover() {
-            loadRefHistory(function() {
-            loadTickersData(function() {
-                const period = getSetting('invest_panel_period', '-35 day');
-                const interval = {
-                    '-90 day': 'day',
-                    '-35 day': 'hour',
-                    '-7 day': 'hour',
-                    '-1 day': 'hour',
-                    '-12 hour': 'fivemin',
-                    '-6 hour': 'fivemin',
-                    '-3 hour': 'minute',
-                    '-1 hour': 'minute'
-                }[period] || 'hour';
-                $.getJSON('/api/invest/history?interval=' + interval + '&period=' + encodeURIComponent(period), function(historyData) {
-                    console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length);
-                    renderBanner(refHistory || historyData, historyData);
-                }).fail(function(xhr, status, error) {
-                    console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
-                    ['#invest_banner_capital_content', '#invest_banner_table_content'].forEach(function(sel) {
-                        $(sel).html('<div class="banner-message error">Ошибка загрузки</div>');
-                    });
+        const period = getSetting('invest_panel_period', '-35 day');
+        // Явный диапазон period-trigger перекрывает относительный период,
+        // чтобы колонки «за период» совпадали с окном графика.
+        const startTs = getSetting('invest_panel_start_ts', null);
+        const endTs = getSetting('invest_panel_end_ts', null);
+        const interval = historyIntervalFor(period);
+
+        // === Параллельный fetch: баннер не ждёт данные друг за другом ===
+        // Раньше цепочка была строго последовательной
+        // (turnover → refHistory → tickers → history → render) — баннер мог не
+        // отрисоваться 3-12с. Теперь все грузятся одновременно, рендер по готовности.
+        const tNet0 = performance.now();
+        let pend = 0;
+        let fd = { history: null, refHistory: null, tickers: null, turnover: null };
+
+        function tryRender() {
+            if (pend > 0) return;
+            if (!fd.history && !fd.refHistory) {
+                console.error('[InvestBanner] Нет истории — баннер не рендерю');
+                ['#invest_banner_capital_content', '#invest_banner_table_content'].forEach(function(sel) {
+                    $(sel).html('<div class="banner-message error">Ошибка загрузки</div>');
                 });
-            });
-            });
+                return;
+            }
+            const historyData = fd.history;
+            console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length, '| net+render', (performance.now() - tNet0).toFixed(0) + 'ms');
+            renderBanner(fd.refHistory || historyData, historyData);
         }
 
+        pend++;
         $.getJSON(turnoverUrl)
-            .done(function(d) { turnoverData = d; console.log('[Turnover] fetched OK, keys=', Object.keys(d)); })
+            .done(function(d) { fd.turnover = d; turnoverData = d; console.log('[Turnover] fetched OK, keys=', Object.keys(d)); })
             .fail(function(xhr, status, err) { console.warn('[Turnover] FAILED:', status, err, 'xhr.status=', xhr.status); })
-            .always(function() { renderWithTurnover(); });
+            .always(function() { pend--; tryRender(); });
+
+        pend++;
+        loadRefHistory(function() {
+            fd.refHistory = refHistory;
+            pend--; tryRender();
+        });
+
+        pend++;
+        loadTickersData(function() {
+            fd.tickers = tickersData;
+            pend--; tryRender();
+        });
+
+        pend++;
+        if (window.InvestHistoryCache) {
+            window.InvestHistoryCache.get(interval, period, startTs, endTs)
+                .then(function(data) { fd.history = data; })
+                .catch(function(error) {
+                    console.error('[InvestBanner] Ошибка загрузки истории:', error);
+                })
+                .finally(function() { pend--; tryRender(); });
+        } else {
+            // Fallback до полной загрузки хелпера (helpers.js ещё грузится)
+            let fRangeQs = '';
+            if (startTs) fRangeQs = '&start_ts=' + encodeURIComponent(startTs) + (endTs ? ('&end_ts=' + encodeURIComponent(endTs)) : '');
+            $.getJSON('/api/invest/history?interval=' + interval + '&period=' + encodeURIComponent(period) + fRangeQs + cacheBust)
+                .done(function(data) { fd.history = data; })
+                .fail(function(xhr, status, error) {
+                    console.error('[InvestBanner] Ошибка загрузки истории:', status, error);
+                })
+                .always(function() { pend--; tryRender(); });
+        }
+    }
+
+    function startFreshnessTicker() {
+        if (!window.__bannerFreshnessTicker) {
+            window.__bannerFreshnessTicker = setInterval(updateBannerFreshness, 1000);
+            updateBannerFreshness();
+        }
     }
 
     function init() {
         console.log('[InvestBanner] init called');
-        
-        loadTickersData();
+
+        setupMediator();
+        startFreshnessTicker();
         updateInvestBanner();
     }
 

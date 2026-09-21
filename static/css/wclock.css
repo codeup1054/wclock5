@@ -245,35 +245,38 @@ body.edit-mode .clock-panel .panel-header {
 #seconds_panel {
     left: 1vw;
     top: 38vh;
-    min-width: 100px;
-    container-type: inline-size;
+    min-width: 50px;
+    container-type: size;
 }
 
 #seconds_panel #clock_seconds {
     text-align: center;
-    font-size: 85cqi;
-    line-height: 1;
+    font-size: min(100cqw, 100cqh);
+    line-height: .8;
 }
 
 /* ─── Date Panel ───────────────────────────────────────────── */
+/* Чистый CSS-скейлинг через container query units (без transform:scale) */
 #date_panel {
     left: 1vw;
     top: 28vh;
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2cqi;
 }
 
 #date_panel #day {
-    position: absolute;
-    font-size: 26vw;
-    line-height: 12vh;
-    width: 100%;
+    font-size: 60cqi;
+    line-height: 0.2;
     text-align: center;
-    top: 45%;
 }
 
-
 #date_panel #month {
-    font-size: 1.8vw;
-    line-height: 1.2;
+    font-size: 25cqi;
+    line-height: 1.1;
 }
 
 /* ─── Moon Panel ───────────────────────────────────────────── */
@@ -292,28 +295,9 @@ body.edit-mode .clock-panel .panel-header {
     z-index: 25;
 }
 
-#date_panel{
-    position: absolute;
-    padding: 0;
-    top: 0vh;
-}
- 
 #date_panel #weekday {
-    position: absolute;
-    width: 100%;
-    text-align: center;
-    font-size: 5vw;
-    line-height: 7vh;
-}
-
-#date_panel #month {
-    position: absolute;
-    width: 100%;
-    text-align: center;
-    top: 75%;
-    font-size: 3vw; 
-    line-height: 4vh;   
-    /* width: 100%; */
+    font-size: 32cqi;
+    line-height: 0.1;
     text-align: center;
 }
 
@@ -448,22 +432,99 @@ img[id*=condition] {
 #fact_condition { top: -1vh; }
 #forecast_1_condition { bottom:-3px !important; }
 
-#sunrise, #daylight, #sunset {
-    position: absolute;
-    font-size: 5vw;
-    top: 0;
+/* ─── Wind/Condition/Precipitation — сетка 2 × 4 ─────────────
+ *  1-я строка — фактические значения, 2-я — прогноз (forecast_1).
+ *  Колонки: [иконка] [скорость ветра] [направление (румб)] [осадки %].
+ *  Иконки и значения рисуются по id из index.js — узел переиспользуется
+ *  под ту же цель, только раскладываем его по ячейкам сетки.
+ *  Направление ветра — стрелка-компас, вращается по wind_direction. */
+#wind_cond_precip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    align-items: center;
+    justify-items: center;
+    gap: 0.3vh;
 }
 
-#sunrise { left: 0%; }
-#daylight { left: 35%; }
-#sunset { right: 2%; }
+/* Сбрасываем античные absolute-позиционирования панели */
+#wind_cond_precip img[id*=condition],
+#wind_cond_precip div[id*='_prec_prob'],
+#wind_cond_precip div[id*='_wind_speed'],
+#wind_cond_precip div[id*='_wind_dir'],
+#wind_cond_precip img[id*='_wind_dir_a'] {
+    position: static !important;
+    margin: 0;
+    padding: 0;
+    width: auto;
+    height: auto;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    opacity: 1;
+}
+
+/* Иконки погоды — квадрат, вписанный в колонку */
+#wind_cond_precip img[id*=condition] {
+    width: 13vh;
+    height: 13vh;
+}
+
+/* Стрелка-компас в ячейке направления: вращается по wind_direction
+   (index.js: mailRuWindToDeg → transform: rotate) — как в классической версии. */
+#wind_cond_precip div[id*='_wind_dir_a'] {
+    display: block !important;
+    position: static !important;
+    width: 13vh;
+    height: 13vh;
+    background-size: 13vh auto;
+    margin: 0;
+}
+#wind_cond_precip #fact_wind_dir_a        { grid-area: 1 / 3; }
+#wind_cond_precip #forecast_1_wind_dir_a  { grid-area: 2 / 3; }
+
+/* Размещение по ячейкам: 1-я строка — факт, 2-я — прогноз */
+#wind_cond_precip img[id=fact_condition]        { grid-area: 1 / 1; }
+#wind_cond_precip #fact_wind_speed              { grid-area: 1 / 2; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #fact_wind_dir                { grid-area: 1 / 3; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #fact_prec_prob               { grid-area: 1 / 4; font-size: 10vh; text-align: center; }
+
+#wind_cond_precip img[id=forecast_1_condition]  { grid-area: 2 / 1; }
+#wind_cond_precip #forecast_1_wind_speed        { grid-area: 2 / 2; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #forecast_1_wind_dir          { grid-area: 2 / 3; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #forecast_1_prec_prob         { grid-area: 2 / 4; font-size: 10vh; text-align: center; }
+
+/* Солнечная панель — чистый CSS-скейлинг через container query units (без transform:scale) */
+#sun_panel {
+    container-type: inline-size;
+}
+
+#sun {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2%;
+}
+
+#sunrise, #daylight, #sunset {
+    font-size: 10cqi;
+    line-height: 1;
+    white-space: nowrap;
+}
 
 /* ─── Controls ───────────────────────────────────────────────── */
 div#browser_fullscreen, div#browser_reload {
     position: absolute;
     z-index: 100;
-    opacity: 0.00;
-    background: #FFF;
+    opacity: 0.35;
+    background: rgb(255 255 255 / 9%);
+    border: 2px dashed rgb(255 215 0 / 10%);
     width: 22vw;
     height: 22vh;
     top: 5vh;
@@ -475,20 +536,34 @@ div#browser_fullscreen, div#browser_reload {
 div#browser_fullscreen{left: 1vw;}
 div#browser_reload{left: 22vw;}
 
+div#browser_fullscreen:hover,
+div#browser_reload:hover {
+    opacity: 0.6;
+    background: rgba(255, 78, 7, 0.2);
+    border-color: rgba(255, 78, 7, 0.6);
+}
 
-
-/* Edit mode - hide behind panels */
+/* Edit mode - show zone border above panels */
 body.edit-mode div#browser_fullscreen,
 body.edit-mode div#browser_reload {
-    opacity: 0.3;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 0.5;
     border: 2px dashed var(--accent-orange);
-    z-index: -1;
+    z-index: 150;
+    background: rgba(255, 78, 7, 0.15);
+}
+
+body.edit-mode div#browser_fullscreen .panel-resize-handle,
+body.edit-mode div#browser_reload .panel-resize-handle {
+    display: block;
+    opacity: 0.7;
 }
 
 body.edit-mode div#browser_fullscreen:hover,
 body.edit-mode div#browser_reload:hover {
-    opacity: 0.6;
-    background: rgba(255, 78, 7, 0.2);
+    opacity: 0.7;
+    background: rgba(255, 78, 7, 0.25);
 }
 
 div#browser_fullscreen.panel-dragging,
@@ -539,8 +614,15 @@ div#browser_reload.panel-dragging {
 }
 
 #invest_banner_capital,
-#invest_banner_table {
+#invest_banner_table,
+#invest_banner_total {
     z-index: 5;
+}
+
+#invest_banner_capital,
+#invest_banner_table,
+#invest_banner_total {
+    container-type: inline-size;
 }
 .invest-banner-host {
     position: absolute;
@@ -569,7 +651,7 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host .banner-capital {
-    font-size: 68px;
+    font-size: 15cqi;
     font-weight: normal;
     color: #8d9d9d;
     line-height: 0.8;
@@ -578,8 +660,8 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .banner-capital-line {
     color: var(--text-color);
-    font-size: 45px;
-    line-height: 0.95;
+    font-size: 12cqi;
+    line-height: 0.85;
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -588,8 +670,8 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host table.banner-turnover-block {
     border-collapse: collapse;
-    width: 130px;
-    font-size: 15px;
+    width: 33cqi;
+    font-size: 4.0cqi;
     line-height: 1.15;
     color: #effcfc;
     opacity: 0.85;
@@ -599,6 +681,7 @@ div#browser_reload.panel-dragging {
 .invest-banner-host table.banner-turnover-block.finam {
     /* Стили для Finam - синие оттенки */
     border: 1px solid rgba(91, 110, 232, 0.3);
+    width: 36.3cqi;
 }
 
 .invest-banner-host table.banner-turnover-block.tinvest {
@@ -616,72 +699,10 @@ div#browser_reload.panel-dragging {
     border-left: 1px solid rgba(141, 157, 157, 0.35);
 }
 
-.invest-banner-host .finam-tariff-hover {
-    cursor: help;
-}
-
-.invest-banner-host .finam-tariff-hover:hover {
-    text-decoration: underline dotted;
-}
-
-.finam-tariff-css-tip {
-    display: block;
-    position: fixed;
-    left: 0;
-    top: 0;
-    z-index: 2147483000;
-    background: rgba(18, 28, 38, 0.7);
-    border: 1px solid rgba(91, 110, 232, 0.5);
-    border-radius: 5px;
-    padding: 7px 10px;
-    font-size: 12px;
-    line-height: 1.45;
-    color: #c8e0e0;
-    white-space: nowrap;
-    text-align: left;
-    pointer-events: none;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-}
-
-.finam-tariff-css-tip > b {
-    display: block;
-    margin-bottom: 3px;
-    color: #7eb8f7;
-    font-size: 11.5px;
-}
-
-.finam-tariff-css-tip table {
-    border-collapse: collapse;
-    font-size: 11.5px;
-}
-
-.finam-tariff-css-tip td {
-    padding: 1px 8px 1px 0;
-    border: none;
-}
-
-.finam-tariff-css-tip td:last-child {
-    text-align: right;
-    color: #86d3d3;
-}
-
-.finam-tariff-css-tip .finam-tariff-note {
-    display: block;
-    margin-top: 4px;
-    font-size: 10.5px;
-    color: #7a9a9a;
-    font-style: italic;
-}
-
-.finam-tariff-css-tip .finam-tariff-active {
-    color: #5b6ee8;
-    font-weight: bold;
-}
-
 .invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 15px;
+    font-size: 3.3cqi;
     margin: 2px 0;
 }
 
@@ -691,7 +712,7 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host [class*="banner-td-"] {
-    font-size: 15px;
+    font-size: 3cqi;
 }
 
 .invest-banner-host .banner-td-change {
@@ -726,18 +747,31 @@ div#browser_reload.panel-dragging {
     flex-direction: row;
     align-items: stretch;
     gap: 10px;
-    margin-top: 4px;
+    margin-top: 0;
 }
 
 .invest-banner-host .banner-total-capital {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 32px;
+    font-size: 7cqi;
     font-weight: 400;
     color: #a7aeae;
     white-space: nowrap;
-    min-width: 90px;
+    min-width: 20cqi;
+    text-align: right;
+    line-height: 1;
+}
+
+.invest-banner-host .banner-total-only {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    font-size: 12.5cqi;
+    font-weight: 400;
+    color: #a7aeae;
+    white-space: nowrap;
     text-align: right;
     line-height: 1;
 }
@@ -756,8 +790,8 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .asset-bar-container {
     flex: 1;
     position: relative;
-    height: 7px;
-    background: rgba(100, 100, 100, 0.3);
+    height: 13px;
+    background: rgba(100, 100, 100, 0.1);
     border-radius: 3px;
     display: flex;
     flex-direction: row;
@@ -776,9 +810,17 @@ div#browser_reload.panel-dragging {
     overflow: hidden;
 }
 
+/* Цвета баров активов. Прозрачность (альфа-байт) задаётся здесь — единый
+   источник правды, JS рендерит только класс (см. invest_banner.js). */
+.invest-banner-host .asset-bar-tgld { background-color: #efad05cc; }
+.invest-banner-host .asset-bar-tmon { background-color: #ff7f5055; }
+.invest-banner-host .asset-bar-lqdt { background-color: #ff4278c7; }
+.invest-banner-host .asset-bar-rub  { background-color: #1da067cc; }
+.invest-banner-host .asset-bar-other { background-color: #9b59b655; }
+
 .invest-banner-host .asset-bar-label {
     color: #fff;
-    font-size: 10px;
+    font-size: 2.2cqi;
     font-weight: bold;
     white-space: nowrap;
     text-shadow: 0 0 2px rgba(0,0,0,0.7);
@@ -786,7 +828,7 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .asset-value {
     color: #fff;
-    font-size: 10px;
+    font-size: 2.2cqi;
     white-space: nowrap;
     text-shadow: 0 0 2px rgba(0,0,0,0.5);
 }
@@ -1397,6 +1439,10 @@ body.edit-mode .panel-fullscreen-btn {
     max-width: 90%;
     max-height: 80vh;
     overflow-y: auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 24px;
+    align-items: start;
 }
 
 .panels-modal-header {
@@ -1406,6 +1452,7 @@ body.edit-mode .panel-fullscreen-btn {
     margin-bottom: 20px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--accent-yellow, #ffd700);
+    grid-column: 1 / -1;
 }
 
 .panels-modal-header h3 {
@@ -1427,6 +1474,110 @@ body.edit-mode .panel-fullscreen-btn {
     color: var(--accent-yellow, #ffd700);
 }
 
+/* === Период графика: триггер + dropdown-модалка (пресеты + календарь) === */
+.period-trigger {
+    background: var(--panel-bg, #222244);
+    color: var(--accent-yellow, #ffd900);
+    border: 1px solid var(--accent-yellow, #ffd900);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.period-range-modal {
+    display: none;
+    position: fixed;
+    z-index: 10001;
+    min-width: 300px;
+    background: var(--bg-color, #1a1a2e);
+    border: 1px solid var(--accent-yellow, #ffd900);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+}
+
+.period-range-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--accent-yellow, #ffd900);
+    color: var(--accent-yellow, #ffd900);
+    font-weight: bold;
+    cursor: move;
+    user-select: none;
+}
+
+.period-range-close {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.3rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.period-range-close:hover { color: var(--accent-yellow, #ffd900); }
+
+.period-range-body {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.period-range-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.period-range-row span { color: #ccc; font-size: 0.85rem; }
+
+.period-range-input {
+    background: #1a1a2e;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 0.8rem;
+    flex: 1;
+}
+
+.period-range-live-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #ccc;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+
+.period-range-live-label input[type="checkbox"] {
+    accent-color: #2cba99;
+    cursor: pointer;
+}
+
+.period-range-input:disabled {
+    opacity: 0.4;
+}
+
+.period-range-apply {
+    background: var(--accent-yellow, #ffd900);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.period-range-apply:hover { filter: brightness(1.1); }
+
+
 /* === Отчёт (report.js) === */
 .report-modal-content {
     position: absolute;
@@ -1440,9 +1591,43 @@ body.edit-mode .panel-fullscreen-btn {
     min-width: 360px;
     max-width: 96%;
     max-height: 88vh;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     /* box-shadow: 0 0 30px rgba(0, 0, 0, 0.6); */
+}
+
+#report-pane-settings {
+    width: 100%;
+}
+
+#report-pane-settings .settings-container {
+    min-width: 320px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 24px;
+    align-items: start;
+}
+
+/* Две явные колонки настроек */
+#report-pane-settings .settings-container .settings-col,
+.panels-modal-content .settings-col {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+#report-pane-settings .settings-container .panel-profiles-row,
+#report-pane-settings .settings-container .settings-section-title,
+.panels-modal-content .panel-profiles-row,
+.panels-modal-content .settings-section-title {
+    grid-column: 1 / -1;
+}
+
+.settings-section-title {
+    border-top: 1px solid rgba(255, 170, 0, 0.25);
+    padding-top: 10px;
 }
 
 .report-controls {
@@ -1628,6 +1813,184 @@ body.edit-mode .panel-fullscreen-btn {
 .report-table td:nth-child(n+10) {
     color: #6fe3a8;
 }
+
+/* ─── Отчёт: табы ─── */
+.report-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    padding-bottom: 6px;
+}
+
+.report-tab {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #9aa0c7;
+    padding: 3px 12px;
+    border-radius: 6px 6px 0 0;
+    font-size: 0.8rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.report-tab.active {
+    background: rgba(255, 215, 0, 0.14);
+    border-color: var(--accent-yellow, #ffd700);
+    color: #ffd700;
+    font-weight: 600;
+}
+
+/* подтабы внутри таба «Ошибки бота»: По интервалу / События */
+.report-tabs-sub {
+    border-bottom: 0;
+    margin: 6px 0 2px;
+}
+
+.report-tabs-sub .report-tab {
+    padding: 1px 12px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+}
+
+/* ─── Отчёт об ошибках бота ─── */
+.report-filt-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #cfd2ff;
+    font-size: 0.8rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.report-filt-label input {
+    accent-color: #f7ca18;
+}
+
+#bot-csv {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 0.8rem;
+}
+
+.bot-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.bot-card {
+    flex: 1 1 120px;
+    min-width: 110px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 5px;
+    padding: 2px 8px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.bot-card .bot-card-n {
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #e6e8ff;
+}
+
+.bot-card .bot-card-l {
+    font-size: 0.55rem;
+    line-height: 1.1;
+    color: #9aa0c7;
+    margin-top: 0;
+}
+
+.bot-card-block { border-color: #e74c3c; }
+.bot-card-block .bot-card-n { color: #e74c3c; }
+.bot-card-warn { border-color: #f7ca18; }
+.bot-card-warn .bot-card-n { color: #f7ca18; }
+.bot-card-info { border-color: #1fc163; }
+.bot-card-info .bot-card-n { color: #1fc163; }
+
+.bot-cols {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.bot-cols .bot-col {
+    flex: 1 1 300px;
+    min-width: 240px;
+}
+
+.be-lvl {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 9px;
+    font-size: 0.72rem;
+    white-space: nowrap;
+}
+
+.be-abbr {
+    cursor: help;
+}
+
+.be-block { color: #e74c3c; font-weight: 700; }
+.be-warn { color: #f7ca18; font-weight: 700; }
+.be-info { color: #1fc163; font-weight: 700; }
+
+.be-row-block { background: rgba(231, 76, 60, 0.08); }
+.be-row-warn { background: rgba(247, 202, 24, 0.08); }
+.be-row-info { background: rgba(31, 193, 99, 0.05); }
+
+.be-warn-text { color: #f7ca18; }
+
+#report-pane-bot .report-table { min-width: 720px; }
+
+/* таб бота: компактнее, чтобы не вылезать за низ попапа */
+#report-pane-bot .report-table-wrap {
+    max-height: 30vh;
+}
+
+.report-cat-sep {
+    margin-left: 10px;
+    color: #cfd2ff;
+    font-size: 0.8rem;
+}
+
+#report-pane-bot .report-int-bot {
+    padding: 2px 8px;
+    font-size: 0.8rem;
+}
+
+#report-pane-bot .report-table td.be-block { color: #e74c3c; font-weight: 600; }
+#report-pane-bot .report-table td.be-warn { color: #f7ca18; font-weight: 600; }
+#report-pane-bot .report-table td.be-info { color: #1fc163; font-weight: 600; }
+
+#report-pane-bot .report-table td.be-text {
+    text-align: left;
+    white-space: normal;
+    max-width: 520px;
+    word-break: break-word;
+}
+
+/* События: столбец «Текст» = 200px */
+#bot-view-events th:nth-child(7),
+#bot-view-events td.be-text {
+    width: 200px;
+    max-width: 200px;
+}
+
+#bot-view-events td.be-text {
+    max-width: none;
+}
+
+#bot-event-tbody td {
+    text-align: left;
+}
+
+#report-pane-bot .report-table th[data-bsort] { cursor: pointer; user-select: none; }
 
 .panel-row {
     display: flex;
