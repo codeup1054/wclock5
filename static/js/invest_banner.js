@@ -868,7 +868,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
             tblHtml += `<tr class="${row.cssClass}" style="opacity:${rowOpacity};">
             <td class="banner-td-num" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
-            <td class="banner-td-num" style="color:${row.color};text-align:right;">${(row.currentTotal / 1e3).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}</td>
+            <td class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
             <td class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
             <td class="banner-td-pct ${row.weekChangeClass}">${formatPercent(row.pctChangeWeek)}</td>

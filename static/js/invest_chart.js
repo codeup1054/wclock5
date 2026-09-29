@@ -838,7 +838,7 @@ try {
                 if (s.fmt) return s.fmt(v);
                 if (s.decimals != null) return Number(v).toFixed(s.decimals);
                 if (Math.abs(v) < 100) return String(Math.round(v));
-                return (v / 1e3).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+                return Math.round(v).toLocaleString('ru-RU').replace(/\u00a0/g, ' ');
             }
 
             // Левый край числовых меток левых осей (например XAU). Маркеры капитала
