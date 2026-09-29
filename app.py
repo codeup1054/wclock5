@@ -4,7 +4,6 @@ VALID_KEY = "6HKJ809-YUI67-HKJJL-5677-HJKK"
 SECRET_MODE_KEY = "INVEST_MODE"
 
 import os
-import re
 import sqlite3
 import json
 import time
@@ -973,26 +972,16 @@ def _invest_turnover_payload():
 
 def _invest_turnover_details_payload():
     """Детализация оборота за сегодня: total/капитал из strategy_summary +
-    база/ставка/комиссия/поручения из сообщения «Тариф процентный» (bot_events).
-    Используется секцией медиатора invest.turnover_details."""
-    import re
-
-    def _num(t, pat):
-        m = re.search(pat, t)
-        if not m:
-            return None
-        try:
-            return float(re.sub(r"[^\d.]", "", m.group(1)))
-        except ValueError:
-            return None
-
+    база/ставка/комиссия/поручения из tariff_details (P2: демон парсит
+    сообщение «Тариф процентный» один раз при приходе и кладёт JSON).
+    Regex из 5с-цикла исключён (минус parse и import re)."""
     now_msk = datetime.now(timezone.utc) + timedelta(hours=3)
     today = now_msk.strftime("%Y-%m-%d")
     out = {}
     try:
         con = sqlite3.connect(INVEST_DB_PATH)
         con.row_factory = sqlite3.Row
-        for chat_like, src in (("%Финам%", "finam"), ("%Т-Инвест%", "tinkoff")):
+        for src in ("finam", "tinkoff"):
             d = {"day": today, "turnover": None, "capital": None, "commission": None,
                  "base": None, "session": None, "evening": None, "orders": None,
                  "rate_percent": None, "fee_per_order": None, "strategy": False}
@@ -1005,27 +994,25 @@ def _invest_turnover_details_payload():
                 d["turnover"] = row["turnover"]
                 d["capital"] = row["capital"]
                 d["commission"] = row["commission"]
-            # Сообщение «✅ Тариф процентный … за <сегодня>» из канала брокера.
-            evs = con.execute(
-                "SELECT text FROM bot_events WHERE chat LIKE ?"
-                " AND text LIKE '%Тариф процентный%' ORDER BY ts_epoch DESC LIMIT 30",
-                (chat_like,)).fetchall()
-            for ev in evs:
-                txt = ev["text"] or ""
-                tm = re.search(r"\bза\s+(\d{4}-\d{2}-\d{2})\b", txt)
-                if not tm or tm.group(1) != today:
-                    continue
-                d["commission"] = _num(txt, r"Комиссия\s*([\d' ]+?)₽") or d["commission"]
-                d["base"] = _num(txt, r"при\s+базе\s*([\d' ]+?)₽")
-                d["session"] = _num(txt, r"сессия\s*([\d' ]+?)\s*\+")
-                d["evening"] = _num(txt, r"вечер\s+прошлого\s+дня\s*([\d' ]+?)\)")
-                mo = re.search(r"(\d+)\s+исполненных\s+поручени", txt)
-                d["orders"] = int(mo.group(1)) if mo else None
-                mr = re.search(r"Ставка\s+([\d.]+)\s*%", txt)
-                d["rate_percent"] = float(mr.group(1)) if mr else None
-                mf = re.search(r"([\d.,]+)₽\s+на\s+поручение", txt)
-                d["fee_per_order"] = float(mf.group(1).replace(",", ".")) if mf else None
-                break
+            # JSON-детали «Тариф процентный» от демона (P2, tariff_details).
+            # Таблицы может ещё не быть (демон не перезапущен) — тогда только
+            # базовые turnover/capital/commission из strategy_summary.
+            try:
+                tr = con.execute(
+                    "SELECT payload_json FROM tariff_details"
+                    " WHERE day=? AND source=?", (today, src)).fetchone()
+            except sqlite3.Error:
+                tr = None
+            if tr and tr["payload_json"]:
+                try:
+                    t = json.loads(tr["payload_json"])
+                except (ValueError, TypeError):
+                    t = None
+                if t:
+                    for k in ("commission", "base", "session", "evening",
+                              "orders", "rate_percent", "fee_per_order"):
+                        if t.get(k) is not None:
+                            d[k] = t[k]
             out[src] = d
         con.close()
     except sqlite3.Error:

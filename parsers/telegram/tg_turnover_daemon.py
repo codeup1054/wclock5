@@ -3,17 +3,23 @@
 # сессия wclock_session; зеркало lab_inspector НЕ используется),
 # парсит обороты стратегии -> invest_portfolio.db :: strategy_summary,
 # сохраняет сообщения из каналов -> bot_events.
-import asyncio, os, re, sys, time
-from telethon import TelegramClient
+import asyncio, hashlib, json, os, re, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB = HERE + '/../invest/invest_portfolio.db'
+# Путь БД переопределяем окружением (тесты пишут во временный файл).
+DB = os.environ.get('TG_TURNOVER_DB') or (HERE + '/../invest/invest_portfolio.db')
 
 sys.path.insert(0, HERE)
 import importlib.util as _ilu
 _tl = _ilu.spec_from_file_location('tg_login', os.path.join(HERE, 'tg_login.py'))
-_l = _ilu.module_from_spec(_tl)
-_tl.loader.exec_module(_l)
+_l = None
+if _tl is not None:
+    _lum = _ilu.module_from_spec(_tl)
+    try:
+        _tl.loader.exec_module(_lum)
+        _l = _lum
+    except Exception:
+        _l = None
 
 CHANNELS = (
     'Сделки Бота — ПРОД Сергей Финам (TGLD)',
@@ -55,6 +61,16 @@ def init_db():
         UNIQUE(chat, msg_id))''')
     con.execute('CREATE INDEX IF NOT EXISTS idx_bot_events_ts ON bot_events(ts_epoch)')
     con.execute('CREATE INDEX IF NOT EXISTS idx_bot_events_chat ON bot_events(chat)')
+    con.execute('''CREATE TABLE IF NOT EXISTS tariff_details(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        day TEXT,
+        source TEXT,
+        ts_epoch INTEGER,
+        msg_id INTEGER,
+        payload_json TEXT,
+        raw_md5 TEXT,
+        UNIQUE(day, source))''')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_tariff_details_day ON tariff_details(day, source)')
     con.commit(); con.close()
 
 NUM = r"[\d'\u00a0 ]+?(?:\.\d+)?"
@@ -137,6 +153,117 @@ def save_event(chat, upd_type, msg_id, ts, text):
         (int(msg_id), chat, int(ts), upd_type, text[:4000], text[:4000]))
     con.commit(); con.close()
 
+
+TARIFF_SOURCES = (
+    ("%Финам%", "finam"),
+    ("%Т-Инвест%", "tinkoff"),
+)
+
+def tariff_source(chat):
+    for like, src in TARIFF_SOURCES:
+        if like.strip("%") in (chat or ""):
+            return src
+    return None
+
+def parse_tariff(text, chat=None):
+    """'Тариф процентный' из канала брокера -> структура один раз при приходе
+    сообщения (P2). Итог сохраняется в tariff_details.payload_json (JSON),
+    API читает таблицу и regex из 5с-цикла исключён."""
+    if not text or "Тариф процентный" not in text:
+        return None
+    src = tariff_source(chat)
+    if not src:
+        return None
+    tm = re.search(r"за\s+(\d{4}-\d{2}-\d{2})", text)
+    if not tm:
+        return None
+    p = {"day": tm.group(1), "source": src}
+    def _num(pat, val):
+        m = re.search(pat, val)
+        if not m:
+            return None
+        try:
+            return float(re.sub(r"[^\d.]", "", m.group(1)))
+        except ValueError:
+            return None
+    comm = _num(r"Комиссия\s*([\d' ]+?)₽", text)
+    if comm is not None:
+        p["commission"] = round(comm, 2)
+    base = _num(r"при\s+базе\s*([\d' ]+?)₽", text)
+    if base is not None:
+        p["base"] = round(base, 2)
+    sess = _num(r"сессия\s*([\d' ]+?)\s*\+", text)
+    if sess is not None:
+        p["session"] = round(sess, 2)
+    eve = _num(r"вечер\s+прошлого\s+дня\s*([\d' ]+?)\)", text)
+    if eve is not None:
+        p["evening"] = round(eve, 2)
+    mo = re.search(r"(\d+)\s+исполненных\s+поручени", text)
+    if mo:
+        p["orders"] = int(mo.group(1))
+    mr = re.search(r"Ставка\s+([\d.]+)\s*%", text)
+    if mr:
+        p["rate_percent"] = float(mr.group(1))
+    mf = re.search(r"([\d.,]+)₽\s+на\s+поручение", text)
+    if mf:
+        try:
+            p["fee_per_order"] = float(mf.group(1).replace(",", "."))
+        except ValueError:
+            pass
+    return p
+
+def save_tariff(chat, msg_id, ts, text):
+    """Upsert тарифа по (day, source); правка поста детектится по raw_md5."""
+    p = parse_tariff(text, chat)
+    if not p or not p.get("source") or not p.get("day"):
+        return
+    raw_md5 = hashlib.md5((text or "").encode("utf-8", "replace")).hexdigest()
+    payload = json.dumps(p, ensure_ascii=False, sort_keys=True)
+    con = _conn()
+    existing = con.execute(
+        'SELECT id, msg_id, raw_md5 FROM tariff_details'
+        ' WHERE day=? AND source=?', (p["day"], p["source"])).fetchone()
+    if existing:
+        eid, old_msg_id, old_md5 = existing
+        if int(msg_id) == old_msg_id and old_md5 == raw_md5:
+            con.close(); return
+        con.execute(
+            'UPDATE tariff_details SET ts_epoch=?, msg_id=?, payload_json=?, raw_md5=? WHERE id=?',
+            (int(ts), int(msg_id), payload, raw_md5, eid))
+    else:
+        con.execute(
+            'INSERT INTO tariff_details (day, source, ts_epoch, msg_id, payload_json, raw_md5)'
+            ' VALUES (?,?,?,?,?,?)',
+            (p["day"], p["source"], int(ts), int(msg_id), payload, raw_md5))
+    con.commit(); con.close()
+
+def backfill_tariff(limit=100):
+    """Одноразовое заполнение уже пришедших сообщений (первый старт после P2)."""
+    con = _conn()
+    rows = con.execute(
+        'SELECT chat, msg_id, ts_epoch, text FROM bot_events'
+        " WHERE text LIKE '%Тариф процентный%' ORDER BY ts_epoch DESC LIMIT ?",
+        (limit,)).fetchall()
+    n = 0
+    for chat, msg_id, ts, text in rows:
+        p = parse_tariff(text, chat)
+        if not p or not p.get("source") or not p.get("day"):
+            continue
+        if con.execute('SELECT 1 FROM tariff_details WHERE day=? AND source=?',
+                       (p["day"], p["source"])).fetchone():
+            continue
+        payload = json.dumps(p, ensure_ascii=False, sort_keys=True)
+        con.execute(
+            'INSERT INTO tariff_details (day, source, ts_epoch, msg_id, payload_json, raw_md5)'
+            ' VALUES (?,?,?,?,?,?)',
+            (p["day"], p["source"], int(ts), int(msg_id), payload,
+             hashlib.md5((text or "").encode("utf-8", "replace")).hexdigest()))
+        n += 1
+    con.commit(); con.close()
+    if n:
+        print(f'💾 тариф: добавлено из bot_events: {n}', flush=True)
+    return n
+
 async def scan_channel(client, ent):
     """Читает свежие посты канала напрямую (без зеркала)."""
     title = ent.title or ''
@@ -146,6 +273,7 @@ async def scan_channel(client, ent):
         ts = int(m.date.timestamp()) if m.date else int(time.time())
         if m.id is not None:
             save_event(title, 'channel_post', m.id, ts, text)
+            save_tariff(title, m.id, ts, text)
         p = parse(text) if text else None
         if p:
             save(m.id, ts, p, text)
@@ -155,8 +283,14 @@ async def scan_channel(client, ent):
         print(f'  -> новых/обновлённых записей: {n}', flush=True)
 
 async def main():
+    from telethon import TelegramClient
+
     print('🔄 tg_turnover_daemon start (прямое чтение каналов, без зеркала)', flush=True)
+    if _l is None:
+        print('Нет tg_login.py (сессия) — демон завершён', flush=True)
+        return
     init_db()
+    backfill_tariff()
     client = TelegramClient(_l.SESSION, _l.API_ID, _l.API_HASH)
     await client.connect()
     if not await client.is_user_authorized():

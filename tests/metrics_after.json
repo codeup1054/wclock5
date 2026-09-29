@@ -1,6 +1,6 @@
 {
   "lines": {
-    "app.py": 1133,
+    "app.py": 1126,
     "invest_repo.py": 1346,
     "panel_mediator.py": 214,
     "db_init.py": 191,
@@ -9,22 +9,22 @@
     "parsers/invest/tinkoff_invest_daemon.py": 377,
     "parsers/invest/finam_invest_daemon.py": 490,
     "parsers/invest/tracked_tickers_daemon.py": 303,
-    "parsers/telegram/tg_turnover_daemon.py": 194,
+    "parsers/telegram/tg_turnover_daemon.py": 328,
     "static/js/panel_mediator.js": 267,
     "static/js/invest_chart_helpers.js": 528,
     "static/js/invest_banner.js": 1067,
     "static/js/invest_chart.js": 2377
   },
-  "total_lines": 8853,
+  "total_lines": 8980,
   "files": 14,
   "app_dup_token_markers": 0,
   "app_uses_shared_engine": true,
   "bench": {
-    "median_ms": 23.48,
+    "median_ms": 24.03,
     "samples_ms": [
-      24.83,
-      23.48,
-      22.2
+      24.45,
+      24.03,
+      23.18
     ]
   }
 }

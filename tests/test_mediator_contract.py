@@ -104,6 +104,23 @@ class MediatorContractTest(unittest.TestCase):
                                 "invalid literal for int() with base 10: 'live'",
                                 f"'live' не должен падать в ValueError: {str(ch)[:200]}")
 
+    def test_turnover_details_schema(self):
+        res = self._post({"v": {"invest.turnover_details": ""}})
+        self.assertIn("invest.turnover_details", res["tokens"])
+        changed = res["changed"]
+        if "invest.turnover_details" in changed:
+            data = changed["invest.turnover_details"]
+            if not data:
+                # Локальная БД со старой схемой strategy_summary
+                # (нет commission) — детали не вычисляются.
+                self.skipTest("локальная БД без колонок strategy_summary")
+            self.assertLessEqual({"finam", "tinkoff"}, set(data.keys()))
+            for src, d in data.items():
+                for k in ("day", "turnover", "capital", "commission", "base",
+                          "session", "evening", "orders", "rate_percent",
+                          "fee_per_order", "strategy"):
+                    self.assertIn(k, d, f"секция details: нет поля {k} у {src}")
+
     def test_no_writer_section(self):
         res = self._post({"write": {"bogus_write": {"value": 1}}})
         self.assertTrue(res["writes"]["bogus_write"]["skipped"])
