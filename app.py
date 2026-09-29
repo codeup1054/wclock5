@@ -813,6 +813,12 @@ def _write_battery_payload(db_path=DB_PATH, device_id=None, battery_level=None):
 def _invest_history_payload(interval="hour", period="-30 day", start_ts=None,
                             end_ts=None, after_ts=None):
     """Полный payload истории капитала (тот же путь, что GET /api/invest/history)."""
+    # 'live' (и любые не-числа) из медиатор-параметров → None, как в GET-пути
+    # (_int_or_none на линии запроса) и как у секции tickers: иначе read_history
+    # падает int('live') (ValueError), секция приходит {"_error": ...} и затирает
+    # историю/баннер на клиенте. 'live' = «до текущего момента» = end_ts None.
+    start_ts = _int_or_none(start_ts)
+    end_ts = _int_or_none(end_ts)
     bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600,
                    'sixhour': 21600, 'day': 86400}.get(interval, 3600)
     base = {"interval": interval, "period": period, "start_ts": start_ts, "end_ts": end_ts}

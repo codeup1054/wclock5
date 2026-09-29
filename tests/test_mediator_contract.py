@@ -85,6 +85,25 @@ class MediatorContractTest(unittest.TestCase):
         self.assertFalse(res["writes"]["battery"]["applied"])
         self.assertNotEqual(res["writes"]["battery"]["reason"], None)
 
+    def test_end_ts_live_not_error(self):
+        # Регрессия: чарт в live-режиме шлёт end_ts='live' (медиатор-параметры).
+        # Секция не должна падать ValueError (int('live')) и уходить в _error —
+        # 'live' санитизируется в None (как в GET-пути и у tickers).
+        params = {"invest.history": {
+            "interval": "hour", "period": "-6 hour",
+            "start_ts": int(time.time()) - 2 * 3600, "end_ts": "live",
+        }}
+        res = self._post({"v": {"invest.history": ""}, "params": params})
+        self.assertIn("invest.history", res["tokens"])
+        changed = res["changed"]
+        if "invest.history" in changed:
+            ch = changed["invest.history"]
+            # Другие _error (например, локальная БД со старой схемой) допустимы —
+            # регрессия именно про int('live') из end_ts.
+            self.assertNotEqual(ch.get("_error"),
+                                "invalid literal for int() with base 10: 'live'",
+                                f"'live' не должен падать в ValueError: {str(ch)[:200]}")
+
     def test_no_writer_section(self):
         res = self._post({"write": {"bogus_write": {"value": 1}}})
         self.assertTrue(res["writes"]["bogus_write"]["skipped"])
