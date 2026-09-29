@@ -52,6 +52,7 @@ services:
     volumes:
       - ./parsers/invest:/app/parsers/invest
       - ./invest_db.py:/app/invest_db.py
+      - ./invest_repo.py:/app/invest_repo.py
       - ./invest_portfolio.db:/app/invest_portfolio.db
 
   finam-invest-parser:
@@ -67,6 +68,7 @@ services:
     volumes:
       - ./parsers/invest:/app/parsers/invest
       - ./invest_db.py:/app/invest_db.py
+      - ./invest_repo.py:/app/invest_repo.py
       - ./invest_portfolio.db:/app/invest_portfolio.db
 
   tickers-parser:
