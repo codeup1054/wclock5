@@ -210,6 +210,29 @@ def apply_retention(db_path=None):
 _LAST_RAW_FOLD_TS = 0
 
 
+def _upsert_bucket(cur, res, bucket, source, m, tgld=None):
+    """UPSERT свечи (bucket, source, res) в invest_buckets (P3)."""
+    tgld = tgld or {}
+    cur.execute("""
+        INSERT INTO invest_buckets
+            (timestamp, ts_epoch, source, res, open, high, low, close, volume,
+             tgld_value, tgld_total, tmon_value, lqdt_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(ts_epoch, source, res) DO UPDATE SET
+            high = MAX(high, excluded.high),
+            low = MIN(low, excluded.low),
+            close = excluded.close,
+            volume = volume + excluded.volume,
+            tgld_value = COALESCE(excluded.tgld_value, tgld_value),
+            tgld_total = COALESCE(excluded.tgld_total, tgld_total),
+            tmon_value = COALESCE(excluded.tmon_value, tmon_value),
+            lqdt_value = COALESCE(excluded.lqdt_value, lqdt_value)
+    """, (to_iso(datetime.fromtimestamp(bucket, tz=timezone.utc)), bucket, source, res,
+          m.get("open"), m.get("high"), m.get("low"), m.get("close"), m.get("volume"),
+          tgld.get("tgld_value"), tgld.get("tgld_total"),
+          tgld.get("tmon_value"), tgld.get("lqdt_value")))
+
+
 def maybe_fold_raw(db_path=None):
     """Схлопывание секунд → минутные свечи раз в минуту (модульный таймер).
 
@@ -231,6 +254,23 @@ def apply_retention_impl(conn, cur, db_path=None):
     raw_cutoff = now - RAW_FOLD_WINDOW_SEC
     min_cutoff = now - RETENTION_MIN_DAYS * 86400
     candle_cutoff = now - RETENTION_CANDLE_DAYS * 86400
+
+    # Писатель P3 работает только с invest_buckets; создаём, если БД старая
+    # (без прогона миграций).
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS invest_buckets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            ts_epoch INTEGER NOT NULL,
+            source TEXT NOT NULL DEFAULT 'tinkoff',
+            res TEXT NOT NULL DEFAULT 'min',
+            open REAL, high REAL, low REAL, close REAL,
+            volume INTEGER DEFAULT 0,
+            tgld_value REAL, tgld_total REAL, tmon_value REAL, lqdt_value REAL,
+            UNIQUE(ts_epoch, source, res)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_invest_buckets_epoch_source ON invest_buckets(ts_epoch, source, res)")
 
     # ---------- Шаг 1: сырые → минуты ----------
     raw_rows = cur.execute("""
@@ -277,22 +317,9 @@ def apply_retention_impl(conn, cur, db_path=None):
 
     for (bucket, source), m in mins.items():
         te = raw_tgld_hours.get((bucket, source))
-        cur.execute("""
-            INSERT INTO portfolio_min (timestamp, ts_epoch, source, open, high, low, close, volume, tgld_value, tgld_total, tmon_value, lqdt_value)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ts_epoch, source) DO UPDATE SET
-                high = MAX(high, excluded.high),
-                low = MIN(low, excluded.low),
-                close = excluded.close,
-                volume = volume + excluded.volume,
-                tgld_value = COALESCE(excluded.tgld_value, tgld_value),
-                tgld_total = COALESCE(excluded.tgld_total, tgld_total),
-                tmon_value = COALESCE(excluded.tmon_value, tmon_value),
-                lqdt_value = COALESCE(excluded.lqdt_value, lqdt_value)
-        """, (to_iso(datetime.fromtimestamp(bucket, tz=timezone.utc)), bucket, source,
-              m["open"], m["high"], m["low"], m["close"], m["volume"],
-              te[0] if te else None, te[3] if te else None,
-              te[1] if te else None, te[2] if te else None))
+        _upsert_bucket(cur, "min", bucket, source, m,
+                       {"tgld_value": te[0], "tgld_total": te[3],
+                        "tmon_value": te[1], "lqdt_value": te[2]} if te else None)
     if mins:
         print(f"📊 Агрегация: {len(mins)} минутных свечей из "
               f"{sum(m['volume'] for m in mins.values())} снапшотов", flush=True)
@@ -300,14 +327,14 @@ def apply_retention_impl(conn, cur, db_path=None):
     # ---------- Шаг 2: минуты → часы (старше RETENTION_MIN_DAYS) ----------
     min_rows = cur.execute("""
         SELECT ts_epoch, source, close AS total
-        FROM portfolio_min
-        WHERE ts_epoch < ?
+        FROM invest_buckets
+        WHERE res='min' AND ts_epoch < ?
         ORDER BY ts_epoch ASC
     """, (min_cutoff,)).fetchall()
     min_tgld = cur.execute("""
         SELECT ts_epoch, source, tgld_value, tgld_total, tmon_value, lqdt_value
-        FROM portfolio_min
-        WHERE ts_epoch < ?
+        FROM invest_buckets
+        WHERE res='min' AND ts_epoch < ?
         ORDER BY ts_epoch ASC
     """, (min_cutoff,)).fetchall()
     min_tgld_map = {}
@@ -335,22 +362,9 @@ def apply_retention_impl(conn, cur, db_path=None):
 
     for (bucket, source), h in hours.items():
         te = min_tgld_hours.get((bucket, source))
-        cur.execute("""
-            INSERT INTO portfolio_hourly (timestamp, ts_epoch, source, open, high, low, close, volume, tgld_value, tgld_total, tmon_value, lqdt_value)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(ts_epoch, source) DO UPDATE SET
-                high = MAX(high, excluded.high),
-                low = MIN(low, excluded.low),
-                close = excluded.close,
-                volume = volume + excluded.volume,
-                tgld_value = COALESCE(excluded.tgld_value, tgld_value),
-                tgld_total = COALESCE(excluded.tgld_total, tgld_total),
-                tmon_value = COALESCE(excluded.tmon_value, tmon_value),
-                lqdt_value = COALESCE(excluded.lqdt_value, lqdt_value)
-        """, (to_iso(datetime.fromtimestamp(bucket, tz=timezone.utc)), bucket, source,
-              h["open"], h["high"], h["low"], h["close"], h["volume"],
-              te[0] if te else None, te[3] if te else None,
-              te[1] if te else None, te[2] if te else None))
+        _upsert_bucket(cur, "hour", bucket, source, h,
+                       {"tgld_value": te[0], "tgld_total": te[3],
+                        "tmon_value": te[1], "lqdt_value": te[2]} if te else None)
     if hours:
         print(f"📊 Агрегация: {len(hours)} часовых свечей из "
               f"{sum(h['volume'] for h in hours.values())} минутных", flush=True)
@@ -358,6 +372,10 @@ def apply_retention_impl(conn, cur, db_path=None):
     # ---------- Чистка ----------
     cur.execute("DELETE FROM portfolio_positions WHERE ts_epoch < ?", (raw_cutoff,))
     cur.execute("DELETE FROM portfolio_history WHERE ts_epoch < ?", (raw_cutoff,))
+    cur.execute("DELETE FROM invest_buckets WHERE res='min' AND ts_epoch < ?", (min_cutoff,))
+    cur.execute("DELETE FROM invest_buckets WHERE res='hour' AND ts_epoch < ?", (candle_cutoff,))
+    # Legacy-таблицы остаются только как fallback-чтение до миграции; писателей
+    # больше нет, поэтому чистим только то, что уже перенесено копией миграции.
     cur.execute("DELETE FROM portfolio_min WHERE ts_epoch < ?", (min_cutoff,))
     cur.execute("DELETE FROM portfolio_hourly WHERE ts_epoch < ?", (candle_cutoff,))
 
@@ -393,6 +411,26 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None, start_epoch=N
         upper_sql = " AND ts_epoch <= ?" if end_epoch is not None else ""
         upper_params = ([] if end_epoch is None else [int(end_epoch)])
 
+        # --- P3: единая бакет-таблица invest_buckets (свечи) ---
+        bucket_rows = []
+        has_buckets = cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='invest_buckets'"
+        ).fetchone() is not None
+        if has_buckets:
+            bucket_rows = cur.execute("""
+                SELECT timestamp, ts_epoch, source, res, close AS total,
+                       tgld_value, tgld_total, tmon_value, lqdt_value
+                FROM invest_buckets
+                WHERE ts_epoch >= ?""" + upper_sql + """
+                ORDER BY ts_epoch ASC
+            """, [cutoff] + upper_params).fetchall()
+
+        # --- RAW-оверлей свежего окна (секунды ещё не сложены в бакеты) ---
+        # Широкий скан сырых секунд уходит: только последние RAW_FOLD_WINDOW_SEC,
+        # остальное покрывают бакеты.
+        raw_lo = cutoff
+        if not tail:
+            raw_lo = max(cutoff, int(now_dt().timestamp()) - RAW_FOLD_WINDOW_SEC)
         raw_rows = cur.execute("""
             SELECT timestamp, ts_epoch, source,
                    SUM(value) AS total,
@@ -403,47 +441,50 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None, start_epoch=N
             WHERE ts_epoch >= ?""" + upper_sql + """
             GROUP BY ts_epoch, source
             ORDER BY ts_epoch ASC
-        """, [cutoff] + upper_params).fetchall()
+        """, [raw_lo] + upper_params).fetchall()
 
         candles = []
-        has_hourly = cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='portfolio_hourly'"
-        ).fetchone() is not None
-        if has_hourly:
-            candles = cur.execute("""
-                SELECT timestamp, ts_epoch, source, close AS total, tgld_value, tgld_total, tmon_value, lqdt_value
-                FROM portfolio_hourly
-                WHERE ts_epoch >= ?""" + upper_sql + """
-                ORDER BY ts_epoch ASC
-            """, [cutoff] + upper_params).fetchall()
-
         min_candles = []
-        has_min = cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='portfolio_min'"
-        ).fetchone() is not None
-        if has_min:
-            min_candles = cur.execute("""
-                SELECT timestamp, ts_epoch, source, close AS total, tgld_value, tgld_total, tmon_value, lqdt_value
-                FROM portfolio_min
-                WHERE ts_epoch >= ?""" + upper_sql + """
-                ORDER BY ts_epoch ASC
-            """, [cutoff] + upper_params).fetchall()
+        # Обратная совместимость до миграции: период, не покрытый бакетами,
+        # читаем из legacy portfolio_min/portfolio_hourly (+ полный raw, если пусто).
+        if not bucket_rows:
+            has_hourly = cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='portfolio_hourly'"
+            ).fetchone() is not None
+            if has_hourly:
+                candles = cur.execute("""
+                    SELECT timestamp, ts_epoch, source, close AS total, tgld_value, tgld_total, tmon_value, lqdt_value
+                    FROM portfolio_hourly
+                    WHERE ts_epoch >= ?""" + upper_sql + """
+                    ORDER BY ts_epoch ASC
+                """, [cutoff] + upper_params).fetchall()
 
-        # Обратная совместимость: если за период пусто — отдаём всё, что есть
-        # (только в полном режиме; tail-запрос с будущим after_ts = пустая дельта)
-        if not tail and not raw_rows and not candles and not min_candles:
-            raw_rows = cur.execute("""
-                SELECT timestamp, ts_epoch, source,
-                       SUM(value) AS total,
-                       SUM(CASE WHEN ticker LIKE '%TGLD%' OR name LIKE '%TGLD%' THEN value ELSE 0 END) AS tgld_val,
-                       SUM(CASE WHEN ticker LIKE '%TMON%' OR name LIKE '%TMON%' THEN value ELSE 0 END) AS tmon_val,
-                       SUM(CASE WHEN ticker LIKE '%LQDT%' OR name LIKE '%LQDT%' THEN value ELSE 0 END) AS lqdt_val
-                FROM portfolio_positions
-                GROUP BY ts_epoch, source
-                ORDER BY ts_epoch ASC
-            """).fetchall()
+            has_min = cur.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='portfolio_min'"
+            ).fetchone() is not None
+            if has_min:
+                min_candles = cur.execute("""
+                    SELECT timestamp, ts_epoch, source, close AS total, tgld_value, tgld_total, tmon_value, lqdt_value
+                    FROM portfolio_min
+                    WHERE ts_epoch >= ?""" + upper_sql + """
+                    ORDER BY ts_epoch ASC
+                """, [cutoff] + upper_params).fetchall()
 
-        if not raw_rows and not candles and not min_candles:
+            # Обратная совместимость: если за период пусто — отдаём всё, что есть
+            # (только в полном режиме; tail-запрос с будущим after_ts = пустая дельта)
+            if not tail and not raw_rows and not candles and not min_candles:
+                raw_rows = cur.execute("""
+                    SELECT timestamp, ts_epoch, source,
+                           SUM(value) AS total,
+                           SUM(CASE WHEN ticker LIKE '%TGLD%' OR name LIKE '%TGLD%' THEN value ELSE 0 END) AS tgld_val,
+                           SUM(CASE WHEN ticker LIKE '%TMON%' OR name LIKE '%TMON%' THEN value ELSE 0 END) AS tmon_val,
+                           SUM(CASE WHEN ticker LIKE '%LQDT%' OR name LIKE '%LQDT%' THEN value ELSE 0 END) AS lqdt_val
+                    FROM portfolio_positions
+                    GROUP BY ts_epoch, source
+                    ORDER BY ts_epoch ASC
+                """).fetchall()
+
+        if not bucket_rows and not raw_rows and not candles and not min_candles:
             conn.close()
             return {}
 
@@ -465,7 +506,7 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None, start_epoch=N
                                    "type": er["update_type"] or "spike",
                                    "text": er["text"] or ""})
 
-        # Слияние: ключ (epoch, source); приоритет raw > min > hourly
+        # Слияние: ключ (epoch, source); приоритет fresh-RAW > buckets(min > hour)
         points = {}     # (epoch, source) -> [display_ts, value, tgld_value, tgld_total, tmon_value, lqdt_value]
         raw_epochs = set()
         for r in raw_rows:
@@ -498,6 +539,19 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None, start_epoch=N
             src = c["source"] or "tinkoff"
             if c["total"] is None or c["ts_epoch"] in raw_epochs or c["ts_epoch"] in min_epochs:
                 continue
+            points[(c["ts_epoch"], src)] = [
+                c["timestamp"], round(c["total"], 2),
+                c["tgld_value"] if c["tgld_value"] is not None else None,
+                c["tgld_total"] if c["tgld_total"] is not None else None,
+                c["tmon_value"] if c["tmon_value"] is not None else None,
+                c["lqdt_value"] if c["lqdt_value"] is not None else None,
+            ]
+        for c in bucket_rows:
+            src = c["source"] or "tinkoff"
+            if c["total"] is None or (c["ts_epoch"], src) in points:
+                continue
+            # Для одного (epoch, source): предпочитаем res='min' (детальнее),
+            # 'hour' берём только если точки ещё нет.
             points[(c["ts_epoch"], src)] = [
                 c["timestamp"], round(c["total"], 2),
                 c["tgld_value"] if c["tgld_value"] is not None else None,
@@ -583,9 +637,11 @@ def read_history(period="-35 day", bucket_size=3600, db_path=None, start_epoch=N
         prev_data = {}
         if not tail:
             try:
-                # Check both portfolio_positions and portfolio_hourly
-                for tbl in ["portfolio_positions", "portfolio_hourly"]:
-                    val_col = "value" if tbl == "portfolio_positions" else "close"
+                # P3: сначала бакеты (close), затем legacy-таблицы как fallback.
+                src_list = [("invest_buckets", "close")] \
+                    if has_buckets else []
+                for tbl, val_col in src_list + [
+                        ("portfolio_positions", "value"), ("portfolio_hourly", "close")]:
                     prev_rows = cur.execute(f"""
                         SELECT source, MIN(ts_epoch) AS first_e, MAX(ts_epoch) AS last_e
                         FROM {tbl}
@@ -811,10 +867,41 @@ def _migrate_portfolio_db(db_path):
     if "lqdt_value" not in cols:
         cur.execute("ALTER TABLE portfolio_hourly ADD COLUMN lqdt_value REAL")
 
+    # 4) invest_buckets: единая бакет-таблица (P3) — свечи всех разрешений.
+    # res='min' — минутные (30 дней, детальный анализ), res='hour' — часовые (120 дней).
+    if not _table_cols(cur, "invest_buckets"):
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS invest_buckets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                ts_epoch INTEGER NOT NULL,
+                source TEXT NOT NULL DEFAULT 'tinkoff',
+                res TEXT NOT NULL DEFAULT 'min',
+                open REAL, high REAL, low REAL, close REAL,
+                volume INTEGER DEFAULT 0,
+                tgld_value REAL, tgld_total REAL, tmon_value REAL, lqdt_value REAL,
+                UNIQUE(ts_epoch, source, res)
+            )
+        """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_invest_buckets_epoch_source ON invest_buckets(ts_epoch, source, res)")
+    # Перенос legacy-свечей (идемпотентно: INSERT OR IGNORE) — чтобы read_history
+    # переключился на бакеты без «пустых» периодов в истории.
+    for _res, _tbl in (("min", "portfolio_min"), ("hour", "portfolio_hourly")):
+        if _table_cols(cur, _tbl):
+            cur.execute(f"""
+                INSERT OR IGNORE INTO invest_buckets
+                    (timestamp, ts_epoch, source, res, open, high, low, close, volume,
+                     tgld_value, tgld_total, tmon_value, lqdt_value)
+                SELECT timestamp, ts_epoch, source, '{_res}', open, high, low, close, volume,
+                       tgld_value, tgld_total, tmon_value, lqdt_value
+                FROM {_tbl}
+            """)
+
     conn.commit()
     n = cur.execute("SELECT COUNT(*) FROM portfolio_hourly").fetchone()[0]
+    b = cur.execute("SELECT COUNT(*) FROM invest_buckets").fetchone()[0]
     conn.close()
-    print(f"✅ Миграция invest_portfolio.db завершена (свечей: {n})", flush=True)
+    print(f"✅ Миграция invest_portfolio.db завершена (свечей: {n}, бакетов: {b})", flush=True)
 
 
 def _migrate_tickers_db(db_path):

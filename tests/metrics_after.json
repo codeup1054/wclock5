@@ -1,7 +1,7 @@
 {
   "lines": {
     "app.py": 1126,
-    "invest_repo.py": 1346,
+    "invest_repo.py": 1433,
     "panel_mediator.py": 214,
     "db_init.py": 191,
     "invest_db.py": 89,
@@ -15,16 +15,16 @@
     "static/js/invest_banner.js": 1067,
     "static/js/invest_chart.js": 2377
   },
-  "total_lines": 8980,
+  "total_lines": 9067,
   "files": 14,
   "app_dup_token_markers": 0,
   "app_uses_shared_engine": true,
   "bench": {
-    "median_ms": 24.03,
+    "median_ms": 22.79,
     "samples_ms": [
-      24.45,
-      24.03,
-      23.18
+      1831.01,
+      22.79,
+      21.43
     ]
   }
 }
