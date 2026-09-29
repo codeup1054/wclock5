@@ -294,6 +294,10 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const eTs = getSetting('invest_panel_end_ts', null);
         if (sTs) params.start_ts = sTs;
         if (eTs) params.end_ts = eTs;
+        // P6: хвост запрашивается ЯВНО (after_ts = последняя известная эпоха),
+        // а не декодируется сервером из цифрового токена. Первый опрос
+        // (lastDataEpoch=0) идёт без after_ts — полный payload.
+        if (lastDataEpoch > 0) params.after_ts = lastDataEpoch;
         return params;
     }
 

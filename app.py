@@ -25,6 +25,7 @@ def _int_or_none(v):
 # === Инициализация БД ===
 from db_init import init_db
 import invest_repo
+from panel_mediator import PanelMediator, stable_token
 print("🔧 Инициализация базы данных...")
 init_db()  # ← вызывается СРАЗУ при импорте app.py
 
@@ -1026,22 +1027,38 @@ def _invest_turnover_details_payload():
     return out
 
 
-# Стабильные токены секций (SHA-256 sort_keys JSON; invest.history — _latest_epoch).
-def _stable_token(payload):
-    import hashlib, json as _json
-    if payload is None:
-        payload = {}
-    blob = _json.dumps(payload, ensure_ascii=False, sort_keys=True,
-                       separators=(",", ":"), default=str).encode("utf-8")
-    return hashlib.sha256(blob).hexdigest()[:16]
+# === Движок медиатора (единый, panel_mediator.py) ===
+# Токены секций: SHA-256 fingerprint payload (sort_keys); исключение —
+# invest.history — его «токен» = _latest_epoch (дельта-навигация хвоста),
+# а после_ts клиент шлёт явно в params (P6), цифровой токен — fallback (BC).
 
+class _WClockMediator(PanelMediator):
+    """WClock-подкласс: tail-логика секции invest.history поверх движка."""
 
-def _section_token(sect, payload):
-    """Токен секции: для invest.history — `_latest_epoch` (дельта), для
-    остальных — стабильный hash payload."""
-    if sect == "invest.history" and isinstance(payload, dict) and payload.get("_latest_epoch") is not None:
-        return str(payload["_latest_epoch"])
-    return _stable_token(payload)
+    def prepare_params(self, sect, client_tok, params, ctx):
+        params = dict(params or {})
+        if sect == "invest.history":
+            after = params.get("after_ts")
+            if after is None and client_tok and str(client_tok).isdigit() \
+                    and int(client_tok) > 0:
+                # BC: старый клиент кодирует эпоху в цифровом токене.
+                after = int(client_tok)
+            if after is not None:
+                params["after_ts"] = after
+                ctx["tail"] = True
+        return params
+
+    def post_read(self, sect, payload, ctx):
+        if ctx.get("tail") and isinstance(payload, dict) \
+                and not payload.get("_error"):
+            payload["_tail"] = True
+        return payload
+
+    def section_token(self, sect, payload):
+        if sect == "invest.history" and isinstance(payload, dict) \
+                and payload.get("_latest_epoch") is not None:
+            return str(payload["_latest_epoch"])
+        return stable_token(payload)
 
 
 # Карта reader'ов секций медиатора (чистые payload без jsonify).
@@ -1079,87 +1096,33 @@ _DATA_MEDIATOR_WRITERS = {
 }
 _DATA_MEDIATOR_WRITE_INTERVAL = {"battery": 60}
 
+# Единый инстанс медиатора (подкласс с tail-логикой invest.history).
+_DATA_MEDIATOR = _WClockMediator(
+    readers=_DATA_MEDIATOR_READERS,
+    writers=_DATA_MEDIATOR_WRITERS,
+    write_interval=_DATA_MEDIATOR_WRITE_INTERVAL,
+)
+
 
 @app.route("/api/data_mediator", methods=["POST"])
 def api_data_mediator():
     """Единый медиатор данных: дельта по секциям через токены.
-    body:
-      {"v": {"weather": токен, ...},              # токены клиента
-       "params": {"weather": {..}, ...},          # необязат. параметры секций
-       "write": {"battery": {"device_id":.., "value":..}}}  # записи
-    ответ:
-      {"changed": {"sect": payload},              # секции, где токен изменился
-       "tokens": {"sect": токен},                 # актуальные токены
-       "ts": мск, "writes": {"battery": {applied/skipped, reason}}}
+    Движок — panel_mediator.PanelMediator (единый, тестируемый).
     """
     body = request.get_json(silent=True) or {}
-    v = body.get("v") or {}
-    params = body.get("params") or {}
-    write_payloads = body.get("write") or {}
-
     # Контракт: пустой слой v = клиент «с нуля» → вернуть ВСЕ известные
-    # секции (client-токен «неизвестен» = пустая строка).
-    if not v:
-        v = {sect: "" for sect in _DATA_MEDIATOR_READERS}
-
-    changed, tokens = {}, {}
-    for sect, client_tok in v.items():
-        reader = _DATA_MEDIATOR_READERS.get(sect)
-        if reader is None:
-            err = {"_error": f"unknown section: {sect}"}
-            err_tok = _stable_token(err)
-            tokens[sect] = err_tok
-            if err_tok != client_tok:
-                changed[sect] = err
-            continue
-        try:
-            sect_params = params.get(sect, {}) if isinstance(params, dict) else {}
-            if not isinstance(sect_params, dict):
-                sect_params = {}
-            else:
-                sect_params = dict(sect_params)
-            tail_mode = (sect == "invest.history" and client_tok
-                         and str(client_tok).isdigit() and int(client_tok) > 0)
-            if tail_mode:
-                # Дельта: клиент уже знает _latest_epoch (токен секции) → читаем
-                # только хвост после него, а не весь массив истории.
-                sect_params["after_ts"] = int(client_tok)
-            payload = reader(sect_params)
-            if tail_mode and isinstance(payload, dict) and not payload.get("_error"):
-                payload["_tail"] = True
-            tok = _section_token(sect, payload)
-            tokens[sect] = tok
-            if tok != client_tok:
-                changed[sect] = payload
-        except Exception as e:
-            err = {"_error": str(e)}
-            err_tok = _stable_token(err)
-            tokens[sect] = err_tok
-            if err_tok != client_tok:
-                changed[sect] = err
-
-    writes = {}
-    for sect, payload in (write_payloads.items() if isinstance(write_payloads, dict) else []):
-        writer = _DATA_MEDIATOR_WRITERS.get(sect)
-        if writer is None:
-            writes[sect] = {"applied": False, "skipped": True,
-                            "reason": f"no writer for section: {sect}"}
-            continue
-        try:
-            res = writer(payload if isinstance(payload, dict) else {})
-            if isinstance(res, dict) and res.get("_error"):
-                writes[sect] = {"applied": False, "skipped": False, "reason": res["_error"]}
-            else:
-                writes[sect] = {"applied": True, "skipped": False, "reason": None}
-        except Exception as e:
-            writes[sect] = {"applied": False, "skipped": False, "reason": str(e)}
-
-    return jsonify({
-        "changed": changed,
-        "tokens": tokens,
-        "writes": writes,
-        "ts": (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S"),
-    })
+    # секции (client-токен «неизвестен» = пустая строка). write/params
+    # из исходного body сохраняются.
+    if not body.get("v"):
+        body = {
+            "v": {sect: "" for sect in _DATA_MEDIATOR_READERS},
+            "params": body.get("params") or {},
+            "write": body.get("write") or {},
+        }
+    res = _DATA_MEDIATOR.process(body)
+    res["ts"] = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime(
+        "%Y-%m-%d %H:%M:%S")
+    return jsonify(res)
 
 
 

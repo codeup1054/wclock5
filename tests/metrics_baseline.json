@@ -1,0 +1,30 @@
+{
+  "lines": {
+    "app.py": 1170,
+    "invest_repo.py": 1346,
+    "panel_mediator.py": 188,
+    "db_init.py": 191,
+    "invest_db.py": 89,
+    "parsers/mail.ru/mail_ru_weather_24hours.py": 277,
+    "parsers/invest/tinkoff_invest_daemon.py": 377,
+    "parsers/invest/finam_invest_daemon.py": 490,
+    "parsers/invest/tracked_tickers_daemon.py": 303,
+    "parsers/telegram/tg_turnover_daemon.py": 194,
+    "static/js/panel_mediator.js": 267,
+    "static/js/invest_chart_helpers.js": 528,
+    "static/js/invest_banner.js": 1063,
+    "static/js/invest_chart.js": 2377
+  },
+  "total_lines": 8860,
+  "files": 14,
+  "app_dup_token_markers": 2,
+  "app_uses_shared_engine": false,
+  "bench": {
+    "median_ms": 21.38,
+    "samples_ms": [
+      2645.9,
+      19.93,
+      21.38
+    ]
+  }
+}

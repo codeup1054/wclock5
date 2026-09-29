@@ -14,6 +14,8 @@ services:
       - wclock-net
     volumes:
       - ./app.py:/app/app.py
+      - ./panel_mediator.py:/app/panel_mediator.py
+      - ./invest_repo.py:/app/invest_repo.py
       - ./templates:/app/templates
       - ./static:/app/static
       - ./parsers/invest:/app/parsers/invest

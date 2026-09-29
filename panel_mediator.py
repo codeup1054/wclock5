@@ -5,14 +5,15 @@
 
     POST /api/panel
     { "v": { "<секция>": "<токен клиента>" },   # чтение (дельта)
-      "w": { "<секция>": { ...payload записи... } } }  # запись (write)
+      "params": { "<секция>": {...} },          # параметры секций (опц.)
+      "write": { "<секция>": { ...payload записи... } } }  # запись (write)
 
     200
     {
       "changed": { "<секция>": <данные> },   // только изменившиеся
       "tokens":  { "<секция>": "<новый токен>" },
       "ts": <unix_epoch_sec>,
-      "w":   { "<секция>": {"applied":..,"skipped":..,"reason":..} }
+      "writes":  { "<секция>": {"applied":..,"skipped":..,"reason":..} }
     }
 
 Правила:
@@ -79,6 +80,24 @@ class PanelMediator:
     # ---------------------------------------------------------------
     # Чтение
     # ---------------------------------------------------------------
+    # ---------------------------------------------------------------
+    # Хуки секций (подклассы приложения переопределяют под исключения).
+    # ctx — периодический контекст секции: НЕ хранить состояние в self,
+    # медиатор общий для потоков.
+    # ---------------------------------------------------------------
+    def prepare_params(self, sect, client_tok, params, ctx):
+        """Вернуть params для reader'а секции (клиентский токен — клиентский
+        токен, params — параметры секции из body)."""
+        return params
+
+    def post_read(self, sect, payload, ctx):
+        """Финализация payload перед токенизацией."""
+        return payload
+
+    def section_token(self, sect, payload):
+        """Стабильный токен секции. Default — SHA-256 hash payload."""
+        return stable_token(payload)
+
     def read(self, v, params=None):
         """v: {sect: клиентский токен}. Возвращает (changed, tokens).
         changed — секции, где серверный токен != клиентскому."""
@@ -95,9 +114,13 @@ class PanelMediator:
                 changed[sect] = err
                 tokens[sect] = stable_token(err)
                 continue
+            ctx = {}
+            sect_params = self.prepare_params(sect, client_tok,
+                                              params.get(sect, {}), ctx)
             try:
-                payload = reader(params.get(sect, {})) if _takes_params(reader) else reader()
-                tok = stable_token(payload)
+                payload = reader(sect_params or {}) if _takes_params(reader) else reader()
+                payload = self.post_read(sect, payload, ctx)
+                tok = self.section_token(sect, payload)
                 self._tokens[sect] = tok
                 if client_tok != tok:
                     changed[sect] = payload
@@ -138,7 +161,10 @@ class PanelMediator:
 
             try:
                 res = writer(payload)
-                if isinstance(res, dict) and not res.get("ok", True):
+                # Провайдер сигналит об ошибке либо ok=False, либо _error
+                # (поддерживаем оба контракта — app.py и сторонние writer'ы).
+                if isinstance(res, dict) and (res.get("ok") is False
+                                              or bool(res.get("_error"))):
                     out[sect] = {"applied": False, "skipped": False,
                                  "reason": res.get("_error", "writer failed")}
                     continue
@@ -155,21 +181,21 @@ class PanelMediator:
     # Формирование ответа
     # ---------------------------------------------------------------
     def process(self, body):
-        """body: {v, w, p?}. Возвращает готовый json-словарь ответа."""
+        """body: {v, params?, w?}. Возвращает готовый json-словарь ответа."""
         body = body or {}
         v = body.get("v") or {}
-        w = body.get("w") or {}
-        p = body.get("p") or {}
+        w = body.get("write") or body.get("w") or {}
+        params = body.get("params") or body.get("p") or {}
 
-        changed, tokens = self.read(v, params=p)
+        changed, tokens = self.read(v, params=params)
         writes = self.write(w)
 
-        # ${убираю комментарий}: ts в том же стиле, что и остальные /api/*
+        # ts в том же стиле, что и остальные /api/* (форматирует приложение).
         return {
             "changed": changed,
             "tokens": tokens,
             "ts": int(time.time()),
-            "w": writes,
+            "writes": writes,
         }
 
 
