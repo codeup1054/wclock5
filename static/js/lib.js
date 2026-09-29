@@ -64,7 +64,11 @@ function chartFontScale(target) {
 window.chartFontScale = chartFontScale;
 
 function dpiFont(n, target) {
-    return Math.round(n * chartFontScale(target) * 10) / 10;
+    const scale = chartFontScale(target);
+    // Шрифты меток растема медленнее, чем линии: общий коэффициент ниже,
+    // чтобы при росте DPI линии толстели, но шрифты не разрастались.
+    const labelFactor = target === 'weather' ? 1 : 0.8;
+    return Math.round(n * scale * labelFactor * 10) / 10;
 }
 window.dpiFont = dpiFont;
 
@@ -282,6 +286,7 @@ function createPanelsModal() {
         'invest_panel': 'Инвестиции',
         'invest_banner_capital': 'Инвестбаннер. Капитал',
         'invest_banner_table': 'Инвестбаннер. Таблица',
+        'invest_banner_total': 'Инвестбаннер. Итого',
         'clock_panel': 'Часы',
         'date_panel': 'Дата',
         'moon_panel': 'Луна',
@@ -290,7 +295,9 @@ function createPanelsModal() {
         'wind_cond_precip_panel': 'Ветер/Осадки',
         'sun_panel': 'Солнце',
         'battery_indicator_panel': 'Батарея (индикатор)',
-        'battery_chart_panel': 'Батарея (график)'
+        'battery_chart_panel': 'Батарея (график)',
+        'browser_fullscreen': 'Область «Во весь экран»',
+        'browser_reload': 'Область «Перезагрузить»'
     };
     
     const panelSettings = {
@@ -309,8 +316,89 @@ function createPanelsModal() {
     const $header = $('<div class="panels-modal-header"><h3>Настройки</h3><button class="close-modal">&times;</button></div>');
     
     $content.append($header);
+
+    // Строки настроек вынесены в отдельную функцию, чтобы вкладка «Настройки»
+    // в модалке Отчётов (report.js) переиспользовала тот же контент.
+    populateSettingsContent($content);
+
+    $modal.append($content);
+    $('body').append($modal);
     
-    Object.keys(panelNames).forEach(panelId => {
+    // Make modal draggable
+    $header.css('cursor', 'move');
+    
+    let isDragging = false;
+    let dragOffsetX, dragOffsetY;
+    
+    $header.on('mousedown', function(e) {
+        if (e.target.classList.contains('close-modal')) return;
+        isDragging = true;
+        dragOffsetX = e.clientX - $modal[0].offsetLeft;
+        dragOffsetY = e.clientY - $modal[0].offsetTop;
+    });
+    
+    $(document).on('mousemove', function(e) {
+        if (!isDragging) return;
+        $modal.css('left', (e.clientX - dragOffsetX) + 'px');
+        $modal.css('top', (e.clientY - dragOffsetY) + 'px');
+    });
+    
+    $(document).on('mouseup', function() {
+        isDragging = false;
+    });
+    
+    $modal.find('.close-modal').on('click', function() {
+        $modal.hide();
+    });
+    
+    $modal.on('click', function(e) {
+        if (e.target === $modal[0]) {
+            $modal.hide();
+        }
+    });
+}
+
+/**
+ * Наполняет контейнер настроек всем содержимым (панели, DPI, сглаживание, сбор данных).
+ * Используется и модалкой панелей (☰), и вкладкой «Настройки» в Отчётах.
+ */
+function populateSettingsContent($content) {
+    const panelNames = {
+        'invest_panel': 'Инвестиции',
+        'invest_banner_capital': 'Инвестбаннер. Капитал',
+        'invest_banner_table': 'Инвестбаннер. Таблица',
+        'invest_banner_total': 'Инвестбаннер. Итого',
+        'clock_panel': 'Часы',
+        'date_panel': 'Дата',
+        'moon_panel': 'Луна',
+        'weather_panel': 'Погода',
+        'press_humidity_temp_panel': 'Давление/Влажность/Темп',
+        'wind_cond_precip_panel': 'Ветер/Осадки',
+        'sun_panel': 'Солнце',
+        'battery_indicator_panel': 'Батарея (индикатор)',
+        'battery_chart_panel': 'Батарея (график)',
+        'browser_fullscreen': 'Область «Во весь экран»',
+        'browser_reload': 'Область «Перезагрузить»'
+    };
+
+    const panelSettings = {
+        'invest_panel': [
+            { value: 'percent', label: '%' },
+            { value: 'growth', label: 'Прирост' },
+            { value: 'both', label: 'Оба' }
+        ],
+        'weather_panel': 'tempRange'
+    };
+
+    // Функция для создания настроек температуры
+
+    // Две явные колонки настроек: заполняем построчно в порядке следования —
+    // первая половина строк в первую колонку, вторая — во вторую.
+    const $col1 = $('<div class="settings-col settings-col-left"></div>');
+    const $col2 = $('<div class="settings-col settings-col-right"></div>');
+    const $rows = [];
+
+    Object.keys(panelNames).forEach((panelId) => {
         const $row = $('<div class="panel-row"></div>');
         
         let labelText = panelNames[panelId];
@@ -346,28 +434,21 @@ function createPanelsModal() {
                 if (panelId === 'invest_panel' && typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
                     window.InvestPlot.update();
                 }
-                if ((panelId === 'invest_banner_capital' || panelId === 'invest_banner_table') && typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
+                if ((panelId === 'invest_banner_capital' || panelId === 'invest_banner_table' || panelId === 'invest_banner_total') && typeof window.InvestBanner !== 'undefined' && typeof window.InvestBanner.update === 'function') {
                     window.InvestBanner.update();
                 }
             }
-            // Save visibility state to cookie
-            try {
-                const config = JSON.parse(getSetting('wclock_panel_config') || '{}');
-                config[panelId] = config[panelId] || {};
-                config[panelId].visible = this.checked;
-                setSetting('wclock_panel_config', JSON.stringify(config));
-                // Also save to server
-                saveSettingsToServer({ wclock_panel_config: JSON.stringify(config) });
-            } catch(e) {}
-            // Видимость не пишем в профиль сразу — это грязное изменение,
-            // фиксируется кнопкой «Сохранить» (MutationObserver активирует её).
-            // Синхронизируем wclock_panels, чтобы F5 не откатывал видимость.
-            if (typeof window.PanelResize !== 'undefined' && typeof window.PanelResize.capturePanelConfig === 'function' && typeof window.PanelResize.savePanelConfig === 'function') {
-                var fullCfg = window.PanelResize.capturePanelConfig();
-                if (fullCfg[panelId]) {
-                    fullCfg[panelId].visible = this.checked;
-                    window.PanelResize.savePanelConfig(fullCfg);
-                }
+            // Видимость — грязное изменение (строго по кнопке «Сохранить» / pp-btn-apply).
+            // Ничего в localStorage/server не пишем: MutationObserver в panel_profiles.js
+            // уже пометил профиль как изменённый и активировал кнопку сохранения.
+            if (typeof window.PanelProfiles === 'undefined' || typeof window.PanelProfiles.markVisibilityChanged !== 'function') {
+                // Фолбэк: если модуль профилей не готов, просто оставляем как есть
+                try {
+                    const cfg = JSON.parse(getSetting('wclock_panel_config') || '{}');
+                    cfg[panelId] = cfg[panelId] || {};
+                    cfg[panelId].visible = this.checked;
+                    setSetting('wclock_panel_config', JSON.stringify(cfg));
+                } catch(e) {}
             }
         });
         
@@ -465,14 +546,9 @@ function createPanelsModal() {
         }
         
         $row.append($toggle);
-        $content.append($row);
+        $rows.push($row);
     });
-    
-    // Профили панелей — строка после заголовка ☰ (вставляется самим renderRow)
-    if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.renderRow === 'function') {
-        window.PanelProfiles.renderRow($content, 'invest_banner_capital');
-    }
-    
+
     // Настройки DPI: отдельные слайдеры для инвест-графика и погоды (куки + сервер)
     function makeDpiRow(label, settingKey, eventName, min, max) {
         const $row = $('<div class="panel-row"><span>' + label + '</span></div>');
@@ -487,8 +563,8 @@ function createPanelsModal() {
         $row.append($slider, $val);
         return $row;
     }
-    $content.append(makeDpiRow('DPI инвест-графика', 'invest_chart_dpi', 'investDpiChange', 0.5, 4));
-    $content.append(makeDpiRow('DPI погоды', 'weather_chart_dpi', 'weatherDpiChange', 0.5, 3));
+    $rows.push(makeDpiRow('DPI инвест-графика', 'invest_chart_dpi', 'investDpiChange', 0.5, 4));
+    $rows.push(makeDpiRow('DPI погоды', 'weather_chart_dpi', 'weatherDpiChange', 0.5, 3));
 
     // Сглаживание графиков
     var $smoothRow = $('<div class="panel-row"><span>Сглаживание графиков</span></div>');
@@ -506,44 +582,45 @@ function createPanelsModal() {
     });
     $smoothToggle.append($smoothCb, '<span class="slider"></span>');
     $smoothRow.append($smoothToggle);
-    $content.append($smoothRow);
+    $rows.push($smoothRow);
 
-    $modal.append($content);
-    $('body').append($modal);
-    
-    // Make modal draggable
-    $header.css('cursor', 'move');
-    
-    let isDragging = false;
-    let dragOffsetX, dragOffsetY;
-    
-    $header.on('mousedown', function(e) {
-        if (e.target.classList.contains('close-modal')) return;
-        isDragging = true;
-        dragOffsetX = e.clientX - $modal[0].offsetLeft;
-        dragOffsetY = e.clientY - $modal[0].offsetTop;
+    // Распределяем строки по колонкам: первая половина — в первый столбец,
+    // вторая — во второй, сохраняя их порядок.
+    const half = Math.ceil($rows.length / 2);
+    $rows.forEach(function($r, idx) {
+        (idx < half ? $col1 : $col2).append($r);
     });
-    
-    $(document).on('mousemove', function(e) {
-        if (!isDragging) return;
-        $modal.css('left', (e.clientX - dragOffsetX) + 'px');
-        $modal.css('top', (e.clientY - dragOffsetY) + 'px');
-    });
-    
-    $(document).on('mouseup', function() {
-        isDragging = false;
-    });
-    
-    $modal.find('.close-modal').on('click', function() {
-        $modal.hide();
-    });
-    
-    $modal.on('click', function(e) {
-        if (e.target === $modal[0]) {
-            $modal.hide();
-        }
-    });
+
+    // Колонки в контейнер
+    $content.append($col1);
+    $content.append($col2);
+
+    // Профили панелей — строка после заголовка ☰ (вставляется самим renderRow)
+    if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.renderRow === 'function') {
+        window.PanelProfiles.renderRow($content, 'invest_banner_capital');
+    }
+
+    // === Сбор данных через API инвест-демонов (Tinkoff / Finam) ===
+    const $collTitle = $('<div class="settings-section-title" style="margin:10px 0 2px;font-size:11px;color:#999;text-transform:uppercase;">Сбор данных через API</div>');
+    $col2.append($collTitle);
+
+    function makeCollectionRow(label, key) {
+        const $row = $('<div class="panel-row"><span>' + label + '</span></div>');
+        const $sw = $('<label class="switch"></label>');
+        const $cb = $('<input type="checkbox">').prop('checked', getSetting(key, '1') !== '0');
+        $cb.on('change', function() {
+            setSetting(key, this.checked ? '1' : '0');
+            saveSettingsToServer({ [key]: this.checked ? '1' : '0' });
+        });
+        $sw.append($cb, '<span class="slider"></span>');
+        $row.append($sw);
+        return $row;
+    }
+    $col2.append(makeCollectionRow('Tinkoff', 'invest_collection_tinkoff_enabled'));
+    $col2.append(makeCollectionRow('Finam', 'invest_collection_finam_enabled'));
 }
+
+window.populateSettingsContent = populateSettingsContent;
 
 // Инициализация
 $(document).ready(function() {

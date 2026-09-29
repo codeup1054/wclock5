@@ -10,8 +10,8 @@
     // ========== Интервалы (в миллисекундах) ==========
     var BATTERY_INTERVAL   = 15 * 60 * 1000;  // 15 мин — обновление графика батареи
     var PAGE_REFRESH       = 4 * 24 * 60 * 60 * 1000; // 4 дня — полная перезагрузка страницы
-    var INVEST_WIDGET      = 60 * 1000;       // 1 мин — виджет инвестиций
-    var INVEST_CHART       = 60 * 1000;       // 1 мин — график инвестиций (демоны пишут каждые 10с)
+    var INVEST_WIDGET      = 10 * 1000;       // 10 сек — виджет инвестиций (баннер)
+    var INVEST_CHART       = 10 * 1000;       // 10 сек — график инвестиций
 
     // Список для совместимости с registerTask()
     var extraTasks = [];
@@ -76,14 +76,17 @@
             }, PAGE_REFRESH));
         }
 
-        // 4. Виджет инвестиций — 3 мин
+        // 4. Виджет инвестиций — 10 сек (только если панели баннера видимы)
         timers.push(setInterval(function() {
-            if (window.InvestBanner && typeof window.InvestBanner.update === 'function') {
+            const cap = document.getElementById('invest_banner_capital');
+            const tbl = document.getElementById('invest_banner_table');
+            const visible = ((cap && cap.style.display !== 'none') || (tbl && tbl.style.display !== 'none'));
+            if (visible && window.InvestBanner && typeof window.InvestBanner.update === 'function') {
                 window.InvestBanner.update();
             }
         }, INVEST_WIDGET));
 
-        // 5. График инвестиций — 7 мин
+        // 5. График инвестиций — 1 мин
         timers.push(setInterval(function() {
             if (window.InvestPlot && typeof window.InvestPlot.update === 'function') {
                 var savedView = getSetting('chartView');
@@ -97,7 +100,7 @@
         executeExtraTasks(); // Немедленный первый запуск
         extraTimer = setInterval(executeExtraTasks, EXTRA_INTERVAL);
 
-        console.log('[Cron] Запущен: батарея ' + (BATTERY_INTERVAL/60000) + 'мин, инвестиции ' + (INVEST_CHART/60000) + 'мин, виджет ' + (INVEST_WIDGET/60000) + 'мин, релоад ' + (PAGE_REFRESH/3600000) + 'ч');
+        console.log('[Cron] Запущен: батарея ' + (BATTERY_INTERVAL/60000) + ' мин, виджет баннера ' + (INVEST_WIDGET/1000) + ' с, график инв ' + (INVEST_CHART/1000) + ' с, релоад ' + (PAGE_REFRESH/3600000) + ' ч');
     }
 
     function stop() {

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
+         color: #1f2430; margin: 0; line-height: 1.55; }
+  .page { max-width: 1330px; margin: 0 auto; padding: 16px 12px 48px; }
+  @media (min-width: 640px) { .page { padding: 24px 16px 64px; } }
+
+  .header { background: #101418; color: #fff; padding: 22px 24px 24px;
+            border-bottom: 5px solid #f37435; margin-bottom: 24px; }
+  @media (min-width: 640px) { .header { padding: 32px 40px 36px; margin-bottom: 32px; } }
+  .header .header-brand { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .header .header-brand svg { flex-shrink: 0; }
+  .header .brand { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+  .header h1 { margin: 8px 0 6px; font-size: 21px; line-height: 1.2; font-weight: 700;
+               text-transform: uppercase; letter-spacing: .5px; }
+  @media (min-width: 640px) { .header h1 { font-size: 34px; } }
+  .header .sub { color: #aa957f; font-size: 11px; text-transform: uppercase;
+                 letter-spacing: 2px; font-weight: 500; margin: 0; }
+  @media (min-width: 640px) { .header .sub { font-size: 13px; } }
+
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .meta-item { background: #1f2430; border: 1px solid #3a4048; padding: 4px 10px;
+               font-size: 11px; border-radius: 4px; }
+  .meta-label { text-transform: uppercase; letter-spacing: .05em; color: #aa957f;
+                font-weight: 600; margin-right: 6px; }
+  .meta-value { font-weight: 700; color: #fff; }
+
+  .tabs { position: sticky; top: 0; z-index: 20; background: #101418;
+          border-bottom: 3px solid #f37435; margin-bottom: 24px;
+          display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 10px; }
+  .tabs a { color: #cfd2d8; text-decoration: none; font-size: 12px; font-weight: 600;
+            padding: 7px 11px; border-radius: 6px; text-transform: uppercase;
+            letter-spacing: .5px; white-space: nowrap; }
+  .tabs a:hover { background: #1f2430; color: #fff; }
+  .tabs a.active { background: #f37435; color: #fff; }
+  h2[id] { scroll-margin-top: 64px; }
+  @media print { .tabs { display: none; } }
+
+  .panel { background: #fff; border: 1px solid #dbdbdb; padding: 18px 20px;
+           margin-bottom: 24px; }
+  @media (min-width: 640px) { .panel { padding: 28px 32px; margin-bottom: 32px; } }
+  .panel h2.panel-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
+                          letter-spacing: .5px; margin: 0 0 12px; padding: 0; border: none; }
+  @media (min-width: 640px) { .panel h2.panel-title { font-size: 18px; } }
+
+  /* Дерево содержания (раскрывающееся, как в SDK/MSDN) */
+  .toc { font-size: 13px; line-height: 1.7; }
+  @media (min-width: 640px) { .toc { font-size: 14px; line-height: 1.6; } }
+  .toc ul { list-style: none; margin: 0; padding: 0; }
+  .toc ul ul { margin-left: 18px; border-left: 1px dashed #d5d0c7; padding-left: 6px; }
+  .toc li { margin: 0; }
+  .toc li.toc-parent { position: relative; }
+  .toc a { color: #1553a3; text-decoration: none; display: block; padding: 2px 4px;
+           border-radius: 3px; line-height: 1.5; }
+  .toc a:hover { color: #f37435; background: #f5f2ea; text-decoration: none; }
+  .toc a.toc-active { color: #f37435; background: #f5f2ea; }
+  .toc ul ul a { color: #2c5f96; }
+  .toc ul ul ul a { color: #4a6b8c; }
+  .toc .toc-toggle { display: inline-block; width: 18px; height: 18px; text-align: center;
+                     cursor: pointer; color: #8a8478; font-size: 12px; line-height: 18px;
+                     user-select: none; flex: 0 0 auto; }
+  .toc .toc-row { display: flex; align-items: flex-start; }
+  .toc .toc-row > a { flex: 1 1 auto; }
+  .toc .toc-ac { display: none; }
+  .toc .toc-ac.open { display: block; }
+
+  .content { background: #fff; border: 1px solid #dbdbdb; padding: 20px; }
+  @media (min-width: 640px) { .content { padding: 32px; } }
+  @media (min-width: 768px) { .content { padding: 48px; } }
+
+  .prose h1 { font-size: 22px; margin: 0 0 14px; }
+  .prose h2 { font-size: 19px; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 32px; margin-bottom: 12px;
+              padding-bottom: 6px; border-bottom: 2px solid #f37435; }
+  @media (min-width: 640px) { .prose h2 { font-size: 26px; margin-top: 44px; margin-bottom: 16px; } }
+  .prose h3 { font-size: 15px; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 24px; margin-bottom: 8px; }
+  @media (min-width: 640px) { .prose h3 { font-size: 19px; margin-top: 32px; margin-bottom: 12px; } }
+  .prose h4 { font-size: 13px; font-weight: 600; color: #585858;
+              margin-top: 16px; margin-bottom: 6px; }
+  @media (min-width: 640px) { .prose h4 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; } }
+  .prose p { font-size: 14px; line-height: 1.6; color: #272727; margin-bottom: 12px; }
+  @media (min-width: 640px) { .prose p { font-size: 15px; } }
+  .prose ul, .prose ol { font-size: 14px; line-height: 1.6; color: #272727;
+                         margin-bottom: 16px; padding-left: 20px; }
+  @media (min-width: 640px) { .prose ul, .prose ol { font-size: 15px; } }
+  .prose li { margin-bottom: 4px; }
+  .prose a { color: #1553a3; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+  .prose a:hover { color: #f37435; }
+  .prose table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11px; }
+  @media (min-width: 640px) { .prose table { font-size: 13px; } }
+  @media (max-width: 640px) {
+    .prose table { font-size: 10px; overflow-wrap: break-word; word-break: break-word; line-height: 1.3; }
+    .prose td:first-child, .prose th:first-child { min-width: 88px; }
+  }
+  .prose th { background: #101418; color: #fff; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .05em; text-align: left; padding: 6px 8px; border: 1px solid #101418;
+              font-size: 9px; }
+  @media (min-width: 640px) { .prose th { padding: 10px 12px; font-size: 12px; } }
+  .prose td { border: 1px solid #dbdbdb; padding: 6px 8px; color: #272727; vertical-align: top; }
+  @media (min-width: 640px) { .prose td { padding: 8px 12px; } }
+  .prose tr:nth-child(even) td { background: #f1f1ea; }
+  .prose code { font-family: Consolas, 'Courier New', monospace; background: #efe9de;
+                color: #1553a3; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  .prose pre { background: #101418; color: #d9dce1; padding: 14px 16px; border-radius: 8px;
+               overflow-x: auto; margin-bottom: 16px; font-size: 12.5px; line-height: 1.5; }
+  .prose pre code { background: transparent; color: inherit; padding: 0; border-radius: 0; }
+  .prose hr { border: none; border-top: 2px solid #e2dbd3; margin: 40px 0; }
+  .prose img, .prose .dimg { max-width: 100%; margin: 16px auto; display: block; }
+  .prose blockquote { border-left: 4px solid #f37435; padding: 10px 12px; margin: 16px 0;
+                      background: #f1f1ea; font-style: italic; color: #585858; font-size: 14px; }
+  @media (min-width: 640px) { .prose blockquote { padding: 12px 16px; font-size: 15px; } }
+
+  .icon { display: inline-block; width: 20px; height: 20px; vertical-align: text-bottom; }
+
+  .tabs .dl { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .dl-btn { display: inline-block; padding: 2px 9px; font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+            color: #101418; background: #f37435; border: 1px solid #f37435; border-radius: 3px;
+            cursor: pointer; line-height: 1.5; text-decoration: none; }
+  @media (min-width: 640px) { .dl-btn { font-size: 10px; padding: 3px 12px; } }
+  .dl-btn:hover { background: #fff; border-color: #fff; }
+  .dl-btn.alt { background: transparent; color: #f37435; }
+  .dl-btn.alt:hover { color: #101418; background: #101418; border-color: #101418; }
+  @media print { .dl, .dl-btn { display: none !important; } }
+  .btn { display: inline-block; font-family: 'Segoe UI', Arial, sans-serif;
+         font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+         padding: 8px 20px; border: 2px solid transparent; cursor: pointer;
+         text-align: center; text-decoration: none; }
+  @media (min-width: 640px) { .btn { font-size: 13px; letter-spacing: 2px; padding: 10px 30px; } }
+  .btn:hover { opacity: .9; }
+  .btn-orange { background: #f37435; color: #fff; border-color: #f37435; }
+  .btn-black { background: #1f2430; color: #fff; border-color: #1f2430; }
+  .btn-rounded { border-radius: 50px; letter-spacing: normal; }
+
+  .badge { display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase;
+           letter-spacing: .03em; padding: 2px 7px; border-radius: 3px; }
+  @media (min-width: 640px) { .badge { font-size: 11px; letter-spacing: .05em; padding: 3px 10px; } }
+  .badge-orange { background: #f37435; color: #fff; }
+  .badge-green { background: #4b8765; color: #fff; }
+  .badge-red { background: #ca3742; color: #fff; }
+  .badge-beige { background: #aa957f; color: #000; }
+  .badge-black { background: #1f2430; color: #fff; }
+  .badge-teal { background: #57a4b5; color: #fff; }
+  .badge-violet { background: #6e4d8b; color: #fff; }
+
+  .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
+            letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
+  @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  
+  <div id="header" class="header">
+    <div class="header-brand">
+      <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+        <rect x="2" y="2" width="44" height="44" rx="10" fill="#f37435"/>
+        <rect x="10" y="10" width="28" height="28" rx="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="24" cy="24" r="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="36" cy="13" r="3" fill="white"/>
+      </svg>
+      <span class="brand">WClock5</span>
+    </div>
+    <h1 id="page-title">Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi</h1>
+    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
+    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">🚧</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.1</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-09-03</span></span></div>
+  </div>
+  
+
+  
+  <nav class="tabs" aria-label="Навигация по разделам">
+    <a href="#kontekst">Контекст</a>
+    <a href="#zadachi-epika">Задачи эпика</a>
+    <a href="#pravila-ui-spravochnik">Правила UI (справоч…</a>
+    <a href="#primenenie">Применение</a>
+    <a href="#svyazi">Связи</a>
+    <a href="#list-izmeneniy">Лист изменений</a>
+    <span class="dl" data-dl="EPIC_panels_uix">
+      <button type="button" class="dl-btn" onclick="downloadPdf()">PDF</button>
+      <button type="button" class="dl-btn alt" onclick="downloadDoc()">DOCX</button>
+    </span>
+  </nav>
+  
+
+  
+
+  <div id="content" class="content prose">
+<p>Изменения интерфейса панелей wclock5 за 03.09.2026: слияние настроек в<br />
+единую модалку Отчётов, настройки сбора через API, отдельная панель «Итого»,<br />
+CSS-скейлинг шрифтов баннера (container query), скрытие избыточных строк<br />
+при одном активном API.</p>
+<h2 id="kontekst">Контекст</h2>
+<p>Раньше настройки были в отдельной модалке <code>#panels-modal</code> (<code>lib.js</code>), а отчёты —<br />
+в <code>report.js</code> с кнопкой <code>O</code> (<code>#report_btn</code>). Плюс инвест-баннер показывал<br />
+строки по обоим источникам и итог даже когда API одного источника отключён.<br />
+За день интерфейс приведён к единой модалке и опционален по источникам.</p>
+<h2 id="zadachi-epika">Задачи эпика</h2>
+<table>
+<thead>
+<tr>
+<th>Код</th>
+<th>Задача</th>
+<th>Результат</th>
+<th>Статус</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UI-01</td>
+<td>Единая модалка Отчёты</td>
+<td>Табы Инвестиции / Ошибки бота / Настройки; открытие по <code>☰</code> (<code>#panels-list-btn</code>) → таб «Настройки»; кнопка <code>O</code> удалена</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-02</td>
+<td>Перенос настроек в таб «Настройки»</td>
+<td><code>populateSettingsContent</code> переиспользует контент <code>lib.js</code>; блок «Сбор данных через API»</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-03</td>
+<td>Отдельная панель «Итого»</td>
+<td><code>#invest_banner_total</code> (только значение, без подписей); убрать из Капитала при включённой панели</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-04</td>
+<td>Скрытие T+F при 1 API</td>
+<td>Строка <code>banner-row-portfolio-total</code> только при <code>portfolioRows.length &gt; 1</code>; источник скрыт при выключенном сборе</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-05</td>
+<td>cqi-скейлинг шрифтов баннера</td>
+<td><code>container-type: inline-size</code> на панелях баннера; px → cqi (капитал 10→13cqi настраивается)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-06</td>
+<td>Убран тултип с тарифом</td>
+<td>Удалены <code>buildFinamTariffTip</code>/<code>FINAM_TIERS</code>/IIFE и CSS <code>.finam-tariff-css-tip</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+</tbody>
+</table>
+<h2 id="pravila-ui-spravochnik">Правила UI (справочник)</h2>
+<ol>
+<li><strong>Единая точка входа модалки</strong> — одна модалка на всё (отчёты+настройки),<br />
+   табы разделяют контент; не плодить отдельные модальные окна.</li>
+<li><strong>Текущий таб подгружает данные</strong> — если модалка открыта сразу на<br />
+   не-инвестиционном табе, переключение на «Инвестиции» вызывает <code>load()</code><br />
+   (иначе таблица пустая: баг UI-01).</li>
+<li><strong>Панель = опциональный элемент</strong> — каждый автономный элемент инвест-баннера<br />
+   (Капитал / Таблица / Итого) — отдельная перетаскиваемая панель в <code>PANEL_IDS</code><br />
+   и реестре <code>panel_configs.js</code>, с собственным переключателем в «Настройках».</li>
+<li><strong>Источники опциональны</strong> — при выключенном сборе (см. эпик API-настройки)<br />
+   источник и пара «T+F итог» не рендерятся; строка источника скрыта полностью.</li>
+<li><strong>Шрифты баннера — cqi</strong> — размеры в единицах контейнера (inline-size),<br />
+   чтобы ресайз панели масштабировал текст (см. conventions §6). Фикс. px — только<br />
+   для структурных неуправляемых элементов.</li>
+</ol>
+<h2 id="primenenie">Применение</h2>
+<ul>
+<li><code>static/js/report.js</code> — tab-структура, <code>populateSettingsPane</code>, <code>window.Report</code></li>
+<li><code>static/js/lib.js</code> — <code>populateSettingsContent</code>, <code>makeCollectionRow</code></li>
+<li><code>static/js/invest_banner.js</code> — <code>presentSources</code>, T+F row, <code>#invest_banner_total_content</code></li>
+<li><code>static/js/panel_resize.js</code>, <code>panel_configs.js</code> — регистрация <code>invest_banner_total</code></li>
+<li><code>static/css/wclock.css</code> — cqi-шрифты, <code>.banner-total-only</code>, контейнеры панелей</li>
+</ul>
+<h2 id="svyazi">Связи</h2>
+<ul>
+<li>Конвенции: <code>docs/02_project/conventions.md</code> §4 «Панели», §6 «cqi-скейлинг»</li>
+<li>Эпик: <code>docs/02_project/epics/EPIC_api_settings.md</code> (настройка сбора → скрытие источника)</li>
+<li>Беклог: <code>docs/02_project/backlogs/backlog_20260903.ldn.md</code></li>
+</ul>
+<h2 id="list-izmeneniy">Лист изменений</h2>
+<ul>
+<li><strong>0.1</strong> · 2026-09-03 — создан: UI-01..06, правила, связи (единая модалка,<br />
+  Итого-панель, cqi, скрытие при 1 API).</li>
+</ul></div>
+
+  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+</div>
+
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs a'));
+  var h2s = Array.prototype.slice.call(document.querySelectorAll('h2[id]'));
+  function setActive(id) {
+    tabs.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+    });
+  }
+  if ('IntersectionObserver' in window && h2s.length) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          setActive(e.target.id);
+          if (location.hash !== '#' + e.target.id) {
+            history.replaceState(null, '', '#' + e.target.id);
+          }
+        }
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    h2s.forEach(function (h) { obs.observe(h); });
+  }
+  tabs.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var t = document.getElementById(id);
+      if (!t) { return; }
+      e.preventDefault();
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActive(id);
+      history.pushState(null, '', '#' + id);
+    });
+  });
+})();
+</script>
+
+
+<script>
+function dlFileName() {
+  var el = document.querySelector('.dl');
+  if (el && el.getAttribute('data-dl')) return el.getAttribute('data-dl');
+  return 'EPIC_panels_uix';
+}
+function downloadPdf() { window.print(); }
+function downloadDoc() {
+  var content = document.getElementById('content').innerHTML;
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi</title></head><body>' + content + '</body></html>';
+  var blob = new Blob(['﻿', html], { type: 'application/msword' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = dlFileName() + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+</script>
+</body>
+</html>

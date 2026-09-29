@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Аналитика рынка — hft.startupassist.ru</title>
+<link rel="stylesheet" href="/static/css/hft.css">
+<style>
+  /* Аналитика: локальная тема поверх hft.css (панели — var(--panel)) */
+  .analytics-wrap { padding: 16px; max-width: 1400px; margin: 0 auto; }
+  .analytics-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .analytics-head h2 { margin: 0; }
+  .a-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .a-toolbar label { font-size: 13px; font-weight: 600; color: var(--muted); }
+  .a-toolbar select, .a-toolbar button, .a-toolbar input[type=text] { font-size: 13px; padding: 4px 8px;
+    background: var(--bg2); color: var(--txt); border: 1px solid var(--line); border-radius: 6px; }
+  .a-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .a-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
+  .a-panel h3 { margin: 0 0 8px; font-size: 14px; color: var(--txt); }
+  .a-panel.wide { grid-column: 1 / -1; }
+  .a-chart-host { height: 320px; position: relative; background: var(--panel); }
+  .a-metrics { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; }
+  .a-metrics b { font-size: 14px; }
+  .a-pair-picker { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+  .a-pair-picker button, .a-asset-picker button { border: 1px solid var(--line); background: var(--bg2); color: var(--muted);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .a-pair-picker button.active, .a-asset-picker button.active { background: var(--acc); color: #fff; border-color: var(--acc); }
+  .a-asset-picker { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+  .a-sub-params { margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th, .data-table td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; vertical-align: top; }
+  .data-table th { background: var(--bg2); font-weight: 600; color: var(--txt); }
+  .data-table td.n { text-align: right; }
+  .data-table .cls { font-weight: 600; }
+  .data-table .ok { color: var(--pos); }
+  .data-table .warn { color: var(--warn); }
+  .data-table .muted { color: var(--muted); }
+  .empty { color: var(--muted); padding: 20px; text-align: center; }
+  .a-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  /* sidebar-навигация */
+  .a-layout { display: flex; gap: 14px; align-items: flex-start; }
+  .a-sidebar { width: 200px; flex-shrink: 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 10px; position: sticky; top: 14px; }
+  .a-sidebar-title { font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+    color: var(--muted); padding: 4px 10px 8px; }
+  .a-nav-item { display: block; width: 100%; text-align: left; background: transparent; color: var(--muted);
+    border: 1px solid transparent; border-radius: 8px; padding: 9px 10px; margin-bottom: 4px;
+    cursor: pointer; font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .a-nav-item:hover { color: var(--txt); background: var(--bg2); }
+  .a-nav-item.active { background: rgba(108,140,255,.12); color: var(--acc); border-color: var(--acc); }
+  .a-content { flex: 1; min-width: 0; }
+  .a-section { display: none; }
+  .a-section.active { display: block; }
+  /* ML: корреляционные матрицы */
+  .a-ml-table { border-collapse: collapse; font-size: 11px; }
+  .a-ml-table th, .a-ml-table td { border: 1px solid var(--line); padding: 4px 6px; text-align: center; min-width: 52px; }
+  .a-ml-table th.fam-name, .a-ml-table td.fam-name { text-align: left; font-weight: 600; white-space: nowrap; position: sticky; left: 0; background: var(--bg2); }
+  .a-ml-wrap { overflow: auto; max-height: 460px; }
+  .a-ml-best-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .a-ml-best-table th, .a-ml-best-table td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
+  .a-ml-best-table td.n { text-align: right; }
+  .a-ml-wrap-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .a-ml-wrap-table th, .a-ml-wrap-table td { border: 1px solid var(--line); padding: 5px 8px; text-align: center; }
+  .a-ml-wrap-table th { background: var(--bg2); font-weight: 600; }
+  .a-ml-wrap-table td.l, .a-ml-wrap-table th.l { text-align: left; }
+  .a-ml-wrap-table td.p { text-align: right; }
+  .a-ml-wrap-table tr.sig { background: rgba(31,193,99,.10); }
+  .a-ml-wrap-table tr.sig td:last-child { color: var(--pos); font-weight: 700; }
+  .a-ml-wrap-table tr.los td:last-child { color: var(--neg); font-weight: 700; }
+  .lq-low { color: var(--warn); }
+  @media (max-width: 900px) {
+    .a-layout { flex-direction: column; }
+    .a-sidebar { width: 100%; position: static; display: flex; flex-wrap: wrap; gap: 6px; }
+    .a-nav-item { width: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div id="a-login-screen" class="login-screen">
+  <form id="a-login-form" class="login-card" autocomplete="off">
+    <h1>HFT <span>Analytics</span></h1>
+    <p class="login-sub">Аналитика рынка · hft.startupassist.ru</p>
+    <label>Логин
+      <input id="a-login-username" name="username" autocomplete="username" required>
+    </label>
+    <label>Пароль
+      <input id="a-login-password" name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <div id="a-login-error" class="login-error"></div>
+    <button type="submit">Войти</button>
+  </form>
+</div>
+
+<div id="a-analytica-wrap" class="analytics-wrap" style="display:none;">
+  <div class="analytics-head">
+    <h2>Аналитика рынка</h2>
+    <a href="/" style="font-size:13px;">← к панелям</a>
+  </div>
+
+  <div class="a-layout">
+    <aside class="a-sidebar">
+      <div class="a-sidebar-title">Разделы</div>
+      <button class="a-nav-item" data-sec="data">Сбор данных</button>
+      <button class="a-nav-item active" data-sec="charts">Графики и аналитика</button>
+      <button class="a-nav-item" data-sec="news">Новости</button>
+      <button class="a-nav-item" data-sec="signals">Сигналы</button>
+      <button class="a-nav-item" data-sec="ml">ML</button>
+    </aside>
+
+    <div class="a-content">
+
+      <!-- Сбор данных -->
+      <section id="a-sec-data" class="a-section">
+        <div class="a-panel">
+          <h3>Настройки сбора данных</h3>
+          <div id="a-collect-settings" class="a-sub-params"><div class="empty">Настройки и запуск сбора данных — здесь будет интерфейс (инструменты, интервалы, лет).</div></div>
+        </div>
+        <div class="a-panel">
+          <h3>Полнота скачанных данных по активам (поиск пар)</h3>
+          <div id="a-data-table" class="a-sub-params"><div class="empty">Загрузка…</div></div>
+        </div>
+      </section>
+
+      <!-- Графики и аналитика -->
+      <section id="a-sec-charts" class="a-section active">
+        <div class="a-toolbar">
+          <label>Интервал</label>
+          <select id="a-interval">
+            <option value="10min">10 мин</option>
+            <option value="60min">1 час</option>
+            <option value="1d" selected>1 день</option>
+          </select>
+          <label>Период</label>
+          <select id="a-period">
+            <option value="0" selected>Всё</option>
+            <option value="30">30 точек</option>
+            <option value="60">60 точек</option>
+            <option value="90">90 точек</option>
+            <option value="180">180 точек</option>
+          </select>
+          <label>Раздел</label>
+          <select id="a-mode">
+            <option value="compare" selected>Сравнение</option>
+            <option value="spread">Спред пары</option>
+          </select>
+          <label><input type="checkbox" id="a-pct" checked> % от старта</label>
+          <button id="a-refresh" class="btn">Обновить</button>
+        </div>
+
+        <div id="a-asset-picker-wrap" style="display:none;">
+          <div id="a-asset-picker" class="a-asset-picker">
+            <span style="font-size:13px;">Активы:</span>
+          </div>
+          <div class="a-hint">Клик → показать/скрыть серию прямо на графике (плавающая легенда). Драг по графику — зум по времени.</div>
+        </div>
+
+        <div id="a-pair-picker" class="a-pair-picker" style="display:none;">
+          <span style="font-size:13px;">Пара:</span>
+        </div>
+
+        <div class="a-grid">
+          <div class="a-panel wide">
+            <h3>Сравнение активов</h3>
+            <div id="a-chart-main" class="a-chart-host"><div class="empty">Загрузка…</div></div>
+          </div>
+          <div class="a-panel">
+            <h3>Спред / z-score пары</h3>
+            <div id="a-chart-spread" class="a-chart-host"><div class="empty">Выберите режим «Спред пары»</div></div>
+          </div>
+          <div class="a-panel">
+            <h3>Метапараметры (форма → бэктест)</h3>
+            <div id="a-metaparams">
+              <div class="a-toolbar" style="margin:0;">
+                <label>asset</label><input type="text" id="mp-asset" value="GOLD" style="width:80px">
+                <label>objective</label>
+                <select id="mp-objective">
+                  <option>Sharpe</option><option>Sortino</option><option>CAGR</option>
+                  <option>Calmar</option><option>Net%</option>
+                </select>
+                <label>splice</label>
+                <select id="mp-splice"><option>RAW</option><option>ADJUSTED</option></select>
+                <label>split</label>
+                <select id="mp-split"><option>HOLDOUT</option><option>WALK_FORWARD</option></select>
+                <label>maxDD</label><input type="text" id="mp-maxdd" value="0.10" style="width:60px">
+                <label>lev</label><input type="text" id="mp-lev" value="1.0" style="width:60px">
+                <button id="mp-run" class="btn">Прогнать</button>
+              </div>
+              <div id="mp-result" class="a-sub-params"></div>
+            </div>
+          </div>
+          <div class="a-panel">
+            <h3>Метрики последней точки</h3>
+            <div id="a-metrics" class="a-metrics"><div class="empty">Нет данных</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Новости -->
+      <section id="a-sec-news" class="a-section">
+        <!-- табы навигации по подсекциям -->
+        <div class="a-news-tabs" id="a-news-tabs">
+          <button data-tab="overview" class="a-news-tab active">Обзор</button>
+          <button data-tab="sources" class="a-news-tab">Источники</button>
+          <button data-tab="health" class="a-news-tab">Здоровье</button>
+          <button data-tab="found" class="a-news-tab">Найденные</button>
+          <button data-tab="corpus" class="a-news-tab">Корпус</button>
+          <button data-tab="dashboards" class="a-news-tab">Дашборды</button>
+          <button data-tab="articles" class="a-news-tab">Статьи</button>
+          <button data-tab="series" class="a-news-tab">Метрики</button>
+          <button data-tab="params" class="a-news-tab">Параметры</button>
+          <button data-tab="signatures" class="a-news-tab">Сигнатуры</button>
+        </div>
+
+        <!-- сводка + управление -->
+        <div class="a-panel" id="a-pan-overview">
+          <div class="a-news-head">
+            <h3 style="margin:0">Новостной конвейер</h3>
+            <div class="a-toolbar" style="margin:0">
+              <label>Период аналитики</label>
+              <select id="news-overview-period">
+                <option value="24">сутки (24ч)</option>
+                <option value="72">3 дня</option>
+                <option value="168">7 дней</option>
+                <option value="720">30 дней</option>
+              </select>
+              <button id="news-overview-refresh" class="btn" title="Обновить графики и ленту">Обновить</button>
+              <button id="news-collect" class="btn" title="Собрать новости прямо сейчас">Собрать</button>
+            </div>
+          </div>
+          <div id="a-news-stats" class="a-news-stats"><div class="empty">Загрузка…</div></div>
+
+          <div class="a-news-feed-head" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 0 6px;">
+            <h4 style="margin:0;font-size:13px;">Бегущая лента: оценки влияния на сигналы</h4>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;">
+              <input type="checkbox" id="news-feed-infl-only" style="accent-color:var(--acc);width:15px;height:15px;">
+              только с влиянием на стоимость активов
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);">
+              строк
+              <select id="news-feed-limit" style="background:var(--bg2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:3px 6px;font-size:12px;">
+                <option value="20" selected>20</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+            </label>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">
+            score = рейтинг влияния на семейство (Σвзвешенных терминов · веса категорий, норм. −100…+100). Цвет: bull <span style="color:#1fc163">▲</span> / bear <span style="color:#e74c3c">▼</span>.
+          </div>
+          <div id="a-news-feed" class="a-news-feed"><div class="empty">Загрузка…</div></div>
+
+          <h4 style="margin:18px 0 6px;font-size:13px;">Аналитика</h4>
+          <div class="a-news-an-grid">
+            <div class="a-an-box">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Новостей за период</div>
+              <div id="a-news-an-count" style="position:relative;height:230px;"><div class="empty">…</div></div>
+            </div>
+            <div class="a-an-box">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Потенциальная влиятельность по семействам <span style="opacity:.7">(Σ|score|·conf)</span></div>
+              <div id="a-news-an-infl" style="position:relative;height:230px;"><div class="empty">…</div></div>
+            </div>
+            <div class="a-an-box">
+              <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">По источникам за период</div>
+              <div id="a-news-an-src" style="position:relative;height:230px;"><div class="empty">…</div></div>
+            </div>
+          </div>
+
+          <h4 style="margin:18px 0 6px;font-size:13px;">Подтверждение влияния бэктестом (сигнатура vs Δцены, горизонт 1 день)</h4>
+          <div id="a-news-an-bt" class="a-news-an-bt"><div class="empty">Нажмите «Собрать» или Обновить после накопления корпуса.</div></div>
+        </div>
+
+        <!-- источники -->
+        <div class="a-panel" id="a-pan-sources">
+          <div class="a-news-head">
+            <h3 style="margin:0">Источники</h3>
+            <div class="a-toolbar" style="margin:0">
+              <button id="news-src-save" class="btn" title="Сохранить веса и статусы">Сохранить</button>
+            </div>
+          </div>
+          <div id="a-news-sources" class="a-sub-params"><div class="empty">Загрузка…</div></div>
+        </div>
+
+        <!-- health-check -->
+        <div class="a-panel" id="a-pan-health">
+          <div class="a-news-head">
+            <h3 style="margin:0">Health-check</h3>
+            <div class="a-toolbar" style="margin:0">
+              <button id="news-health-refresh" class="btn" title="Обновить метрики">Обновить</button>
+            </div>
+          </div>
+          <div id="a-news-health" class="a-news-stats"><div class="empty">Загрузка…</div></div>
+        </div>
+
+        <!-- график найденных новостей (аналог a-chart-main) -->
+        <div class="a-panel" id="a-pan-found">
+          <div class="a-news-head">
+            <h3 style="margin:0">Найденные новости</h3>
+            <div class="a-toolbar" style="margin:0">
+              <label>Период (дн)</label>
+              <select id="news-found-days">
+                <option value="7">7</option>
+                <option value="14">14</option>
+                <option value="30" selected>30</option>
+                <option value="60">60</option>
+                <option value="180">180</option>
+              </select>
+              <button id="news-found-refresh" class="btn" title="Обновить сейчас">Обновить</button>
+            </div>
+          </div>
+          <div id="a-news-found" style="position:relative;height:340px;"><canvas id="a-news-found-ch"></canvas></div>
+          <div id="a-news-found-info" style="margin-top:8px;font-size:12px;color:var(--muted);"></div>
+        </div>
+
+        <!-- накопление корпуса -->
+        <div class="a-panel" id="a-pan-corpus">
+          <div class="a-news-head">
+            <h3 style="margin:0">Накопление корпуса</h3>
+            <div class="a-toolbar" style="margin:0">
+              <label>Период</label>
+              <select id="news-corp-days">
+                <option value="7">7 дн</option>
+                <option value="14">14 дн</option>
+                <option value="30" selected>30 дн</option>
+                <option value="60">60 дн</option>
+                <option value="180">6 мес</option>
+              </select>
+              <button id="news-corp-refresh" class="btn">Обновить</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
+            <div><div id="a-news-corp-accum" style="height:200px;position:relative;"><canvas id="a-news-corp-accum-ch"></canvas></div></div>
+            <div><div id="a-news-corp-fam" style="height:200px;position:relative;"><canvas id="a-news-corp-fam-ch"></canvas></div></div>
+          </div>
+          <div style="margin-top:8px;">
+            <div id="a-news-corp-stacked" style="height:180px;position:relative;"><canvas id="a-news-corp-stacked-ch"></canvas></div>
+          </div>
+          <div id="a-news-corp-info" style="margin-top:6px;font-size:11px;color:var(--muted);"></div>
+        </div>
+
+        <!-- аналитические дашборды -->
+        <div class="a-panel" id="a-pan-dashboards">
+          <div class="a-news-head">
+            <h3 style="margin:0">Аналитические дашборды</h3>
+            <div class="a-toolbar" style="margin:0">
+              <select id="news-dash-view">
+                <option value="family_heat">Семейства × Источники</option>
+                <option value="conf_dist">Распределение confidence</option>
+                <option value="score_scatter">Score vs Δprice</option>
+                <option value="source_quality">Качество по источникам</option>
+              </select>
+              <button id="news-dash-build" class="btn">Построить</button>
+            </div>
+          </div>
+          <div id="a-news-dash" style="height:320px;position:relative;"><div class="empty">Выберите представление.</div></div>
+        </div>
+
+        <!-- история статей -->
+        <div class="a-panel" id="a-pan-articles">
+          <div class="a-news-head">
+            <h3 style="margin:0">История статей</h3>
+            <div class="a-toolbar" style="margin:0">
+              <label>Источник</label>
+              <select id="news-art-src"><option value="">Все</option></select>
+              <label>Семейство</label>
+              <select id="news-art-fam"><option value="">Все</option></select>
+              <label>Период обзора</label>
+              <select id="news-found-table-days">
+                <option value="1">1 день</option>
+                <option value="3" selected>3 дня</option>
+                <option value="7">7 дней</option>
+                <option value="14">14 дней</option>
+              </select>
+              <button id="news-found-table-refresh" class="btn">Обновить</button>
+            </div>
+          </div>
+          <div id="a-news-found-table" class="a-news-articles" style="margin-bottom:14px;overflow:auto;">
+            <div class="empty">Загрузка…</div>
+          </div>
+          <div id="a-news-articles" class="a-news-articles"><div class="empty">Загрузка…</div></div>
+        </div>
+
+        <!-- график серий метрик -->
+        <div class="a-panel" id="a-pan-series">
+          <h3>Метрики влияния по дням</h3>
+          <div class="a-toolbar" style="margin:0 0 8px;">
+            <label>Период (дн)</label>
+            <select id="news-series-days">
+              <option value="30">30</option>
+              <option value="60">60</option>
+              <option value="90" selected>90</option>
+              <option value="180">180</option>
+            </select>
+            <button id="news-series-refresh" class="btn">Обновить</button>
+          </div>
+          <div id="a-news-series" style="position:relative;height:280px;"><canvas id="a-news-chart"></canvas></div>
+        </div>
+
+        <!-- параметры анализа -->
+        <div class="a-panel" id="a-pan-params">
+          <h3>Параметры анализа</h3>
+          <div id="a-news-params" class="a-sub-params"><div class="empty">Загрузка…</div></div>
+        </div>
+
+        <!-- сигнатуры и валидация -->
+        <div class="a-panel" id="a-pan-signatures">
+          <div class="a-news-head">
+            <h3 style="margin:0">Сигнатуры: сравнение подходов</h3>
+            <div class="a-toolbar" style="margin:0">
+              <button id="news-sig-compare" class="btn">Сравнить подходы</button>
+              <button id="news-sig-validate" class="btn">Валидация vs цены</button>
+            </div>
+          </div>
+          <div id="a-news-sig" class="a-sub-params"><div class="empty">Нажмите «Сравнить подходы».</div></div>
+        </div>
+      </section>
+
+      <!-- Сигналы -->
+      <section id="a-sec-signals" class="a-section">
+        <!-- табы -->
+        <div class="a-news-tabs" id="a-sig-tabs">
+          <button data-tab="algo" class="a-news-tab active">Алгоритмы</button>
+          <button data-tab="list" class="a-news-tab">Сигналы</button>
+        </div>
+
+        <!-- ▸ Алгоритмы -->
+        <div id="a-sig-tab-algo">
+          <div class="a-panel">
+            <h3>Сигналы — общая схема</h3>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <b style="color:#f1c40f;">Источники сигналов:</b>
+              <ol style="margin:6px 0 0 18px;padding:0;">
+                <li><b>Новостной конвейер</b> — лексико-семантический скоринг текста → score ∈ [−100, +100] на семейство.</li>
+                <li><b>ML-корреляции со сдвигом</b> — лог-доходности, матрица Пирсона с лагом → пара «ведущий→ведомый».</li>
+                <li><b>Подбор лага</b> — лучший лаг по |r|, симуляция знаковой торговли → PnL (1 млн ₽).</li>
+                <li><b>Стратегии gap/intraday</b> — сигналы по разрывам цены, моментуму XAU и мультифактору (virtual_trader).</li>
+                <li><b>Сигнатуры текста</b> — TF-IDF/Hybrid/Lexicon → [−1, +1], валидация против будущей цены (Spearman ρ).</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="a-panel" id="a-pan-sig-news">
+            <h3>Новостной сигнал (news_scorer)</h3>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <p style="margin:0 0 6px;">Поиск по 5 категориям: <b>monetary · commodity · geopolitics · macro · demand</b>.</p>
+              <div class="a-f-formula" style="background:rgba(38,48,90,.55);border-radius:6px;padding:8px 10px;margin:6px 0;font-family:Consolas,monospace;white-space:pre-wrap;">impact  =  Σ_cat ( Σ_pos w − Σ_neg w )
+conf    =  min( 0.3 + 0.12·min(hits, 8), 0.95 )
+score   =  impact · fam_coef · (100/9) · (Σ_weights / 3)
+          прямые упоминания:   fam_coef = 1.0
+          косвенные (глоб.драйверы): fam_coef = 0.35 · 0.7
+направл.  += 0.12·100·fam_coef  (bullish),  −0.12·100·fam_coef  (bearish)
+клиппинг: [−100, +100]</div>
+              <p style="margin:6px 0 4px;"><b>Параметры DEFAULT_PARAMS:</b></p>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px;font-size:11px;">
+                <div>half_life_hours — <b>12.0</b> (полураспад влияния)</div>
+                <div>min_conf — <b>0.35</b> (порог уверенности)</div>
+                <div>agg — <b>weighted</b> (weighted|median|peak)</div>
+                <div>norm — <b>100.0</b> (шкала сигнала)</div>
+                <div>weights.monetary — <b>0.30</b></div>
+                <div>weights.commodity — <b>0.25</b></div>
+                <div>weights.geopolitics — <b>0.25</b></div>
+                <div>weights.macro — <b>0.10</b></div>
+                <div>weights.demand — <b>0.10</b></div>
+              </div>
+              <p style="margin:6px 0 0;">Семейства: GOLD, SILV, COPPER, PLATINUM_SPOT, BRENT, NGAS. Правило: если совпал &gt;1 негативный + отсутствует позитивный маркер → aggr `bear`.</p>
+            </div>
+          </div>
+
+          <div class="a-panel" id="a-pan-sig-ml">
+            <h3>ML-корреляции со сдвигом (analytics_db)</h3>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <p style="margin:0 0 6px;">Лог-доходность и матрица Пирсона со сдвигом: <b>строка «ведёт» столбец</b>.</p>
+              <div class="a-f-formula" style="background:rgba(38,48,90,.55);border-radius:6px;padding:8px 10px;margin:6px 0;font-family:Consolas,monospace;white-space:pre-wrap;">r[i]    =  ln( c[i] / c[i−1] )                // лог-доходность
+ρ(x,y)  =  Σ(x−x̄)(y−ȳ) / √(Σ(x−x̄)² · Σ(y−ȳ)²)   // Пирсон, попарно, n ≥ 5
+mat[исх][цел] = ρ( logRet[исх][t], logRet[цел][t+lag] )</div>
+              <p style="margin:6px 0 4px;"><b>Пресеты лагов (баров):</b></p>
+              <div style="font-size:11px;">
+                LAG_PRESETS: 1d = <b>[1,2,3,5,10,20]</b>, 60min = <b>[1,2,4,12,24,48,72,144]</b>, 10min = <b>[1,3,6,12,36,72,144,288,432]</b>
+              </div>
+              <p style="margin:6px 0 4px;"><b>Сигнал от подбора лага (ml_best_lags):</b></p>
+              <div class="a-f-formula" style="background:rgba(38,48,90,.55);border-radius:6px;padding:8px 10px;margin:6px 0;font-family:Consolas,monospace;white-space:pre-wrap;">s      =  sign( logRet[source][t] )           // +1 / −1 / 0
+gross  =  Σ s · logRet[target][t+lag]
+profit =  gross · 1 000 000 − 0.00015·n·1 000 000   // условная комиссия 0,015%
+acc    =  доля совпадений знака s и return target</div>
+              <p style="margin:6px 0 4px;"><b>Экономика (ml_strategies, «Финам N6 Трейдер»):</b></p>
+              <div style="font-size:11px;">
+                FINAM_COMM = {futures: <b>1.2 ₽/контракт</b>, spot: <b>0.025%</b>} · BARS_PER_DAY = {1d:<b>1</b>, 60min:<b>14</b>, 10min:<b>70</b>}<br>
+                trades_day = round(BARS_PER_DAY / lag), contracts = int(1 000 000 / avg_close), fee = 2 · fee_per_trade · n
+              </div>
+            </div>
+          </div>
+
+          <div class="a-panel" id="a-pan-sig-gap">
+            <h3>Стратегии gap / intraday (virtual_trader)</h3>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <div class="a-f-formula" style="background:rgba(38,48,90,.55);border-radius:6px;padding:8px 10px;margin:0 0 8px;font-family:Consolas,monospace;white-space:pre-wrap;">gap      =  (open[first.today] − close[yest.end]) / close[yest.end] · 100
+xau_ret  =  (close[0] − close[N]) / close[N] · 100          // моментум XAU за N баров
+intr_ret =  (close[0] − close[N]) / close[N] · 100          // внутридневной моментум
+vol_spike=  avg(vol[-5])  >  avg(vol[-30]) · 1.5            // подтверждение объёмом</div>
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead><tr style="color:var(--muted);text-align:left;border-bottom:1px solid var(--line);">
+                  <th style="padding:4px 6px;">Стратегия</th><th style="padding:4px 6px;">Сигнал (формула)</th><th style="padding:4px 6px;">Параметры</th><th style="padding:4px 6px;">Инструмент</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td style="padding:4px 6px;"><b>GapFade</b></td><td style="padding:4px 6px;">|gap| &lt; threshold → <span style="color:#f7ca18">SHORT</span> если gap&gt;0, иначе <span style="color:#f7ca18">LONG</span></td><td style="padding:4px 6px;">threshold=<b>0.5%</b>, sl=<b>1.0%</b>, tp=<b>1.0%</b></td><td style="padding:4px 6px;">TGLD</td></tr>
+                  <tr><td style="padding:4px 6px;"><b>XauLeadLag</b></td><td style="padding:4px 6px;">|xau_ret(lead)| &gt; threshold → LONG если &gt;0, иначе SHORT</td><td style="padding:4px 6px;">lead=<b>20</b>, threshold=<b>0.08%</b>, sl=<b>1.0%</b>, tp=<b>0.6%</b></td><td style="padding:4px 6px;">TGLD</td></tr>
+                  <tr><td style="padding:4px 6px;"><b>MultiFactor</b></td><td style="padding:4px 6px;">score = gap·0.4 + xau_ret(10)·0.3 + intr_ret(30)·0.2 + vol(±0.15); |score|&gt;thr</td><td style="padding:4px 6px;">score_threshold=<b>0.3</b>, sl=<b>1.0%</b>, tp=<b>1.0%</b></td><td style="padding:4px 6px;">TRUR</td></tr>
+                  <tr><td style="padding:4px 6px;"><b>GapCont</b></td><td style="padding:4px 6px;">|gap| &gt; threshold → LONG если gap&gt;0, иначе SHORT</td><td style="padding:4px 6px;">threshold=<b>0.3%</b>, sl=<b>1.2%</b>, tp=<b>2.0%</b></td><td style="padding:4px 6px;">TGLD</td></tr>
+                  <tr><td style="padding:4px 6px;"><b>ScalperMulti</b></td><td style="padding:4px 6px;">|intr_ret(90m)| &gt; threshold → LONG/SHORT</td><td style="padding:4px 6px;">interval=<b>90м</b>, threshold=<b>0.05%</b>, sl=<b>0.6%</b>, tp=<b>1.0%</b></td><td style="padding:4px 6px;">TRUR</td></tr>
+                </tbody>
+              </table>
+              <p style="margin:8px 0 0;">Капитал: TOTAL_CAPITAL=<b>1000</b> ₽, CAPITAL_PER_STRATEGY=<b>200</b> ₽, POSITION_SIZE_PCT=<b>50%</b>, UPDATE_INTERVAL=<b>300</b> с. 1 сделка/стратегию/сутки, перекрытие при открытой позиции.</p>
+            </div>
+          </div>
+
+          <div class="a-panel" id="a-pan-sig-gap-bt">
+            <h3>Бэктест-версии (strategies.py)</h3>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead><tr style="color:var(--muted);text-align:left;border-bottom:1px solid var(--line);">
+                  <th style="padding:4px 6px;">Класс</th><th style="padding:4px 6px;">Логика</th><th style="padding:4px 6px;">Параметры по умолчанию</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td style="padding:4px 6px;"><b>GapFade</b></td><td style="padding:4px 6px;">mean reversion малых разрывов (|gap| &lt; thr)</td><td style="padding:4px 6px;">gapThreshold=<b>0.5%</b>, stopLoss=<b>2.0%</b>, takeProfit=<b>1.5%</b>, risk=<b>1.0%</b>, cooldown=<b>30м</b></td></tr>
+                  <tr><td style="padding:4px 6px;"><b>XLedLag</b></td><td style="padding:4px 6px;">моментум XAU на открытии (gap фильтр ≥0.2%)</td><td style="padding:4px 6px;">leadMinutes=<b>10</b>, stopLoss=<b>2.0%</b>, takeProfit=<b>1.0%</b></td></tr>
+                  <tr><td style="padding:4px 6px;"><b>GapContinuation</b></td><td style="padding:4px 6px;">breakout по гэпу + объём</td><td style="padding:4px 6px;">gapThreshold=<b>1.0%</b>, volumeSpike=<b>1.5×</b>, stopLoss=<b>1.5%</b>, takeProfit=<b>2.0%</b></td></tr>
+                  <tr><td style="padding:4px 6px;"><b>AdaptiveRegime</b></td><td style="padding:4px 6px;">мал. гэпы fade, бол. гэпы continuation</td><td style="padding:4px 6px;">fadeThreshold=<b>0.5%</b>, contThreshold=<b>1.5%</b>, stopLoss=<b>2.0%</b>, TP=SL·<b>1.5</b></td></tr>
+                </tbody>
+              </table>
+              <p style="margin:8px 0 0;">Signal.direction: <b>1</b>=long, <b>−1</b>=short, <b>0</b>=flat. Выход по SL/TP интрабар, иначе EOD close. Комиссии в бэктесте задаются engine.run_backtest().</p>
+            </div>
+          </div>
+
+          <div class="a-panel" id="a-pan-sig-sig">
+            <h3>Сигнатуры текста (text_signature)</h3>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                <thead><tr style="color:var(--muted);text-align:left;border-bottom:1px solid var(--line);">
+                  <th style="padding:4px 6px;">Модель</th><th style="padding:4px 6px;">Векторизация</th><th style="padding:4px 6px;">Выход</th>
+                </tr></thead>
+                <tbody>
+                  <tr><td style="padding:4px 6px;"><b>TFIDFSignature</b></td><td style="padding:4px 6px;">TfidfVectorizer(max_features=<b>5000</b>, min_df=<b>1</b>, max_df=<b>0.95</b>, sublinear_tf=<b>True</b>)</td><td style="padding:4px 6px;">Σ весов по семейным ключам, норм. max|.| → [−1, +1]</td></tr>
+                  <tr><td style="padding:4px 6px;"><b>HybridSignature</b></td><td style="padding:4px 6px;">TF-IDF база + направление ±<b>0.15</b> от bull/bear слов</td><td style="padding:4px 6px;">[−1, +1]; confidence = min(1, tfidf_conf + 0.05)</td></tr>
+                  <tr><td style="padding:4px 6px;"><b>LexiconSignature</b></td><td style="padding:4px 6px;">LEXICON score, нормализация по шкале</td><td style="padding:4px 6px;">[−1, +1]</td></tr>
+                </tbody>
+              </table>
+              <div class="a-f-formula" style="background:rgba(38,48,90,.55);border-radius:6px;padding:8px 10px;margin:8px 0 6px;font-family:Consolas,monospace;white-space:pre-wrap;">forward ret(d) = close[t+d] / close[t] − 1    // d ∈ {1, 2, 3, 5} дней
+метрики: Spearman ρ(сигнал, forward ret), p-value, hit_rate совпадения знака</div>
+              <p style="margin:0;">Цель валидации: стабильный ρ &gt; 0.3 при корпусе ≥ 100 статей (current: ~35).</p>
+            </div>
+          </div>
+
+          <div class="a-panel" id="a-pan-sig-ml-news">
+            <h3>ML-модель новостей: размер движения + оптимальный лаг (news_ml)</h3>
+            <div style="display:flex;gap:10px;align-items:center;margin:0 0 6px;">
+              <button id="a-ml-news-train" class="a-btn" style="padding:6px 14px;">Переобучить (вручную)</button>
+              <span id="a-ml-news-status" style="font-size:11px;color:var(--muted);">модель не обучена</span>
+            </div>
+            <div style="font-size:12px;line-height:1.7;color:var(--muted);">
+              <div class="a-f-formula" style="background:rgba(38,48,90,.55);border-radius:6px;padding:8px 10px;margin:6px 0;font-family:Consolas,monospace;white-space:pre-wrap;">Целевая метрика (регрессия):  y = |close[t+lag] − close[t]| / close[t]
+Лаги (10min бары):  LAGS_10MIN = [1, 3, 6, 12, 24, 48, 72, 144]
+Только прямые статьи:  fam_coef = 1.0 (скоринг по семейству)
+Комиссия бэктеста:  Финам futures = 1.2 ₽/контракт (вход + выход), контракт = 1 млн ₽
+Модель:  GradientBoostingRegressor(n_estimators=100, depth=3, lr=0.05); opt-lag подбирается
+         на предсказанный max |return| по сигнатуре текста + домену источника</div>
+              <div id="a-ml-news-res" style="margin:6px 0;display:none;">
+                <p style="margin:0 0 4px;font-weight:600;color:#f1c40f;">Метрики модели:</p>
+                <div id="a-ml-news-metrics" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:4px 12px;font-size:11px;"></div>
+                <p style="margin:8px 0 4px;font-weight:600;color:#f1c40f;">Оптимальные лаги по семействам:</p>
+                <div id="a-ml-news-lags" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:4px 12px;font-size:11px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ▸ Сигналы (таблица) -->
+        <div id="a-sig-tab-list" style="display:none;">
+          <div class="a-panel">
+            <div class="a-news-head">
+              <h3 style="margin:0">Сгенерированные сигналы</h3>
+              <div class="a-toolbar" style="margin:0">
+                <label>Период</label>
+                <select id="sig-list-period">
+                  <option value="24">сутки (24ч)</option>
+                  <option value="72">3 дня</option>
+                  <option value="168" selected>7 дней</option>
+                  <option value="720">30 дней</option>
+                </select>
+                <label>Мин. |score|</label>
+                <select id="sig-list-thr">
+                  <option value="0">все</option>
+                  <option value="5" selected>≥ 5</option>
+                  <option value="15">≥ 15</option>
+                  <option value="30">≥ 30</option>
+                  <option value="50">≥ 50</option>
+                </select>
+                <button id="sig-list-refresh" class="btn">Обновить</button>
+              </div>
+            </div>
+            <div id="a-sig-table" style="overflow-x:auto;margin-top:6px;">
+              <div class="empty">Загрузка…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ML -->
+      <section id="a-sec-ml" class="a-section">
+        <div class="a-panel">
+          <h3>Корреляционные матрицы со сдвигом по времени</h3>
+          <div class="a-toolbar" style="margin:0 0 10px;">
+            <label>Интервал</label>
+            <select id="ml-interval">
+              <option value="1d">1 день</option>
+              <option value="60min">1 час</option>
+              <option value="10min">10 мин</option>
+            </select>
+            <label>Сдвиг (лаг)</label>
+            <select id="ml-lag"></select>
+            <button id="ml-build" class="btn">Построить</button>
+            <button id="ml-autobest" class="btn">Автоподбор лага</button>
+          </div>
+          <div class="a-ml-legend" style="font-size:11px;color:var(--muted);margin-bottom:6px;">
+            r = corr(logRet[строки][t], logRet[столбца][t+lag]) — строка «ведёт» столбец.
+            Положительные зелёные, отрицательные красные.
+          </div>
+          <div id="a-ml-matrix" class="a-ml-matrix"><div class="empty">Выберите интервал и лаг → «Построить».</div></div>
+        </div>
+        <div class="a-panel">
+          <h3>Автоподбор лага (топ пар по |r|)</h3>
+          <div id="a-ml-best" class="a-sub-params"><div class="empty">Нажмите «Автоподбор лага».</div></div>
+        </div>
+        <div class="a-panel">
+          <h3>Наиболее доходные стратегии (модель на 1 000 000 ₽)</h3>
+          <div class="a-toolbar" style="margin:0 0 10px;">
+            <label><input type="checkbox" id="ml-strat-nocom"> Без комиссии (грязный доход)</label>
+            <button id="ml-strat-run" class="btn">Рассчитать стратегии</button>
+          </div>
+          <div class="a-ml-legend" style="font-size:11px;color:var(--muted);margin-bottom:6px;">
+            Стратегия: по знаку логдоходности источника (source) в момент t открываем позицию в цели (target) на лаг баров.
+            Ликвидность и цены — по фактическим сделкам MOEX (60 min, ~5 дней). Комиссия: фьючерсы до 1,2 ₽/контракт, spot/ETF до 0,025%.
+          </div>
+          <div id="a-ml-strat" class="a-sub-params"><div class="empty">Нажмите «Рассчитать стратегии».</div></div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-crosshair@2.0.0"></script>
+<script src="/static/js/analytics_chart_kit.js?v=20260912.2"></script>
+<script src="/static/js/analytics.js?v=20260916.9"></script>
+</body>
+</html>

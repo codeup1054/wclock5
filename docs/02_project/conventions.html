@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Конвенции WClock5</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
+         color: #1f2430; margin: 0; line-height: 1.55; }
+  .page { max-width: 1330px; margin: 0 auto; padding: 16px 12px 48px; }
+  @media (min-width: 640px) { .page { padding: 24px 16px 64px; } }
+
+  .header { background: #101418; color: #fff; padding: 22px 24px 24px;
+            border-bottom: 5px solid #f37435; margin-bottom: 24px; }
+  @media (min-width: 640px) { .header { padding: 32px 40px 36px; margin-bottom: 32px; } }
+  .header .header-brand { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .header .header-brand svg { flex-shrink: 0; }
+  .header .brand { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+  .header h1 { margin: 8px 0 6px; font-size: 21px; line-height: 1.2; font-weight: 700;
+               text-transform: uppercase; letter-spacing: .5px; }
+  @media (min-width: 640px) { .header h1 { font-size: 34px; } }
+  .header .sub { color: #aa957f; font-size: 11px; text-transform: uppercase;
+                 letter-spacing: 2px; font-weight: 500; margin: 0; }
+  @media (min-width: 640px) { .header .sub { font-size: 13px; } }
+
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .meta-item { background: #1f2430; border: 1px solid #3a4048; padding: 4px 10px;
+               font-size: 11px; border-radius: 4px; }
+  .meta-label { text-transform: uppercase; letter-spacing: .05em; color: #aa957f;
+                font-weight: 600; margin-right: 6px; }
+  .meta-value { font-weight: 700; color: #fff; }
+
+  .tabs { position: sticky; top: 0; z-index: 20; background: #101418;
+          border-bottom: 3px solid #f37435; margin-bottom: 24px;
+          display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 10px; }
+  .tabs a { color: #cfd2d8; text-decoration: none; font-size: 12px; font-weight: 600;
+            padding: 7px 11px; border-radius: 6px; text-transform: uppercase;
+            letter-spacing: .5px; white-space: nowrap; }
+  .tabs a:hover { background: #1f2430; color: #fff; }
+  .tabs a.active { background: #f37435; color: #fff; }
+  h2[id] { scroll-margin-top: 64px; }
+  @media print { .tabs { display: none; } }
+
+  .panel { background: #fff; border: 1px solid #dbdbdb; padding: 18px 20px;
+           margin-bottom: 24px; }
+  @media (min-width: 640px) { .panel { padding: 28px 32px; margin-bottom: 32px; } }
+  .panel h2.panel-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
+                          letter-spacing: .5px; margin: 0 0 12px; padding: 0; border: none; }
+  @media (min-width: 640px) { .panel h2.panel-title { font-size: 18px; } }
+
+  /* Дерево содержания (раскрывающееся, как в SDK/MSDN) */
+  .toc { font-size: 13px; line-height: 1.7; }
+  @media (min-width: 640px) { .toc { font-size: 14px; line-height: 1.6; } }
+  .toc ul { list-style: none; margin: 0; padding: 0; }
+  .toc ul ul { margin-left: 18px; border-left: 1px dashed #d5d0c7; padding-left: 6px; }
+  .toc li { margin: 0; }
+  .toc li.toc-parent { position: relative; }
+  .toc a { color: #1553a3; text-decoration: none; display: block; padding: 2px 4px;
+           border-radius: 3px; line-height: 1.5; }
+  .toc a:hover { color: #f37435; background: #f5f2ea; text-decoration: none; }
+  .toc a.toc-active { color: #f37435; background: #f5f2ea; }
+  .toc ul ul a { color: #2c5f96; }
+  .toc ul ul ul a { color: #4a6b8c; }
+  .toc .toc-toggle { display: inline-block; width: 18px; height: 18px; text-align: center;
+                     cursor: pointer; color: #8a8478; font-size: 12px; line-height: 18px;
+                     user-select: none; flex: 0 0 auto; }
+  .toc .toc-row { display: flex; align-items: flex-start; }
+  .toc .toc-row > a { flex: 1 1 auto; }
+  .toc .toc-ac { display: none; }
+  .toc .toc-ac.open { display: block; }
+
+  .content { background: #fff; border: 1px solid #dbdbdb; padding: 20px; }
+  @media (min-width: 640px) { .content { padding: 32px; } }
+  @media (min-width: 768px) { .content { padding: 48px; } }
+
+  .prose h1 { font-size: 22px; margin: 0 0 14px; }
+  .prose h2 { font-size: 19px; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 32px; margin-bottom: 12px;
+              padding-bottom: 6px; border-bottom: 2px solid #f37435; }
+  @media (min-width: 640px) { .prose h2 { font-size: 26px; margin-top: 44px; margin-bottom: 16px; } }
+  .prose h3 { font-size: 15px; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 24px; margin-bottom: 8px; }
+  @media (min-width: 640px) { .prose h3 { font-size: 19px; margin-top: 32px; margin-bottom: 12px; } }
+  .prose h4 { font-size: 13px; font-weight: 600; color: #585858;
+              margin-top: 16px; margin-bottom: 6px; }
+  @media (min-width: 640px) { .prose h4 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; } }
+  .prose p { font-size: 14px; line-height: 1.6; color: #272727; margin-bottom: 12px; }
+  @media (min-width: 640px) { .prose p { font-size: 15px; } }
+  .prose ul, .prose ol { font-size: 14px; line-height: 1.6; color: #272727;
+                         margin-bottom: 16px; padding-left: 20px; }
+  @media (min-width: 640px) { .prose ul, .prose ol { font-size: 15px; } }
+  .prose li { margin-bottom: 4px; }
+  .prose a { color: #1553a3; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+  .prose a:hover { color: #f37435; }
+  .prose table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11px; }
+  @media (min-width: 640px) { .prose table { font-size: 13px; } }
+  @media (max-width: 640px) {
+    .prose table { font-size: 10px; overflow-wrap: break-word; word-break: break-word; line-height: 1.3; }
+    .prose td:first-child, .prose th:first-child { min-width: 88px; }
+  }
+  .prose th { background: #101418; color: #fff; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .05em; text-align: left; padding: 6px 8px; border: 1px solid #101418;
+              font-size: 9px; }
+  @media (min-width: 640px) { .prose th { padding: 10px 12px; font-size: 12px; } }
+  .prose td { border: 1px solid #dbdbdb; padding: 6px 8px; color: #272727; vertical-align: top; }
+  @media (min-width: 640px) { .prose td { padding: 8px 12px; } }
+  .prose tr:nth-child(even) td { background: #f1f1ea; }
+  .prose code { font-family: Consolas, 'Courier New', monospace; background: #efe9de;
+                color: #1553a3; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  .prose pre { background: #101418; color: #d9dce1; padding: 14px 16px; border-radius: 8px;
+               overflow-x: auto; margin-bottom: 16px; font-size: 12.5px; line-height: 1.5; }
+  .prose pre code { background: transparent; color: inherit; padding: 0; border-radius: 0; }
+  .prose hr { border: none; border-top: 2px solid #e2dbd3; margin: 40px 0; }
+  .prose img, .prose .dimg { max-width: 100%; margin: 16px auto; display: block; }
+  .prose blockquote { border-left: 4px solid #f37435; padding: 10px 12px; margin: 16px 0;
+                      background: #f1f1ea; font-style: italic; color: #585858; font-size: 14px; }
+  @media (min-width: 640px) { .prose blockquote { padding: 12px 16px; font-size: 15px; } }
+
+  .icon { display: inline-block; width: 20px; height: 20px; vertical-align: text-bottom; }
+
+  .tabs .dl { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .dl-btn { display: inline-block; padding: 2px 9px; font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+            color: #101418; background: #f37435; border: 1px solid #f37435; border-radius: 3px;
+            cursor: pointer; line-height: 1.5; text-decoration: none; }
+  @media (min-width: 640px) { .dl-btn { font-size: 10px; padding: 3px 12px; } }
+  .dl-btn:hover { background: #fff; border-color: #fff; }
+  .dl-btn.alt { background: transparent; color: #f37435; }
+  .dl-btn.alt:hover { color: #101418; background: #101418; border-color: #101418; }
+  @media print { .dl, .dl-btn { display: none !important; } }
+  .btn { display: inline-block; font-family: 'Segoe UI', Arial, sans-serif;
+         font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+         padding: 8px 20px; border: 2px solid transparent; cursor: pointer;
+         text-align: center; text-decoration: none; }
+  @media (min-width: 640px) { .btn { font-size: 13px; letter-spacing: 2px; padding: 10px 30px; } }
+  .btn:hover { opacity: .9; }
+  .btn-orange { background: #f37435; color: #fff; border-color: #f37435; }
+  .btn-black { background: #1f2430; color: #fff; border-color: #1f2430; }
+  .btn-rounded { border-radius: 50px; letter-spacing: normal; }
+
+  .badge { display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase;
+           letter-spacing: .03em; padding: 2px 7px; border-radius: 3px; }
+  @media (min-width: 640px) { .badge { font-size: 11px; letter-spacing: .05em; padding: 3px 10px; } }
+  .badge-orange { background: #f37435; color: #fff; }
+  .badge-green { background: #4b8765; color: #fff; }
+  .badge-red { background: #ca3742; color: #fff; }
+  .badge-beige { background: #aa957f; color: #000; }
+  .badge-black { background: #1f2430; color: #fff; }
+  .badge-teal { background: #57a4b5; color: #fff; }
+  .badge-violet { background: #6e4d8b; color: #fff; }
+
+  .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
+            letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
+  @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  
+  <div id="header" class="header">
+    <div class="header-brand">
+      <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+        <rect x="2" y="2" width="44" height="44" rx="10" fill="#f37435"/>
+        <rect x="10" y="10" width="28" height="28" rx="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="24" cy="24" r="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="36" cy="13" r="3" fill="white"/>
+      </svg>
+      <span class="brand">WClock5</span>
+    </div>
+    <h1 id="page-title">Конвенции WClock5</h1>
+    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
+    
+  </div>
+  
+
+  
+  <nav class="tabs" aria-label="Навигация по разделам">
+    <a href="#0-prompt-retsept-posle-zadachi">Промпт-рецепт после…</a>
+    <a href="#1-deploy-na-prod">Деплой на прод</a>
+    <a href="#2-invest-dannye">Инвест-данные</a>
+    <a href="#3-grafiki-chart-js">Графики (Chart.js)</a>
+    <a href="#4-paneli-razmeschenie-i-pokaz">Панели (размещение…</a>
+    <a href="#5-patterny-shtrikhovki-canvaspattern">Паттерны штриховки…</a>
+    <a href="#6-kontentnyy-skeyling-paneley-cqi">Контентный скейлинг…</a>
+    <a href="#7-invest-panel-zhivoy-konets-avto-refresh-dannye-svezhesti">Инвест-панель: живо…</a>
+    <a href="#8-minutnye-svechi-sloy-portfolio-min">Минутные свечи: сло…</a>
+    <a href="#9-chart-js-defensive-update-pattern">Chart.js: defensive…</a>
+    <a href="#10-nastroyki-sbora-cherez-api-tinkoff-finam">Настройки сбора чер…</a>
+    <a href="#11-demony-dannykh-pravki-na-servere-tg-turnover-i-dr">Демоны данных: прав…</a>
+    <a href="#list-izmeneniy">Лист изменений</a>
+    <span class="dl" data-dl="conventions">
+      <button type="button" class="dl-btn" onclick="downloadPdf()">PDF</button>
+      <button type="button" class="dl-btn alt" onclick="downloadDoc()">DOCX</button>
+    </span>
+  </nav>
+  
+
+  
+  <div id="toc" class="panel">
+    <h2 id="toc-title" class="panel-title">Содержание</h2>
+    <div id="toc-links" class="toc"><ul><li class="toc-parent" data-parent="0-prompt-retsept-posle-zadachi">
+<div class="toc-row">
+<span class="toc-toggle" data-target="0-prompt-retsept-posle-zadachi" title="Развернуть">+</span>
+<a href="#0-prompt-retsept-posle-zadachi">0. Промпт-рецепт после задачи</a>
+</div>
+<ul class="toc-ac" id="toc-ac-0-prompt-retsept-posle-zadachi">
+<li>
+<a href="#0-1-neskolko-poslednikh-zadach-n">0.1 Несколько последних задач (N)</a>
+</li>
+<li>
+<a href="#0-2-fiksatsiya-v-bekloge">0.2 Фиксация в беклоге</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#1-deploy-na-prod">1. Деплой на прод</a>
+</li>
+<li>
+<a href="#2-invest-dannye">2. Инвест-данные</a>
+</li>
+<li>
+<a href="#3-grafiki-chart-js">3. Графики (Chart.js)</a>
+</li>
+<li>
+<a href="#4-paneli-razmeschenie-i-pokaz">4. Панели (размещение и показ)</a>
+</li>
+<li class="toc-parent" data-parent="5-patterny-shtrikhovki-canvaspattern">
+<div class="toc-row">
+<span class="toc-toggle" data-target="5-patterny-shtrikhovki-canvaspattern" title="Развернуть">+</span>
+<a href="#5-patterny-shtrikhovki-canvaspattern">5. Паттерны штриховки (CanvasPattern)</a>
+</div>
+<ul class="toc-ac" id="toc-ac-5-patterny-shtrikhovki-canvaspattern">
+<li>
+<a href="#5-1-funktsii">5.1 Функции</a>
+</li>
+<li>
+<a href="#5-2-parametry-patterna">5.2 Параметры паттерна</a>
+</li>
+<li>
+<a href="#5-3-ugly-naklona">5.3 Углы наклона</a>
+</li>
+<li>
+<a href="#5-4-stek-poryadok-sloev">5.4 Стек: порядок слоёв</a>
+</li>
+<li>
+<a href="#5-5-legenda-3-stolbtsa">5.5 Легенда: 3 столбца</a>
+</li>
+<li>
+<a href="#5-6-bystryy-deploy-podbor-parametrov">5.6 Быстрый деплой (подбор параметров)</a>
+</li>
+<li>
+<a href="#5-7-primenenie-v-drugikh-proektakh">5.7 Применение в других проектах</a>
+</li>
+<li>
+<a href="#5-8-legenda-drag-drop-touch-cookie">5.8 Легенда: drag&amp;amp;drop, touch, cookie</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#6-kontentnyy-skeyling-paneley-cqi">6. Контентный скейлинг панелей (cqi)</a>
+</li>
+<li class="toc-parent" data-parent="7-invest-panel-zhivoy-konets-avto-refresh-dannye-svezhesti">
+<div class="toc-row">
+<span class="toc-toggle" data-target="7-invest-panel-zhivoy-konets-avto-refresh-dannye-svezhesti" title="Развернуть">+</span>
+<a href="#7-invest-panel-zhivoy-konets-avto-refresh-dannye-svezhesti">7. Инвест-панель: живой конец, авто-refresh, данные свежести</a>
+</div>
+<ul class="toc-ac" id="toc-ac-7-invest-panel-zhivoy-konets-avto-refresh-dannye-svezhesti">
+<li>
+<a href="#7-1-zhivoy-konets-diapazona">7.1 Живой конец диапазона</a>
+</li>
+<li>
+<a href="#7-2-avto-refresh-gibrid">7.2 Авто-refresh (гибрид)</a>
+</li>
+<li>
+<a href="#7-3-indikator-svezhesti-dannykh">7.3 Индикатор свежести данных</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#8-minutnye-svechi-sloy-portfolio-min">8. Минутные свечи: слой portfolio_min</a>
+</li>
+<li>
+<a href="#9-chart-js-defensive-update-pattern">9. Chart.js: defensive update pattern</a>
+</li>
+<li>
+<a href="#10-nastroyki-sbora-cherez-api-tinkoff-finam">10. Настройки сбора через API (Tinkoff / Finam)</a>
+</li>
+<li>
+<a href="#11-demony-dannykh-pravki-na-servere-tg-turnover-i-dr">11. Демоны данных: правки на сервере (tg_turnover и др.)</a>
+</li>
+<li>
+<a href="#list-izmeneniy">Лист изменений</a>
+</li></ul></div>
+  </div>
+  
+
+  <div id="content" class="content prose">
+<ul>
+<li>ver: 0.7</li>
+<li>updated: 2026-09-16</li>
+<li>scope: деплой, инвест-данные, графики, панели (в т.ч. browser-зоны), паттерны, cqi-скейлинг, минутные свечи, авто-refresh, настройки сбора через API, демоны данных, промпт-рецепты</li>
+<li>источник: сессия 21.08–16.09.2026</li>
+</ul>
+<h2 id="0-prompt-retsept-posle-zadachi">0. Промпт-рецепт после задачи</h2>
+<p>После <strong>завершения любой задачи</strong> (правка визуала, логики, деплой) ассистент<br />
+выводит в конце ответа <strong>самый короткий промпт</strong>, которым эту задачу можно<br />
+повторить/воспроизвести одной командой (токен <code>пп</code>).</p>
+<p>Формат: одна строка <code>&gt; &lt;промпт&gt;</code> под основным ответом. Промпт должен<br />
+содержать: файл/модуль, что изменить и (если применимо) целевую величину —<br />
+без лишнего контекста.</p>
+<p>Пример после выравнивания маркеров:</p>
+<blockquote>
+<p>Выровняй начальный и конечный маркеры капитала по левому краю меток оси Y XAU. В <code>PeriodLabelsPlugin</code> (<code>invest_chart.js</code>) установи X-позицию <code>LABEL_RIGHT_X</code> = <code>scales['y_xau'].left</code> (fallback — <code>chartArea.left</code>).</p>
+</blockquote>
+<h3 id="0-1-neskolko-poslednikh-zadach-n">0.1 Несколько последних задач (N)</h3>
+<p>Правило §0 действует для последней задачи. Дополнительно, по запросу<br />
+<code>&gt; N</code> (или <code>&gt; N промптов</code>), ассистент выводит <strong>список последних N<br />
+решённых задач</strong> — каждый пункт одной строкой <code>&gt; …</code> с самым коротким<br />
+промптом/сутью. Список идёт от свежей задачи к более ранней (LIFO), N —<br />
+количество последних задач, например <code>&gt; 5</code> → 5 последних рецептов.</p>
+<p>Цель: каждая доработка превращается в переиспользуемый рецепт без разбора<br />
+истории сессии.</p>
+<h3 id="0-2-fiksatsiya-v-bekloge">0.2 Фиксация в беклоге</h3>
+<p>После <strong>завершения задачи</strong> помимо вывода рецепта (§0):<br />
+1. <strong>Зафиксировать статус</strong> задачи в свежем беклоге<br />
+   (<code>docs/02_project/backlogs/backlog_YYYYMMDD.ldn.md</code>): пометить задачу<br />
+<code>&lt;svg class="icon" viewBox="0 0 20 20" fill="none"&gt;&lt;circle cx="10" cy="10" r="9" fill="#4b8765"/&gt;&lt;path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/&gt;&lt;/svg&gt;</code> (напр. <code>TICK-01 &lt;svg class="icon" viewBox="0 0 20 20" fill="none"&gt;&lt;circle cx="10" cy="10" r="9" fill="#4b8765"/&gt;&lt;path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/&gt;&lt;/svg&gt; (H) — …</code>).<br />
+2. <strong>Записать самый оптимальный промпт</strong> для её решения — компактной<br />
+   строкой в записи задачи (или в отдельном поле <code>промпт:</code>), чтобы<br />
+   задачу можно было воспроизвести одной командой без разбора кода.<br />
+3. Если беклог дня уже закрыт/перенесён — занести запись в актуальный<br />
+   открытый беклог либо добавить задачу с рецептом в новый.</p>
+<p>Формат промпта внутри беклога — тот же, что в §0 (одна строка <code>&gt; …</code>),<br />
+с указанием файла/модуля и сути правки.</p>
+<h2 id="1-deploy-na-prod">1. Деплой на прод</h2>
+<p>Прод: <code>root@217.114.8.5</code>, <code>/var/www/wclock5.startupassist.ru</code>.<br />
+Compose-сервисы: <code>wclock</code> (app), <code>invest-parser</code>, <code>finam-invest-parser</code><br />
+(контейнеры <code>wclock5-app</code>, <code>wclock5-inv</code>, <code>wclock5-finam-inv</code>).<br />
+Приложение на хосте: <strong>порт 10405</strong> (<code>localhost:8000</code> — чужой сервис,<br />
+не использовать для тестов).</p>
+<p>Команды деплоя (токены <code>пп</code>):<br />
+- <strong><code>пп -дп</code></strong> — деплой prod: <code>bash sh/devops.sh static</code> на VPS 217.114.8.5<br />
+- <strong><code>пп -дд</code></strong> — деплой dev: локальный деплой без VPS</p>
+<ul>
+<li>JS/CSS: scp → <code>/tmp</code> → <code>node --check</code> → cp в <code>static/…</code>; локального node нет.</li>
+<li>Python: scp напрямую + рестарт затронутых контейнеров<br />
+  (<code>docker compose restart wclock invest-parser finam-invest-parser</code>).</li>
+<li>HTML/Jinja: правки через шаблоны; статика версионируется глобалом<br />
+<code>surl()</code> (<code>?v=mtime</code>) + <code>no-cache</code> у HTML → кэш обновляется сам.</li>
+<li>systemd-сервисы хоста (вне compose): <code>tg-turnover</code><br />
+  (<code>parsers/telegram/tg_turnover_daemon.py</code>).</li>
+</ul>
+<h2 id="2-invest-dannye">2. Инвест-данные</h2>
+<ul>
+<li>Время — <strong>всегда числовой <code>ts_epoch</code></strong> (Unix UTC) в БД; ISO-строки только<br />
+  как источник парсинга (<code>invest_repo.parse_ts</code>). Строковые сравнения<br />
+  дат запрещены (класс багов −3ч/−6ч).</li>
+<li>Mediation-слой — <code>invest_repo.py</code> (DTO, запись/чтение, retention,<br />
+  миграции идемпотентны); <code>invest_db.py</code> — shim совместимости.</li>
+<li>Демоны пишут через repo, читают API-эндпоинты через repo.</li>
+<li>Интервал опроса портфелей: 10с днём (08:00–24:00 МСК) / 60с ночью.</li>
+<li><strong>Оборот = только стратегия</strong>: API счёта содержит чужие алго-потоки и<br />
+  не пригоден для фильтрации. Источник истины — Telegram-канал бота<br />
+  «Сделки Бота» → таблица <code>strategy_summary</code> (последняя запись дня на<br />
+  источник; дубли строк от редактирования поста — норма).</li>
+<li>Комиссия в <code>/api/invest/turnover</code> и отчёте: Tinkoff — 0,02% плоско;<br />
+  Finam — тариф «Трейдер n6»: брекетная ставка дневного оборота<br />
+  (<code>FINAM_MOEX_TIERS</code>: до 1М 0,025 / 1–5М 0,015 / 5–30М 0,01 / 30–100М 0,005 /<br />
+  100–250М 0,0025 / &gt;250М 0,001 %) + урегулирование сделок СПБ 0,01%<br />
+  (<code>FINAM_SETTLE_SPB</code>); стратегия Финама торгует на СПБ, поэтому ставка в<br />
+  отчёте = брокерский брекет + 0,01% (пример: 30–100 млн → 0,015%).<br />
+  Урегулирование МосБиржи 0,03% — только для мосбиржевых сделок (<code>app.py</code>).</li>
+</ul>
+<h2 id="3-grafiki-chart-js">3. Графики (Chart.js)</h2>
+<ul>
+<li>Позиции точек — <code>scale.getPixelForValue(index)</code> по данным;<br />
+<code>getPixelForTick()</code> — только для тиков оси (прорежены autoSkip'ом,<br />
+  индексы НЕ совпадают с точками — класс багов «линия у края»).</li>
+<li>Всё, что зависит от текущего времени (линия «сейчас», тултип),<br />
+  либо считается при каждом рендере, либо обновляется таймером<br />
+  (<code>chart.update('none')</code> раз в минуту); деление на ноль/isFinite проверять.</li>
+<li>DPI: пер-панельные слайдеры (<code>chartDpiValue('invest'|'weather')</code>,<br />
+<code>dpiFont()</code>, <code>setupCanvasForDPR</code>), события <code>weatherDpiChange</code>,<br />
+<code>investDpiChange</code>; слушатели регистрировать ОДИН раз на верхнем уровне,<br />
+  не внутри обработчиков ресайза (иначе накапливаются).</li>
+<li>Слушатели событий графиков: jQuery-namespaced<br />
+  (<code>$(document).on('panelTempRangeChange', …)</code>).</li>
+</ul>
+<h2 id="4-paneli-razmeschenie-i-pokaz">4. Панели (размещение и показ)</h2>
+<ul>
+<li>Реестр панелей <code>PANEL_IDS</code> + дефолты <code>PANEL_CONFIG_DESKTOP/TABLET</code><br />
+  (<code>static/js/panel_configs.js</code>); геометрия и видимость per-device_id:<br />
+  localStorage <code>wclock_panels</code> + сервер <code>/api/panel_config/&lt;device_id&gt;</code>.</li>
+<li>Edit-mode (кнопка «Настройка панелей»): drag за шапку, ресайз за угол,<br />
+  show/hide через модалку панелей (<code>lib.js</code>); сброс к дефолту, export/import.</li>
+<li>Перетаскиваемые элементы UI — см. конвенцию<br />
+<code>01.lab/00_manifest/general_rules.md</code> §8 (сохранение позиции в куки с<br />
+  префиксом приложения, клампинг, порог drag/click 5px, Pointer Events).<br />
+  Референс: легенда investChart (<code>wclock_invest_legend_pos</code>).</li>
+<li>z-index слоёв панелей: обычные ~10–100; поверх — по логике приложения<br />
+  (панель управления выше всех).</li>
+</ul>
+<p><strong>Автономные элементы инвест-баннера — отдельные панели</strong> (каждая — в<br />
+<code>PANEL_IDS</code>, в <code>panel_configs.js</code>, со своим переключателем в «Настройках»):</p>
+<table>
+<thead>
+<tr>
+<th>Панель</th>
+<th>id</th>
+<th>Содержимое</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Капитал</td>
+<td><code>invest_banner_capital</code> → <code>#invest_banner_capital_content</code></td>
+<td>строки капитала + оборот + бары активов</td>
+</tr>
+<tr>
+<td>Таблица</td>
+<td><code>invest_banner_table</code> → <code>#invest_banner_table_content</code></td>
+<td>таблица периодов</td>
+</tr>
+<tr>
+<td>Итого</td>
+<td><code>invest_banner_total</code> → <code>#invest_banner_total_content</code></td>
+<td>только суммарный капитал (без подписей)</td>
+</tr>
+</tbody>
+</table>
+<p>Инлайн-«Итого» в Капитале показывается только когда панель «Итого» скрыта<br />
+И активны 2+ источника; при включённой панели «Итого» — инлайн дубль убирается.</p>
+<p><strong>Единая модалка Отчётов</strong> (<code>report.js</code>) — табы Инвестиции / Ошибки бота /<br />
+Настройки; открытие по <code>☰</code> (<code>#panels-list-btn</code>) и запросу <code>window.Report.open(tab)</code>.<br />
+Кнопки <code>O</code> больше нет.</p>
+<p><strong>Настройки в 2 столбца</strong> (<code>lib.js</code> <code>populateSettingsContent</code>): контейнер<br />
+<code>settings-container</code> — grid <code>1fr 1fr</code>; внутри два div-столбца<br />
+<code>settings-col-left</code> / <code>settings-col-right</code>. Заполнение построчно в порядке<br />
+следования: <strong>первая половина строк</strong> → первый столбец, <strong>вторая</strong> → второй<br />
+(<code>Math.ceil(rows.length/2)</code>). Профили (<code>panel-profiles-row</code>) и заголовки<br />
+(<code>settings-section-title</code>) — на всю ширину (<code>grid-column: 1 / -1</code>).<br />
+Row-классы <code>settings-col-first/second</code> НЕ использовать (удалены).</p>
+<p><strong>Browser-зоны (<code>#browser_fullscreen</code>, <code>#browser_reload</code>)</strong> — прозрачные<br />
+клик-зоны действий браузера, НЕ clock-panel:</p>
+<ul>
+<li><code>clock-panel</code> не навешивается (сплошная рамка/<code>overflow:hidden</code> ломают<br />
+  прозрачность и собственные клики). Зарегистрированы в <code>PANEL_IDS</code> +<br />
+<code>PANEL_CONFIG_DESKTOP/TABLET</code>, переключатели — в «Настройках».</li>
+<li>Обычный вид: почти невидимые (opacity 0.35, фон <code>rgb(255 255 255/9%)</code>,<br />
+  рамка <code>2px dashed rgb(255 215 0/10%)</code>) — зона видна, но не «шум ит».</li>
+<li>Edit-mode: зоны поверх панелей (<code>z-index: 150</code>, <code>display:block !important</code>),<br />
+  оранжевая dashed-рамка, drag (<code>initDrag</code>) + resize (<code>initResizeHandle</code>,<br />
+  8 ручек видны в edit-mode).</li>
+<li>Действия зон (reload/fullscreen) в edit-mode отключены (<code>index.js</code> +<br />
+<code>initDrag</code> гасит клик после перетаскивания).</li>
+<li><strong>Подавление клика после drag/resize — ТОЛЬКО для <code>browser_reload</code></strong><br />
+  (иначе после движения срабатывает <code>hardReload</code>): capture-слушатель <code>click</code><br />
+  на документе гасит событие, если <code>suppressClickTarget === panel</code>. Флаг<br />
+  ставится только при реальном движении (порог 3px, <code>moved</code> в<br />
+<code>onDragMove</code>/<code>onResizeMove</code>), простой клик не гасится.</li>
+</ul>
+<h2 id="5-patterny-shtrikhovki-canvaspattern">5. Паттерны штриховки (CanvasPattern)</h2>
+<h3 id="5-1-funktsii">5.1 Функции</h3>
+<ul>
+<li><code>hatchPattern(color, angleDeg, alpha)</code> — создаёт CanvasPattern с штриховкой.<br />
+  Ключ кеша: <code>color|angleDeg|alpha</code>. Тайл рисуется 1 раз, переиспользуется.<br />
+<code>invest_chart.js</code> (buildTgldDatasets).</li>
+<li><code>rgba(base, alpha)</code> — конвертирует hex <code>#rrggbb</code> → <code>rgba(r,g,b,alpha)</code>.<br />
+  Без конвертации hex возвращает цвет без alpha (баг). <code>invest_chart.js</code>.</li>
+<li><code>makeLayer(name, data, color, stack, axisId, dashed, angle, hatchAlpha)</code> —<br />
+  обёртка для стекового датасета с паттерном; <code>hatchAlpha</code> — прозрачность<br />
+  штриховки слоя (LQDT → 0.99). <code>invest_chart.js</code> (buildTgldDatasets).</li>
+</ul>
+<h3 id="5-2-parametry-patterna">5.2 Параметры паттерна</h3>
+<table>
+<thead>
+<tr>
+<th>Параметр</th>
+<th>Значение</th>
+<th>Формула / Примечание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>tileW × tileH</td>
+<td>23 × 23</td>
+<td><code>round(SPACING / sin(45°))</code> ≈ 22.6 → 23</td>
+</tr>
+<tr>
+<td>SPACING</td>
+<td>18</td>
+<td>Расстояние между линиями (px на экране)</td>
+</tr>
+<tr>
+<td>lineWidth</td>
+<td>1</td>
+<td>На экране 1px</td>
+</tr>
+<tr>
+<td>dpr</td>
+<td><code>devicePixelRatio / 4</code></td>
+<td>Баланс чёткости и производительности</td>
+</tr>
+<tr>
+<td>HATCH_ALPHA</td>
+<td>0.45</td>
+<td>Прозрачность линий штриховки (дефолт)</td>
+</tr>
+<tr>
+<td>LQDT alpha</td>
+<td>0.99</td>
+<td>Штриховка LQDT почти непрозрачная</td>
+</tr>
+<tr>
+<td>FILL_ALPHA</td>
+<td>0 (clearRect)</td>
+<td>Фон тайла — прозрачный</td>
+</tr>
+<tr>
+<td>cache key</td>
+<td><code>color\|angleDeg\|alpha</code></td>
+<td>Одно создание на сессию</td>
+</tr>
+</tbody>
+</table>
+<h3 id="5-3-ugly-naklona">5.3 Углы наклона</h3>
+<table>
+<thead>
+<tr>
+<th>Источник</th>
+<th>Угол</th>
+<th>Направление</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tinkoff</td>
+<td>-45°</td>
+<td>Сверху-слева вниз-вправо <code>\</code></td>
+</tr>
+<tr>
+<td>Finam</td>
+<td>45°</td>
+<td>Снизу-слева вверх-вправо <code>/</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="5-4-stek-poryadok-sloev">5.4 Стек: порядок слоёв</h3>
+<p>Layerdown-заливка стека: каждый слой заливается к <strong>нижестоящему</strong><br />
+(<code>fill: '-1'</code>), а не к origin — поэтому штриховка LQDT идёт от уровня TGLD,<br />
+а не от нуля. Нулевые участки (нет позиций) не штрихуются<br />
+(<code>spanGaps: false</code> + доля 0, а не null).</p>
+<table>
+<thead>
+<tr>
+<th>Слой</th>
+<th>Заливка</th>
+<th>Цвет</th>
+<th>Примечание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TGLD (низ)</td>
+<td>сплошная, <code>fill: origin</code></td>
+<td>T: <code>#2cba99</code> @ 30% · Ф: <code>#4a7bd8</code> @ 12%</td>
+<td>без паттерна, дно стека</td>
+</tr>
+<tr>
+<td>TMON</td>
+<td>штриховка <code>fill: '-1'</code></td>
+<td>оранжевый <code>rgba(255,120,0)</code>, alpha 0.45</td>
+<td>от уровня TGLD</td>
+</tr>
+<tr>
+<td>LQDT (верх)</td>
+<td>штриховка <code>fill: '-1'</code>, alpha 0.99</td>
+<td>розовый <code>rgba(220,100,140)</code></td>
+<td>от уровня TGLD+TMON</td>
+</tr>
+</tbody>
+</table>
+<p>Контуры стека: <code>borderWidth: 0.5</code>, <code>borderColor: rgba(color, 0.5)</code>, сплошные.<br />
+Финам TGLD контур — тот же синий <code>#4a7bd8</code> (alpha 0.9).</p>
+<h3 id="5-5-legenda-3-stolbtsa">5.5 Легенда: 3 столбца</h3>
+<table>
+<thead>
+<tr>
+<th>Столбец 1 (Финам)</th>
+<th>Столбец 2 (Тинвест)</th>
+<th>Столбец 3 (Тикеры/прочее)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ф:LQDT, Ф:TMON, Ф:TGLD, Ф:₽, Ф:%</td>
+<td>T:LQDT, T:TMON, T:TGLD, T:₽, T:%</td>
+<td>XAU, TGLD@, 100%</td>
+</tr>
+</tbody>
+</table>
+<p>Группировка: <code>Ф:</code> / <code>Finam*</code> → столбец 0; <code>Т:</code> / <code>Tinkoff*</code> → столбец 1;<br />
+остальное → столбец 2.</p>
+<p>Collapse/expand: cookie <code>wclock_invest_legend_collapsed</code>.</p>
+<h3 id="5-6-bystryy-deploy-podbor-parametrov">5.6 Быстрый деплой (подбор параметров)</h3>
+<div class="codehilite"><pre><span></span><code>bash<span class="w"> </span>sh/deploy_js.sh<span class="w"> </span><span class="o">[</span>file<span class="o">]</span>
+</code></pre></div>
+
+<p>Деплоит JS/CSS файл на VPS с проверкой MD5. По умолчанию — <code>invest_chart.js</code>.</p>
+<h3 id="5-7-primenenie-v-drugikh-proektakh">5.7 Применение в других проектах</h3>
+<p>Для воспроизведения штриховки достаточно промпта + таблицы §5.2.<br />
+Полный код: <code>invest_chart.js</code> → <code>hatchPattern</code>, <code>makeLayer</code>, <code>buildTgldDatasets</code>.</p>
+<h3 id="5-8-legenda-drag-drop-touch-cookie">5.8 Легенда: drag&amp;drop, touch, cookie</h3>
+<p><strong>Архитектура.</strong> Кастомный плагин <code>inlineLegendPlugin</code> (не встроенный<br />
+<code>legend</code> Chart.js). Рисуется на canvas после тултипа.</p>
+<p><strong>Стиль:</strong><br />
+- 3 столбца: Финам | Тинвест | Тикеры/прочее<br />
+- Шрифт: 12px bold, auto-resize (уменьшается если не влезает)<br />
+- Swatch: 12×2px, gap между строками 12px, между столбцами 32px<br />
+- Фон: <code>rgba(18,20,24,0.78)</code>, кнопка collapse <code>◀</code>/<code>▶</code></p>
+<p><strong>Touch-интеракция (планшет):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Параметр</th>
+<th>Значение</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>drag threshold</td>
+<td>5px</td>
+<td>Минимальное смещение для начала drag</td>
+</tr>
+<tr>
+<td>hit area</td>
+<td><code>_legendRect</code></td>
+<td>Жесто-зона для захвата</td>
+</tr>
+<tr>
+<td>collapse button</td>
+<td>20×20px</td>
+<td>Достаточно для пальца</td>
+</tr>
+</tbody>
+</table>
+<p>Порог 5px разделяет click (переключение серии) и drag (перемещение).<br />
+Это критично для планшета: случайный жест не переключит серию.</p>
+<p><strong>Cookie:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Cookie</th>
+<th>TTL</th>
+<th>Содержимое</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wclock_invest_legend_pos</code></td>
+<td>1 год</td>
+<td><code>{x, y}</code> — позиция</td>
+</tr>
+<tr>
+<td><code>wclock_invest_legend_collapsed</code></td>
+<td>1 год</td>
+<td><code>0/1</code> — свёрнута/развёрнута</td>
+</tr>
+<tr>
+<td><code>wclock_invest_legend</code></td>
+<td>1 год</td>
+<td><code>{label: hidden}</code> — видимость серий</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Клампинг позиции:</strong><br />
+<code>pos.x = clamp(0, chart.width - totalW)</code>, аналогично по Y.<br />
+Легенда не выходит за границы canvas.</p>
+<p><strong>Подавление клика после drag:</strong><br />
+После перетаскивания (<code>_legendDragMoved = true</code>) клик игнорируется<br />
+до следующего <code>pointerdown</code>. Предотвращает случайное переключение<br />
+при отпускании пальца.</p>
+<p><strong>Группировка столбцов:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Столбец</th>
+<th>Префикс метки</th>
+<th>Примеры</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0 (Финам)</td>
+<td><code>Ф:</code>, <code>Finam*</code></td>
+<td>Ф:LQDT, Finam, ₽</td>
+</tr>
+<tr>
+<td>1 (Тинвест)</td>
+<td><code>Т:</code>, <code>Tinkoff*</code></td>
+<td>T:TGLD, Tinkoff, %</td>
+</tr>
+<tr>
+<td>2 (Тикеры)</td>
+<td>остальное</td>
+<td>XAU, TGLD@, 100%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Референсы:</strong><br />
+- <code>inlineLegendPlugin</code> → <code>invest_chart.js:~1370</code><br />
+- <code>toggleLegendDataset</code> → <code>invest_chart.js:~1565</code><br />
+- <code>attachLegendDrag</code> → <code>invest_chart.js:~1612</code></p>
+<h2 id="6-kontentnyy-skeyling-paneley-cqi">6. Контентный скейлинг панелей (cqi)</h2>
+<p>Вместо <code>transform:scale</code> хака — чистый CSS через container query units (<code>cqi</code>).</p>
+<p><strong>Паттерн</strong> (эталон: <code>#seconds_panel</code>, <code>#sun_panel</code>, <code>#date_panel</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="p">.</span><span class="nc">panel</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">container-type</span><span class="p">:</span><span class="w"> </span><span class="kc">inline</span><span class="o">-</span><span class="n">size</span><span class="p">;</span>
+<span class="w">    </span><span class="k">container-name</span><span class="p">:</span><span class="w"> </span><span class="n">self</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="p">.</span><span class="nc">child-element</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">font-size</span><span class="p">:</span><span class="w"> </span><span class="n">Ncqi</span><span class="p">;</span><span class="w">         </span><span class="c">/* относительно контейнера */</span>
+<span class="w">    </span><span class="k">line-height</span><span class="p">:</span><span class="w"> </span><span class="n">L</span><span class="p">;</span><span class="w">          </span><span class="c">/* нормализованная высота строки */</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><strong>Текущие панели (cqi):</strong></p>
+<table>
+<thead>
+<tr>
+<th>Панель</th>
+<th>Элементы</th>
+<th>Значения</th>
+<th>Статус</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#seconds_panel</code></td>
+<td><code>#seconds</code></td>
+<td><code>85cqi</code> → <code>55cqi</code> (настр.)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td><code>#sun_panel</code></td>
+<td><code>#sun</code> flex 100%, <code>#sunrise/#daylight/#sunset</code></td>
+<td><code>10cqi</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td><code>#date_panel</code></td>
+<td><code>#day</code>, <code>#month</code>, <code>#weekday</code></td>
+<td><code>60/25/32cqi</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td><code>#invest_banner_capital</code></td>
+<td><code>.banner-capital-line</code>, <code>.banner-turnover-block</code></td>
+<td><code>13cqi</code> / <code>4.0cqi</code> (настр.)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td><code>#invest_banner_table</code></td>
+<td><code>[class*="banner-td-"]</code></td>
+<td><code>2.7cqi</code> (настр.)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td><code>#invest_banner_total</code></td>
+<td><code>.banner-total-only</code></td>
+<td><code>12.5cqi</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Баннерные панели — контейнеры</strong> (<code>container-type: inline-size</code> на<br />
+<code>#invest_banner_capital/_table/_total</code>): строки капитала/оборота, бары активов<br />
+и таблица масштабируются по ширине панели. Фон/структура — px (<code>.asset-bar</code>).</p>
+<p><strong>Остальные</strong> (clock_panel, moon_panel, wind_cond_precip_panel, press_humidity_temp_panel)<br />
+пока в <code>PANEL_CONTENT_SELECTORS</code> / <code>PANEL_BASE_SIZES</code> — поэтапно перевести.</p>
+<p><strong>Правила:</strong><br />
+- Убрать панель из <code>PANEL_CONTENT_SELECTORS</code> и <code>PANEL_BASE_SIZES</code> (<code>panel_resize.js</code>)<br />
+  после перевода на cqi.<br />
+- Проверять паттерн через ресайз в браузере (drag за угол в edit-mode).<br />
+- После деплоя — MD5-проверка CSS.</p>
+<h2 id="7-invest-panel-zhivoy-konets-avto-refresh-dannye-svezhesti">7. Инвест-панель: живой конец, авто-refresh, данные свежести</h2>
+<h3 id="7-1-zhivoy-konets-diapazona">7.1 Живой конец диапазона</h3>
+<p>Тумблер «По: сейчас» в модалке period-range-modal (<code>control_panel.js</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Значение <code>end</code></th>
+<th>Поведение</th>
+<th>Серверный URL</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>'live'</code></td>
+<td>График заканчивается на текущем времени</td>
+<td><code>end_ts=live</code> (→ <code>_int_or_none</code> → None → без верхней границы)</td>
+</tr>
+<tr>
+<td>timestamp</td>
+<td>Фиксированная верхняя граница</td>
+<td><code>end_ts=&lt;timestamp&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>Фикс: при снятии чекбокса поле «по» разблокируется и подставляется <code>Date.now()</code>.</p>
+<h3 id="7-2-avto-refresh-gibrid">7.2 Авто-refresh (гибрид)</h3>
+<p>Таймер обновления графика при живом конце (<code>invest_chart.js</code> → <code>control_panel.js</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Компонент</th>
+<th>Поведение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>График investChart</td>
+<td>Обновляется <strong>только при <code>end='live'</code></strong></td>
+</tr>
+<tr>
+<td>InvestBanners</td>
+<td>Обновляются <strong>всегда</strong> (<code>window.InvestBanner.update()</code>)</td>
+</tr>
+<tr>
+<td>Интервал</td>
+<td>Настраиваемый (30/60/120с) через select в period-range-modal</td>
+</tr>
+<tr>
+<td>Настройка</td>
+<td><code>invest_autorefresh</code> (cookie)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="7-3-indikator-svezhesti-dannykh">7.3 Индикатор свежести данных</h3>
+<p>Код: <code>showDataFreshness()</code> → <code>invest_freshness</code> div в invest_panel (<code>invest_chart.js:~2005</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Интервал</th>
+<th>Порог <code>maxAgeMin</code></th>
+<th>Цвет при превышении</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>minute</code></td>
+<td>3 мин</td>
+<td><code>#f44336</code> (красный)</td>
+</tr>
+<tr>
+<td><code>hour</code></td>
+<td>10 мин</td>
+<td><code>#f44336</code></td>
+</tr>
+<tr>
+<td><code>day</code></td>
+<td>120 мин</td>
+<td><code>#f44336</code></td>
+</tr>
+</tbody>
+</table>
+<p>Формат: <code>⚠ HH:MM (N мин)</code> — красный, жирный. Если свежий — <code>✓ HH:MM</code> — серый.</p>
+<h2 id="8-minutnye-svechi-sloy-portfolio-min">8. Минутные свечи: слой portfolio_min</h2>
+<p><strong>Таблица</strong> <code>portfolio_min</code> — 1-минутные OHLCV-свечи, детальный анализ за 30 дней.</p>
+<table>
+<thead>
+<tr>
+<th>Константа</th>
+<th>Значение</th>
+<th>Назначение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RETENTION_RAW_DAYS</code></td>
+<td>1</td>
+<td>Хранение сырых 10с снапшотов</td>
+</tr>
+<tr>
+<td><code>RETENTION_MIN_DAYS</code></td>
+<td>30</td>
+<td>Хранение минутных свечей</td>
+</tr>
+<tr>
+<td><code>RETENTION_CANDLE_DAYS</code></td>
+<td>120</td>
+<td>Хранение часовых свечей</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Схема <code>portfolio_min</code>:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="k">CREATE</span><span class="w"> </span><span class="k">TABLE</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">portfolio_min</span><span class="w"> </span><span class="p">(</span>
+<span class="w">    </span><span class="k">timestamp</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span><span class="w"> </span><span class="n">ts_epoch</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span><span class="w"> </span><span class="k">source</span><span class="w"> </span><span class="nb">TEXT</span><span class="p">,</span>
+<span class="w">    </span><span class="k">open</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="n">high</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="n">low</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="k">close</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="n">volume</span><span class="w"> </span><span class="nb">INTEGER</span><span class="p">,</span>
+<span class="w">    </span><span class="n">tgld_value</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="n">tgld_total</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="n">tmon_value</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span><span class="w"> </span><span class="n">lqdt_value</span><span class="w"> </span><span class="nb">REAL</span><span class="p">,</span>
+<span class="w">    </span><span class="k">UNIQUE</span><span class="p">(</span><span class="n">ts_epoch</span><span class="p">,</span><span class="w"> </span><span class="k">source</span><span class="p">)</span>
+<span class="p">);</span>
+<span class="k">CREATE</span><span class="w"> </span><span class="k">INDEX</span><span class="w"> </span><span class="k">IF</span><span class="w"> </span><span class="k">NOT</span><span class="w"> </span><span class="k">EXISTS</span><span class="w"> </span><span class="n">idx_portfolio_min_epoch_source</span>
+<span class="w">    </span><span class="k">ON</span><span class="w"> </span><span class="n">portfolio_min</span><span class="p">(</span><span class="n">ts_epoch</span><span class="p">,</span><span class="w"> </span><span class="k">source</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>apply_retention() — двухступенчатый:</strong></p>
+<ol>
+<li><strong>Шаг 1: raw → min</strong> — сырые 10с снапшоты → 1-мин свечи (OHLCV).</li>
+<li>Бакет: <code>ts_epoch // 60 * 60</code> (aligned to minute).</li>
+<li>
+<p>INSERT ON CONFLICT DO UPDATE: max(high), min(low), close=excluded, volume+=excluded.</p>
+</li>
+<li>
+<p><strong>Шаг 2: min → hourly</strong> — минутные свечи старше 30 дней → часовые.</p>
+</li>
+<li>Бакет: <code>ts_epoch // 3600 * 3600</code>.</li>
+<li>
+<p>Аналогичный UPSERT.</p>
+</li>
+<li>
+<p><strong>Чистка</strong>: DELETE raw (старше raw_cutoff), min (старше min_cutoff), hourly (старше candle_cutoff).</p>
+</li>
+</ol>
+<p><strong>read_history() — приоритет raw &gt; min &gt; hourly:</strong></p>
+<ul>
+<li>Читает <code>portfolio_positions</code> (raw), <code>portfolio_min</code>, <code>portfolio_hourly</code>.</li>
+<li>Слияние по ключу <code>(ts_epoch, source)</code>: raw перекрывает min, min перекрывает hourly.</li>
+<li>Все три таблицы участвуют в fallback (<code>if not raw_rows and not candles and not min_candles</code>).</li>
+</ul>
+<p><strong>Backfill не нужен</strong> — 1-мин свечи копятся только с момента деплоя (старые данные не восстановить).</p>
+<h2 id="9-chart-js-defensive-update-pattern">9. Chart.js: defensive update pattern</h2>
+<p>При in-place обновлении графика (модификация <code>investChart.data.datasets</code>) <strong>обязательно</strong><br />
+вызывать <code>investChart.update('none')</code> после всех изменений.</p>
+<p><strong>Причина:</strong> без <code>update()</code> Chart.js не пересчитывает оси (scales). При mouse event<br />
+tooltip обращается к несуществующей оси → <code>TypeError: Cannot read properties of null
+(reading 'getLabelAndValue')</code>.</p>
+<p><strong>Паттерн</strong> (<code>invest_chart.js:~1440</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="c1">// Обновление датасетов in-place</span>
+<span class="nx">investChart</span><span class="p">.</span><span class="nx">data</span><span class="p">.</span><span class="nx">datasets</span><span class="p">[</span><span class="mf">0</span><span class="p">].</span><span class="nx">data</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">newData</span><span class="p">;</span>
+<span class="c1">// ... push/pop datasets ...</span>
+
+<span class="c1">// Обязательно!</span>
+<span class="nx">investChart</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="s1">&#39;none&#39;</span><span class="p">);</span>
+</code></pre></div>
+
+<p><strong>Дополнительно:</strong> defensive <code>try/catch</code> в tooltip callbacks для защиты от race conditions.</p>
+<h2 id="10-nastroyki-sbora-cherez-api-tinkoff-finam">10. Настройки сбора через API (Tinkoff / Finam)</h2>
+<p>Серверное отключение сбора данных отдельно по брокерам, применяется демонами<br />
+<strong>без рестарта</strong> (читают каждый цикл).</p>
+<p><strong>Ключи</strong> (таблица <code>settings</code> инвест-БД <code>invest_portfolio.db</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Ключ</th>
+<th>Брокер</th>
+<th>False</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>invest_collection_tinkoff_enabled</code></td>
+<td>Tinkoff</td>
+<td><code>'0'</code></td>
+<td><code>'1'</code> (нет записи = включено)</td>
+</tr>
+<tr>
+<td><code>invest_collection_finam_enabled</code></td>
+<td>Finam</td>
+<td><code>'0'</code></td>
+<td><code>'1'</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Маршрутизация:</strong> эти ключи НЕ хранятся в <code>user_settings</code> БД как обычные<br />
+настройки — <code>app.py</code> (<code>_get/_write_invest_collection_settings</code>) направляет их<br />
+в инвест-БД <code>settings</code> через <code>/api/user_settings/&lt;device_id&gt;</code> (GET/POST).<br />
+Проверено: POST <code>invest_collection_finam_enabled=0</code> → флаг в инвест-БД <code>0</code>,<br />
+GET возвращает из инвест-БД.</p>
+<p><strong>Демоны</strong> (<code>parsers/invest/tinkoff_invest_daemon.py</code>,<br />
+<code>finam_invest_daemon.py</code>): при ключе <code>'0'</code> — печать <code>⏸️ Сбор данных через …
+отключён — цикл пропущен</code> и пропуск тела цикла (fetch/save/retention/trades).<br />
+<code>get_setting_value(key, default)</code> / <code>finam_collection_enabled()</code> (try/except).</p>
+<p><strong>Фронтенд:</strong> переключатели в табе «Настройки» единой модалки (<code>lib.js</code><br />
+<code>makeCollectionRow</code>); состояние в cookie <code>getSetting(key,'1')</code>, на сервер —<br />
+<code>saveSettingsToServer</code>. При выключенном сборе источник скрыт в баннере<br />
+(<code>presentSources</code> фильтр по <code>COLLECTION_KEY</code>).</p>
+<h2 id="11-demony-dannykh-pravki-na-servere-tg-turnover-i-dr">11. Демоны данных: правки на сервере (tg_turnover и др.)</h2>
+<p>Демоны (<code>parsers/telegram/tg_turnover_daemon.py</code> и др.) крутятся в systemd<br />
+<strong>на хосте</strong>, не в docker-контейнере wclock5-app. Правила:</p>
+<ol>
+<li><strong>Деплой демона</strong> — <code>scp</code> напрямую<br />
+<code>root@217.114.8.5:/var/www/wclock5.startupassist.ru/parsers/.../</code> →<br />
+<code>systemctl restart &lt;service&gt;</code>; проверка статуса через <code>journalctl -u &lt;svc&gt;</code>.</li>
+<li><strong>Новый пост не должен перезатираться старым.</strong> <code>iter_messages(limit=N)</code><br />
+   возвращает посты от новых к старым; при записи итога дня в<br />
+<code>strategy_summary</code> (day, source) — обновлять строку, только если<br />
+<code>msg_ts</code> нового сообщения <strong>новее</strong> <code>ts_epoch</code> существующей записи<br />
+   (иначе устаревший внутридневной пост перезапишет свежий).</li>
+<li><strong>Рабочая БД = <code>parsers/invest/invest_portfolio.db</code></strong> (bind-mount на хосте<br />
+   → в контейнере <code>/app/parsers/invest/invest_portfolio.db</code>, это один файл).<br />
+   Проверка данных: <code>docker exec wclock5-app python3 -c "…"</code>.</li>
+</ol>
+<h2 id="list-izmeneniy">Лист изменений</h2>
+<p>Версии <code>X.Y</code>. Новые записи — сверху.</p>
+<ul>
+<li><strong>0.7</strong> · 2026-09-16 — §11 демоны данных: деплой демонов на хосте через<br />
+  scp+systemctl (не docker); правило «новый пост не перезатирается старым»<br />
+  в strategy_summary (проверка msg_ts &gt; ts_epoch перед UPDATE); рабочая БД<br />
+<code>parsers/invest/invest_portfolio.db</code> — bind-mount хоста в контейнер.</li>
+<li><strong>0.6</strong> · 2026-09-09 — §4 панели: настройки в 2 div-столбца (grid,<br />
+  построчное заполнение первой/второй половиной); browser-зоны<br />
+  (<code>#browser_fullscreen</code>/<code>#browser_reload</code>) как отдельная подтема — вид,<br />
+  edit-mode (drag/resize, рамка), подавление клика после перетаскивания<br />
+  только для reload (порог 3px).</li>
+<li><strong>0.5</strong> · 2026-09-08 — §0 промпт-рецепт: после завершения любой задачи<br />
+  выводить самый короткий промпт для её воспроизведения; §0.1 — по <code>&gt; N</code><br />
+  выводить список последних N решённых задач (по одной строке <code>&gt; …</code>);<br />
+  §0.2 — фиксировать статус задачи в беклоге и записывать в неё самый<br />
+  оптимальный промпт.</li>
+<li><strong>0.5</strong> · 2026-09-03 — §5 штриховка стека: <code>fill: '-1'</code> (к нижестоящему<br />
+  слою, не к origin), HATCH_ALPHA 0.45, LQDT alpha 0.99, TGLD сплошная<br />
+  (T 30%, Ф #4a7bd8 12%), датасеты tmon/lqdt — 0 при нулевых долях<br />
+  (не null); <code>hatchPattern</code>/<code>makeLayer</code> принимают alpha; кеш-ключ alpha.</li>
+<li><strong>0.4</strong> · 2026-09-03 — §4 панели: отдельные панели инвест-баннера<br />
+  (Капитал/Таблица/Итого), единая модалка Отчётов (табы, <code>☰</code>); §6 cqi —<br />
+  баннерные панели-контейнеры; §10 настройки сбора через API<br />
+  (<code>invest_collection_*</code>, читаются демонами без рестарта).</li>
+<li><strong>0.3</strong> · 2026-08-31 — §6 cqi-скейлинг панелей, §7 инвест-панель (живой конец,<br />
+  авто-refresh, свежесть данных), §8 минутные свечи (portfolio_min, 30 дней),<br />
+  §9 Chart.js defensive update pattern.</li>
+<li><strong>0.2</strong> · 2026-08-25 — §5 паттерны штриховки: CanvasPattern (hatchPattern,<br />
+  rgba hex-конвертация, кеш), параметры тайла (23×23, SPACING 18, dpr/4),<br />
+  углы 45°/-45°, порядок стека (LQDT→TMON→TGLD), легенда 3 столбца,<br />
+  быстрый деплой (deploy_js.sh), §5.8 легенда drag&amp;drop/touch/cookie.</li>
+<li><strong>0.1</strong> · 2026-08-22 — первичная версия: деплой (порт 10405, surl),<br />
+  инвест-данные (ts_epoch, mediation, оборот=стратегия, тарифы комиссий),<br />
+  графики (getPixelForValue vs тики, DPI-слушатели), панели (конфиги,<br />
+  куки-позиции, drag&amp;drop).</li>
+</ul></div>
+
+  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+</div>
+
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs a'));
+  var h2s = Array.prototype.slice.call(document.querySelectorAll('h2[id]'));
+  function setActive(id) {
+    tabs.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+    });
+  }
+  if ('IntersectionObserver' in window && h2s.length) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          setActive(e.target.id);
+          if (location.hash !== '#' + e.target.id) {
+            history.replaceState(null, '', '#' + e.target.id);
+          }
+        }
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    h2s.forEach(function (h) { obs.observe(h); });
+  }
+  tabs.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var t = document.getElementById(id);
+      if (!t) { return; }
+      e.preventDefault();
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActive(id);
+      history.pushState(null, '', '#' + id);
+    });
+  });
+})();
+</script>
+
+
+<script>
+(function () {
+  function initToc() {
+    function setTocIcon(t, open) {
+      t.textContent = open ? '−' : '+';
+    }
+    var toggles = document.querySelectorAll('#toc .toc-toggle');
+    Array.prototype.forEach.call(toggles, function (t) {
+      t.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var target = t.getAttribute('data-target');
+        var ac = document.getElementById('toc-ac-' + target);
+        var open = t.classList.toggle('open');
+        if (ac) ac.classList.toggle('open', open);
+        setTocIcon(t, open);
+        t.title = open ? 'Свернуть' : 'Развернуть';
+      });
+    });
+    // Расширить путь до текущего якоря
+    function reveal(id) {
+      if (!id) return;
+      var parent = document.querySelector('#toc li[data-parent="' + id + '"]');
+      while (parent) {
+        var pid = parent.getAttribute('data-parent');
+        var ac = document.getElementById('toc-ac-' + pid);
+        var tg = parent.querySelector('.toc-toggle');
+        if (ac && !ac.classList.contains('open')) ac.classList.add('open');
+        if (tg && !tg.classList.contains('open')) { tg.classList.add('open'); setTocIcon(tg, true); }
+        parent = parent.parentElement && parent.parentElement.closest('li.toc-parent');
+      }
+    }
+    function active(id) {
+      document.querySelectorAll('#toc a.toc-active').forEach(function (a) {
+        a.classList.remove('toc-active');
+      });
+      var a = document.querySelector('#toc a[href="#' + id + '"]');
+      if (a) { a.classList.add('toc-active'); reveal(id); }
+    }
+    reveal(location.hash && location.hash.slice(1));
+    // Обратная совместимость: кириллические якоря (старые ссылки #пример-2-…)
+    // — транслитерировать и перейти к найденному латинскому id. Таблица
+    // инжектится из Python-словаря TRANSLIT (см. TRANSLIT_JSON), чтобы
+    // транслитерация совпадала с slugify_latin на 100%.
+    var TRANSLIT_MAP = JSON.parse('{"\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g", "\u0434": "d", "\u0435": "e", "\u0451": "e", "\u0436": "zh", "\u0437": "z", "\u0438": "i", "\u0439": "y", "\u043a": "k", "\u043b": "l", "\u043c": "m", "\u043d": "n", "\u043e": "o", "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t", "\u0443": "u", "\u0444": "f", "\u0445": "kh", "\u0446": "ts", "\u0447": "ch", "\u0448": "sh", "\u0449": "sch", "\u044a": "", "\u044b": "y", "\u044c": "", "\u044d": "e", "\u044e": "yu", "\u044f": "ya"}');
+    function translitToSlug(s) {
+      s = s.toLowerCase().trim();
+      var out = [];
+      for (var i = 0; i < s.length; i++) {
+        var ch = s[i];
+        if (TRANSLIT_MAP.hasOwnProperty(ch)) out.push(TRANSLIT_MAP[ch]);
+        else if (/[a-z0-9]/.test(ch)) out.push(ch);
+        else out.push('-');
+      }
+      return out.join('').replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
+    }
+    function resolveCyrillicHash() {
+      var h = (location.hash || '').slice(1);
+      if (!h) return;
+      var el = document.getElementById(h);
+      if (el) return;
+      var slug = translitToSlug(h);
+      var target = document.getElementById(slug) ||
+                   document.getElementById(document.querySelector('[href="#' + slug + '"]') && slug);
+      if (!target) {
+        // фрагмент может быть префиксом id (пропущен суффикс, напр. (Explore))
+        var alnum = slug.replace(/[^a-z0-9]/g, '');
+        if (alnum.length >= 12) {
+          var all = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id]');
+          var found = null;
+          Array.prototype.forEach.call(all, function (el) {
+            if (!found && el.id.replace(/[^a-z0-9]/g, '').indexOf(alnum) === 0) found = el;
+          });
+          if (!found) {
+            Array.prototype.forEach.call(all, function (el) {
+              if (!found && el.id.replace(/[^a-z0-9]/g, '') === alnum) found = el;
+            });
+          }
+          target = found;
+        }
+      }
+      if (target && target.scrollIntoView) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.replaceState(null, '', '#' + target.id);
+      }
+    }
+    if (document.readyState === 'loading') {
+      resolveCyrillicHash(); // hash уже в URL при загрузке
+    } else {
+      resolveCyrillicHash();
+    }
+    window.addEventListener('hashchange', resolveCyrillicHash);
+    if ('IntersectionObserver' in window) {
+      var obs = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) active(e.target.id);
+        });
+      }, { rootMargin: '-10% 0px -80% 0px' });
+      document.querySelectorAll('h2[id], h3[id], h4[id]').forEach(function (h) {
+        obs.observe(h);
+      });
+    }
+    window.addEventListener('hashchange', function () {
+      reveal(location.hash && location.hash.slice(1));
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initToc);
+  } else {
+    initToc();
+  }
+})();
+</script>
+
+<script>
+function dlFileName() {
+  var el = document.querySelector('.dl');
+  if (el && el.getAttribute('data-dl')) return el.getAttribute('data-dl');
+  return 'conventions';
+}
+function downloadPdf() { window.print(); }
+function downloadDoc() {
+  var content = document.getElementById('content').innerHTML;
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Конвенции WClock5</title></head><body>' + content + '</body></html>';
+  var blob = new Blob(['﻿', html], { type: 'application/msword' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = dlFileName() + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+</script>
+</body>
+</html>

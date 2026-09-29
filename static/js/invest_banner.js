@@ -237,7 +237,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         if (sTs) rangeQs = '&start_ts=' + encodeURIComponent(sTs) + (eTs ? ('&end_ts=' + encodeURIComponent(eTs)) : '');
         $.getJSON('/api/invest/tickers?period=' + encodeURIComponent(apiPeriod) + rangeQs)
             .done(function(data) {
-                if (data && !data.error && Object.keys(data).length > 0) {
+                if (data && !(data.error || data._error) && Object.keys(data).length > 0) {
                     tickersData = data;
                     lastTickersData = data;
                     console.log('[InvestBanner] Tickers loaded:', Object.keys(data));
@@ -273,10 +273,23 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }[period] || 'hour';
     }
 
-    // Параметры секции invest.history — совпадают с окном самого баннера.
+    // Интервал секции invest.history должен СОВПАДАТЬ с интервалом чарта
+    // (window.currentInterval). Иначе каскад медиатора и кэш чарта расходятся
+    // по ключу (баннер: historyIntervalFor('-6 hour')='fivemin', график: «twentymin»),
+    // и чарт вместо «дёшево из _med» идёт тяжёлым GET с after_ts поверх шины.
+    function currentHistoryInterval() {
+        const ci = window.currentInterval;
+        if (ci && { minute: 1, fivemin: 1, twentymin: 1, hour: 1, sixhour: 1, day: 1 }[ci]) return ci;
+        return historyIntervalFor(getSetting('invest_panel_period', '-35 day'));
+    }
+
+    // Параметры секции invest.history = ровно те, с которыми чарт читает кэш
+    // (currentInterval + apiPeriod + диапазон) — одна секция, один ключ, без
+    // дублирующих GET-дельт каждые 10с.
     function mediatorHistoryParams() {
         const period = getSetting('invest_panel_period', '-35 day');
-        const params = { interval: historyIntervalFor(period), period: period };
+        const apiPeriod = period === '-1 day' ? '-1.5 day' : period;
+        const params = { interval: currentHistoryInterval(), period: apiPeriod };
         const sTs = getSetting('invest_panel_start_ts', null);
         const eTs = getSetting('invest_panel_end_ts', null);
         if (sTs) params.start_ts = sTs;
@@ -297,12 +310,50 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     function onMediatorTickers(payload) {
         if (!payload || typeof payload !== 'object') return;
-        tickersData = payload;
-        if (payload && Object.keys(payload).length > 0) lastTickersData = payload;
-        if (typeof window.__investTickerCache === 'undefined') window.__investTickerCache = {};
-        window.__investTickerCache.data = payload;
-        window.__investTickerCache.at = Date.now();
+        // Пустой payload (напр. до конца TTL серверного кэша) НЕ затирает тикеры —
+        // иначе таблица активов схлопывается до одной строки портфеля. Payload
+        // с _error тоже не принимается (секция могла вернуть {"_error": ...}).
+        if (Object.keys(payload).length > 0 && !payload._error) {
+            tickersData = payload;
+            lastTickersData = payload;
+            if (typeof window.__investTickerCache === 'undefined') window.__investTickerCache = {};
+            window.__investTickerCache.data = payload;
+            window.__investTickerCache.at = Date.now();
+        }
         maybeRenderFromMediator();
+    }
+
+    // Объединение хвоста медиатора в СОБСТВЕННОЕ полное состояние баннера.
+    // Не зависит от InvestHistoryCache: кэш живёт своей жизнью для чарта и может
+    // не иметь ключа баннера (evict/смена currentInterval) — тогда applyMediatorTail
+    // возвращает null и баннер застревал на полном payload момента загрузки.
+    function mergeMediatorTail(tail) {
+        const interval = currentHistoryInterval();
+        const msMap = { minute: 60000, fivemin: 300000, twentymin: 1200000, hour: 3600000, sixhour: 21600000, day: 86400000 };
+        const ms = msMap[interval] || 3600000;
+        if (!mediatorHistory || Object.keys(mediatorHistory).length === 0) return tail;
+        const out = {};
+        for (const k in mediatorHistory) {
+            if (k.charAt(0) === '_') continue;
+            out[k] = mediatorHistory[k];
+        }
+        for (const dk in tail) {
+            if (dk.charAt(0) === '_') continue;
+            const dEpoch = Date.parse(dk) / 1000;
+            if (isNaN(dEpoch)) continue;
+            const dB = Math.floor((dEpoch * 1000) / ms) * ms;
+            for (const ek in out) {
+                const eEpoch = Date.parse(ek) / 1000;
+                if (!isNaN(eEpoch) && Math.floor((eEpoch * 1000) / ms) * ms === dB && eEpoch < dEpoch) {
+                    delete out[ek];
+                }
+            }
+            out[dk] = tail[dk];
+        }
+        if (tail._prev) out._prev = tail._prev;
+        else if (mediatorHistory._prev) out._prev = mediatorHistory._prev;
+        if (tail._latest_epoch != null) out._latest_epoch = tail._latest_epoch;
+        return out;
     }
 
     function onMediatorTurnover(payload) {
@@ -319,30 +370,25 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     }
 
     function onMediatorHistory(payload) {
-        if (!payload || typeof payload !== 'object') return;
+        if (!payload || typeof payload !== 'object' || payload._error) return;
         if (payload._latest_epoch != null) lastDataEpoch = Number(payload._latest_epoch);
         const cache = window.InvestHistoryCache;
         const p = mediatorHistoryParams();
-        if (payload._tail && cache && cache.applyMediatorTail) {
-            // Хвост (дельта) медиатора: мёрджим в полный кэш, чтобы рендер
-            // видел целую историю (в changed уходит только последний бакет).
-            const merged = cache.applyMediatorTail(p.interval, p.period, p.start_ts, p.end_ts, payload);
-            if (merged) {
-                mediatorHistory = merged;
-                mediatorHistoryAt = Date.now();
-                maybeRenderFromMediator();
-                return;
+        if (payload._tail) {
+            // Хвост (дельта) медиатора: мёрджим в СВОЁ полное состояние,
+            // не завися от кэша чарта (там ключ баннера может отсутствовать) —
+            // баннер живо обновляется и не застревает на полном payload загрузки.
+            mediatorHistory = mergeMediatorTail(payload);
+            mediatorHistoryAt = Date.now();
+            if (cache && cache.applyMediatorTail) {
+                // Дополнительно подкармливаем кэш/чарт из того же хвоста; если
+                // полного кэша ещё нет — создаём его из нашего полного состояния.
+                const merged = cache.applyMediatorTail(p.interval, p.period, p.start_ts, p.end_ts, payload);
+                if (!merged && cache.primeFromMediator && mediatorHistory) {
+                    cache.primeFromMediator(p.interval, p.period, p.start_ts, p.end_ts, mediatorHistory);
+                }
             }
-            // Редкий edge: хвост пришёл, а полного кэша нет — берём полный через GET.
-            cache.get(p.interval, p.period, p.start_ts, p.end_ts)
-                .then(function(d) {
-                    mediatorHistory = d;
-                    mediatorHistoryAt = Date.now();
-                    maybeRenderFromMediator();
-                })
-                .catch(function() {
-                    mediatorHistoryAt = Date.now();
-                });
+            maybeRenderFromMediator();
             return;
         }
         mediatorHistory = payload;
@@ -354,12 +400,68 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     }
 
     // Рендер из актуальных данных медиатора (статические колонки — refHistory 10 мин).
+    let _awaitingTickers = false;
+
+    // Живой источник для баннера: если медиаторное окно покрывает исонствующую
+    // глубину (>= 7 дней) — используем ТОЛЬКО его (живые бакеты, иначе капитал/
+    // таблица отстают от графика на TTL статичного refHistory). Для коротких окон
+    // (минуты/часы) докладываем старые бакеты refHistory — day/week бейзлайны.
+    function isWideWindow() {
+        const p = getSetting('invest_panel_period', '-35 day');
+        const sTs = getSetting('invest_panel_start_ts', null);
+        if (sTs) {
+            const eTs = getSetting('invest_panel_end_ts', null);
+            if (eTs) {
+                const spanD = (Number(eTs) - Number(sTs)) / 86400000;
+                return spanD >= 7;
+            }
+            return false;
+        }
+        return { '-7 day': 1, '-14 day': 1, '-30 day': 1, '-35 day': 1, '-90 day': 1 }[p] === 1;
+    }
+
+    function bannerDataFor(liveData) {
+        if (!liveData || Object.keys(liveData).length === 0) return refHistory || null;
+        if (isWideWindow()) return liveData;
+        // Короткое окно: живые бакеты + старые бакеты refHistory для широких бейзлайнов.
+        const out = {};
+        for (const k in liveData) {
+            if (k.charAt(0) === '_') { out[k] = liveData[k]; continue; }
+            out[k] = liveData[k];
+        }
+        if (refHistory) {
+            for (const k in refHistory) {
+                if (k.charAt(0) === '_') continue;
+                if (out[k] === undefined) out[k] = refHistory[k];
+            }
+        }
+        if (liveData._prev === undefined && refHistory) out._prev = refHistory._prev;
+        return out;
+    }
+
     function maybeRenderFromMediator() {
         if (!mediatorHistory || Object.keys(mediatorHistory).length === 0) return;
+        const haveTickers = (tickersData && Object.keys(tickersData).length > 0) ||
+            (lastTickersData && Object.keys(lastTickersData).length > 0);
         const render = function() {
-            renderBanner(refHistory || mediatorHistory, mediatorHistory);
+            renderBanner(bannerDataFor(mediatorHistory), mediatorHistory);
         };
-        if (!refHistory) loadRefHistory(render); else render();
+        const startRender = function() {
+            if (isWideWindow()) { render(); return; }
+            // Короткое окно: нужна широкая база refHistory для day/week бейзлайнов.
+            if (!refHistory) loadRefHistory(render); else render();
+        };
+        if (!haveTickers && !_awaitingTickers) {
+            // Первый рендер без тикеров = таблица без строк активов → грузим тикеры
+            // и отрисовываем по готовности (иначе мелькание «только первая строка»).
+            _awaitingTickers = true;
+            loadTickersData(function() {
+                _awaitingTickers = false;
+                if (mediatorHistory) startRender();
+            });
+            return;
+        }
+        startRender();
     }
 
     // Медиатор живой и обслуживает текущее окно истории — GET-слой не нужен.
@@ -393,7 +495,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             console.warn('[TurnoverBlock] SKIP:', source, 'turnoverData=', !!turnoverData, 'capital=', capital);
             return '';
         }
-        const t = turnoverData[source] || {};
+        const t = turnoverData[source];
+        if (!t) {
+            // Данных стратегии за сегодня нет (сервер {} ) — не рисуем ложные x0,0 / 0%:
+            // блок появится, когда сервер пришлёт обороты по источнику.
+            return '';
+        }
         const total = t.total || 0;
         const comm = t.commission || 0;
         const x = total / capital;
@@ -521,7 +628,18 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     function setBannerFreshness(historyData) {
         const epoch = collectFreshnessEpoch(historyData);
-        if (!epoch || epoch <= lastShownEpoch) return;
+        // Метка могла быть снесена пересозданием панели (профиль/layout/resize).
+        // Тогда восстанавливаем её даже при СТАЦИОНАРНОЙ эпохе — иначе пока данные
+        // не поползут вверх, lastShownEpoch не растёт и renderFreshnessLabel не
+        // вызывается: метка пропадает навсегда.
+        const missing = ['invest_banner_capital', 'invest_banner_table', 'invest_banner_total'].some(function(pid) {
+            const panel = document.getElementById(pid);
+            if (!panel) return false;
+            const key = pid.replace('invest_banner_', '');
+            return !document.getElementById('banner_freshness_' + key);
+        });
+        if (!epoch) return;
+        if (epoch <= lastShownEpoch && !missing) return;
         lastShownEpoch = epoch;
         renderFreshnessLabel(epoch);
     }
@@ -774,15 +892,25 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     let refHistoryLoadedAt = 0;
     const REF_HISTORY_TTL_MS = 10 * 60 * 1000;
 
+    let _refHistoryPending = null;           // общий in-flight запрос refHistory (дедуп)
     function loadRefHistory(callback) {
         if (refHistory && (Date.now() - refHistoryLoadedAt) < REF_HISTORY_TTL_MS) {
             if (callback) callback();
             return;
         }
-        $.getJSON('/api/invest/history?interval=hour&period=-8%20day')
-            .done(function(d) { refHistory = d; refHistoryLoadedAt = Date.now(); })
-            .fail(function() { console.warn('[InvestBanner] ref history failed'); })
-            .always(function() { if (callback) callback(); });
+        // Дедуп: пока первый запрос летит (2-4с), остальных триггеров (cron 10с,
+        // доставки медиатора по 4 секциям, panelViewChange) НЕ запускают новые GET —
+        // иначе при коротком окне медиатор долбит /api/invest/history?period=-8 day
+        // шестью одинаковыми запросами вместо одного.
+        let p = _refHistoryPending;
+        if (!p) {
+            p = $.getJSON('/api/invest/history?interval=hour&period=-8%20day')
+                .done(function(d) { refHistory = d; refHistoryLoadedAt = Date.now(); })
+                .fail(function() { console.warn('[InvestBanner] ref history failed'); })
+                .always(function() { _refHistoryPending = null; });
+            _refHistoryPending = p;
+        }
+        if (callback) p.always(function() { callback(); });
     }
 
     function updateInvestBanner() {
@@ -795,9 +923,23 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
 
         // Медиатор живой и обслуживает текущее окно — рендер из его данных,
-        // прямые GET не нужны. Иначе — fallback: старый параллельный fetch.
-        if (mediatorCanServe()) {
+        // прямые GET не нужны (это и есть «массив, получаемый для графика»).
+        const pm = window.PanelMediator;
+        const medHasHistory = !!(pm && typeof pm.getLatest === 'function' && pm.getLatest('invest.history'));
+        if (mediatorCanServe() || medHasHistory) {
             maybeRenderFromMediator();
+            return;
+        }
+        if (pm && typeof pm.poll === 'function' && typeof pm.healthy === 'function' && pm.healthy()) {
+            // Первый опрос ещё в полёте — доставка invest.history сама вызовет рендер.
+            // Страховка: если опрос затянулся и история не пришла, пробуем ещё раз
+            // (медиатор-путь предпочтительнее дублирующего тяжёлого GET).
+            setTimeout(function() {
+                if (mediatorCanServe() ||
+                    !!(pm && typeof pm.getLatest === 'function' && pm.getLatest('invest.history'))) {
+                    maybeRenderFromMediator();
+                }
+            }, 1500);
             return;
         }
 
@@ -832,7 +974,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             }
             const historyData = fd.history;
             console.log('[InvestBanner] Data received, keys:', Object.keys(historyData).length, '| net+render', (performance.now() - tNet0).toFixed(0) + 'ms');
-            renderBanner(fd.refHistory || historyData, historyData);
+            renderBanner(bannerDataFor(historyData), historyData);
         }
 
         pend++;
@@ -888,9 +1030,9 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             $.extend(tickersData, externalTickers);
         }
         const render = function() {
-            renderBanner(refHistory || historyData, historyData);
+            renderBanner(bannerDataFor(historyData), historyData);
         };
-        if (!refHistory) {
+        if (!isWideWindow() && !refHistory) {
             loadRefHistory(function() {
                 if (Object.keys(tickersData).length === 0) {
                     loadTickersData(render);

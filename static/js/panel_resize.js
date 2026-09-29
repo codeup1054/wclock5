@@ -9,13 +9,30 @@
 
     const PANEL_COOKIE = 'wclock_panels';
     const EDIT_MODE_COOKIE = 'wclock_edit_mode';
-    const PANEL_IDS = ['invest_panel', 'invest_banner_capital', 'invest_banner_table', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'seconds_panel', 'date_panel', 'moon_panel', 'chart_control_panel'];
+
+    // Флаг: только что было перетаскивание/ресайз — ближайший click по этому же
+    // элементу надо погасить (иначе после перемещения зоны reload/fullscreen
+    // срабатывает их действие).
+    let suppressClickTarget = null;
+    document.addEventListener('click', function(e) {
+        if (suppressClickTarget) {
+            const target = suppressClickTarget;
+            suppressClickTarget = null;
+            if (e.target === target || target.contains(e.target)) {
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        }
+    }, true);
+
+    const PANEL_IDS = ['invest_panel', 'invest_banner_capital', 'invest_banner_table', 'invest_banner_total', 'weather_panel', 'battery_indicator_panel', 'battery_chart_panel', 'press_humidity_temp_panel', 'wind_cond_precip_panel', 'sun_panel', 'clock_panel', 'seconds_panel', 'date_panel', 'moon_panel', 'chart_control_panel', 'browser_fullscreen', 'browser_reload'];
     // Default per-panel chart scales (0.0..1.0). Panels with charts: weather_panel, invest_panel
     const DEFAULT_PANEL_CHART_SCALES = {
         weather_panel: 1,
         invest_panel: 1,
         invest_banner_capital: 1,
         invest_banner_table: 1,
+        invest_banner_total: 1,
         chart_control_panel: 1
     };
 
@@ -86,7 +103,35 @@
     function applyPanelConfig() {
         console.log('[EditMode] applyPanelConfig called');
         
-        // First check localStorage
+        // Источник истины — активный профиль (объединён с сервером в lib.js).
+        // Профиль читается с сервера первым (mergeFromServer), поэтому при F5
+        // отображаем именно серверный профиль, а не случайную локальную раскладку.
+        let applied = false;
+        if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.loadProfiles === 'function') {
+            try {
+                const profileData = window.PanelProfiles.loadProfiles();
+                const active = profileData.profiles.find(function (p) { return p.name === profileData.active; }) || profileData.profiles[0];
+                if (active && active.config && Object.keys(active.config).length) {
+                    console.log('[EditMode] Applying ACTIVE PROFILE:', active.name);
+                    applyConfigToPanels(active.config);
+                    applied = true;
+                }
+            } catch (e) {
+                console.warn('[EditMode] Active profile apply error:', e);
+            }
+        }
+        if (applied) {
+            // Сохраняем активный профиль и в localStorage-кэш, чтобы F5 был стабильным
+            if (typeof window.PanelProfiles !== 'undefined' && typeof window.PanelProfiles.capturePanelConfig === 'function') {
+                try {
+                    const full = window.PanelProfiles.capturePanelConfig();
+                    if (full) savePanelConfig(full);
+                } catch (e) {}
+            }
+            return;
+        }
+
+        // Fallback — localStorage (кэш из прошлой сессии/из профиля)
         const localConfig = loadPanelConfig();
         console.log('[EditMode] localConfig:', localConfig);
         if (localConfig) {
@@ -294,6 +339,7 @@ function normalizePanelPosition(panel) {
 
         let isResizing = false;
         let currentHandle = null;
+        let moved = false;
         let startX, startY, startWidth, startHeight, startTop, startLeft;
 
         function onResizeStart(e) {
@@ -301,6 +347,7 @@ function normalizePanelPosition(panel) {
             if (panel.classList.contains('panel-fullscreen')) return;
             
             isResizing = true;
+            moved = false;
             currentHandle = e.target.dataset.pos;
             const pos = getClientPos(e);
             startX = pos.x;
@@ -327,6 +374,9 @@ function normalizePanelPosition(panel) {
             const dx = pos.x - startX;
             const dy = pos.y - startY;
             const pos_ = currentHandle;
+            
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+            if (!moved) return;
             
             // Width
             if (pos_.includes('e')) {
@@ -359,6 +409,7 @@ function normalizePanelPosition(panel) {
             if (!isResizing) return;
             isResizing = false;
             currentHandle = null;
+            if (moved && panel.id === 'browser_reload') suppressClickTarget = panel;
             setButtonsDisabled(false);
             normalizePanelPosition(panel);
             resizeCharts();
@@ -371,6 +422,7 @@ function normalizePanelPosition(panel) {
     // Initialize drag functionality
     function initDrag(panel) {
         let isDragging = false;
+        let moved = false;
         let startX, startY, startTop, startLeft;
 
         function onDragStart(e) {
@@ -380,6 +432,7 @@ function normalizePanelPosition(panel) {
             if (panel.classList.contains('panel-fullscreen')) return;
             
             isDragging = true;
+            moved = false;
             panel.classList.add('dragging');
             
             const pos = getClientPos(e);
@@ -402,6 +455,9 @@ function normalizePanelPosition(panel) {
             const dx = pos.x - startX;
             const dy = pos.y - startY;
             
+            if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+            if (!moved) return;
+            
             panel.style.top = (startTop + dy) + 'px';
             panel.style.left = (startLeft + dx) + 'px';
             panel.style.right = 'auto';
@@ -416,6 +472,7 @@ function normalizePanelPosition(panel) {
             
             isDragging = false;
             panel.classList.remove('dragging');
+            if (moved && panel.id === 'browser_reload') suppressClickTarget = panel;
             setButtonsDisabled(false);
             normalizePanelPosition(panel);
             resizeCharts();
@@ -584,16 +641,13 @@ function normalizePanelPosition(panel) {
     const PANEL_CONTENT_SELECTORS = {
         'wind_cond_precip_panel': '#wind_cond_precip',
         'press_humidity_temp_panel': '#press_humidity_temp',
-        'sun_panel': '#sun',
         'clock_panel': '#clock',
-        'date_panel': '#day',
         'moon_panel': '#moon_phase'
     };
     
     const PANEL_BASE_SIZES = {
         'wind_cond_precip_panel': { width: 457, height: 179 },
         'press_humidity_temp_panel': { width: 469, height: 172 },
-        'sun_panel': { width: 492, height: 58 },
         'clock_panel': { width: 445, height: 167 },
         'moon_panel': { width: 200, height: 200 }
     };
@@ -636,6 +690,15 @@ function normalizePanelPosition(panel) {
         PANEL_IDS.forEach(id => {
             const panel = document.getElementById(id);
             if (!panel) return;
+            
+            // Browser-зоны (fullscreen/reload) — только drag + resize,
+            // без clock-panel (сплошная рамка/overflow ломают их прозрачность и клики).
+            const isBrowserZone = panel.id === 'browser_fullscreen' || panel.id === 'browser_reload';
+            if (isBrowserZone) {
+                initDrag(panel);
+                initResizeHandle(panel);
+                return;
+            }
             
             panel.classList.add('clock-panel');
             if (panel.id === 'weather_panel') {

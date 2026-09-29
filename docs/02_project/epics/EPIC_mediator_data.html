@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Эпик — Медиатор данных клиент↔сервер (единый /api/data_mediator)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
+         color: #1f2430; margin: 0; line-height: 1.55; }
+  .page { max-width: 1330px; margin: 0 auto; padding: 16px 12px 48px; }
+  @media (min-width: 640px) { .page { padding: 24px 16px 64px; } }
+
+  .header { background: #101418; color: #fff; padding: 22px 24px 24px;
+            border-bottom: 5px solid #f37435; margin-bottom: 24px; }
+  @media (min-width: 640px) { .header { padding: 32px 40px 36px; margin-bottom: 32px; } }
+  .header .header-brand { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .header .header-brand svg { flex-shrink: 0; }
+  .header .brand { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+  .header h1 { margin: 8px 0 6px; font-size: 21px; line-height: 1.2; font-weight: 700;
+               text-transform: uppercase; letter-spacing: .5px; }
+  @media (min-width: 640px) { .header h1 { font-size: 34px; } }
+  .header .sub { color: #aa957f; font-size: 11px; text-transform: uppercase;
+                 letter-spacing: 2px; font-weight: 500; margin: 0; }
+  @media (min-width: 640px) { .header .sub { font-size: 13px; } }
+
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .meta-item { background: #1f2430; border: 1px solid #3a4048; padding: 4px 10px;
+               font-size: 11px; border-radius: 4px; }
+  .meta-label { text-transform: uppercase; letter-spacing: .05em; color: #aa957f;
+                font-weight: 600; margin-right: 6px; }
+  .meta-value { font-weight: 700; color: #fff; }
+
+  .tabs { position: sticky; top: 0; z-index: 20; background: #101418;
+          border-bottom: 3px solid #f37435; margin-bottom: 24px;
+          display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 10px; }
+  .tabs a { color: #cfd2d8; text-decoration: none; font-size: 12px; font-weight: 600;
+            padding: 7px 11px; border-radius: 6px; text-transform: uppercase;
+            letter-spacing: .5px; white-space: nowrap; }
+  .tabs a:hover { background: #1f2430; color: #fff; }
+  .tabs a.active { background: #f37435; color: #fff; }
+  h2[id] { scroll-margin-top: 64px; }
+  @media print { .tabs { display: none; } }
+
+  .panel { background: #fff; border: 1px solid #dbdbdb; padding: 18px 20px;
+           margin-bottom: 24px; }
+  @media (min-width: 640px) { .panel { padding: 28px 32px; margin-bottom: 32px; } }
+  .panel h2.panel-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
+                          letter-spacing: .5px; margin: 0 0 12px; padding: 0; border: none; }
+  @media (min-width: 640px) { .panel h2.panel-title { font-size: 18px; } }
+
+  /* Дерево содержания (раскрывающееся, как в SDK/MSDN) */
+  .toc { font-size: 13px; line-height: 1.7; }
+  @media (min-width: 640px) { .toc { font-size: 14px; line-height: 1.6; } }
+  .toc ul { list-style: none; margin: 0; padding: 0; }
+  .toc ul ul { margin-left: 18px; border-left: 1px dashed #d5d0c7; padding-left: 6px; }
+  .toc li { margin: 0; }
+  .toc li.toc-parent { position: relative; }
+  .toc a { color: #1553a3; text-decoration: none; display: block; padding: 2px 4px;
+           border-radius: 3px; line-height: 1.5; }
+  .toc a:hover { color: #f37435; background: #f5f2ea; text-decoration: none; }
+  .toc a.toc-active { color: #f37435; background: #f5f2ea; }
+  .toc ul ul a { color: #2c5f96; }
+  .toc ul ul ul a { color: #4a6b8c; }
+  .toc .toc-toggle { display: inline-block; width: 18px; height: 18px; text-align: center;
+                     cursor: pointer; color: #8a8478; font-size: 12px; line-height: 18px;
+                     user-select: none; flex: 0 0 auto; }
+  .toc .toc-row { display: flex; align-items: flex-start; }
+  .toc .toc-row > a { flex: 1 1 auto; }
+  .toc .toc-ac { display: none; }
+  .toc .toc-ac.open { display: block; }
+
+  .content { background: #fff; border: 1px solid #dbdbdb; padding: 20px; }
+  @media (min-width: 640px) { .content { padding: 32px; } }
+  @media (min-width: 768px) { .content { padding: 48px; } }
+
+  .prose h1 { font-size: 22px; margin: 0 0 14px; }
+  .prose h2 { font-size: 19px; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 32px; margin-bottom: 12px;
+              padding-bottom: 6px; border-bottom: 2px solid #f37435; }
+  @media (min-width: 640px) { .prose h2 { font-size: 26px; margin-top: 44px; margin-bottom: 16px; } }
+  .prose h3 { font-size: 15px; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 24px; margin-bottom: 8px; }
+  @media (min-width: 640px) { .prose h3 { font-size: 19px; margin-top: 32px; margin-bottom: 12px; } }
+  .prose h4 { font-size: 13px; font-weight: 600; color: #585858;
+              margin-top: 16px; margin-bottom: 6px; }
+  @media (min-width: 640px) { .prose h4 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; } }
+  .prose p { font-size: 14px; line-height: 1.6; color: #272727; margin-bottom: 12px; }
+  @media (min-width: 640px) { .prose p { font-size: 15px; } }
+  .prose ul, .prose ol { font-size: 14px; line-height: 1.6; color: #272727;
+                         margin-bottom: 16px; padding-left: 20px; }
+  @media (min-width: 640px) { .prose ul, .prose ol { font-size: 15px; } }
+  .prose li { margin-bottom: 4px; }
+  .prose a { color: #1553a3; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+  .prose a:hover { color: #f37435; }
+  .prose table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11px; }
+  @media (min-width: 640px) { .prose table { font-size: 13px; } }
+  @media (max-width: 640px) {
+    .prose table { font-size: 10px; overflow-wrap: break-word; word-break: break-word; line-height: 1.3; }
+    .prose td:first-child, .prose th:first-child { min-width: 88px; }
+  }
+  .prose th { background: #101418; color: #fff; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .05em; text-align: left; padding: 6px 8px; border: 1px solid #101418;
+              font-size: 9px; }
+  @media (min-width: 640px) { .prose th { padding: 10px 12px; font-size: 12px; } }
+  .prose td { border: 1px solid #dbdbdb; padding: 6px 8px; color: #272727; vertical-align: top; }
+  @media (min-width: 640px) { .prose td { padding: 8px 12px; } }
+  .prose tr:nth-child(even) td { background: #f1f1ea; }
+  .prose code { font-family: Consolas, 'Courier New', monospace; background: #efe9de;
+                color: #1553a3; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  .prose pre { background: #101418; color: #d9dce1; padding: 14px 16px; border-radius: 8px;
+               overflow-x: auto; margin-bottom: 16px; font-size: 12.5px; line-height: 1.5; }
+  .prose pre code { background: transparent; color: inherit; padding: 0; border-radius: 0; }
+  .prose hr { border: none; border-top: 2px solid #e2dbd3; margin: 40px 0; }
+  .prose img, .prose .dimg { max-width: 100%; margin: 16px auto; display: block; }
+  .prose blockquote { border-left: 4px solid #f37435; padding: 10px 12px; margin: 16px 0;
+                      background: #f1f1ea; font-style: italic; color: #585858; font-size: 14px; }
+  @media (min-width: 640px) { .prose blockquote { padding: 12px 16px; font-size: 15px; } }
+
+  .icon { display: inline-block; width: 20px; height: 20px; vertical-align: text-bottom; }
+
+  .tabs .dl { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .dl-btn { display: inline-block; padding: 2px 9px; font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+            color: #101418; background: #f37435; border: 1px solid #f37435; border-radius: 3px;
+            cursor: pointer; line-height: 1.5; text-decoration: none; }
+  @media (min-width: 640px) { .dl-btn { font-size: 10px; padding: 3px 12px; } }
+  .dl-btn:hover { background: #fff; border-color: #fff; }
+  .dl-btn.alt { background: transparent; color: #f37435; }
+  .dl-btn.alt:hover { color: #101418; background: #101418; border-color: #101418; }
+  @media print { .dl, .dl-btn { display: none !important; } }
+  .btn { display: inline-block; font-family: 'Segoe UI', Arial, sans-serif;
+         font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+         padding: 8px 20px; border: 2px solid transparent; cursor: pointer;
+         text-align: center; text-decoration: none; }
+  @media (min-width: 640px) { .btn { font-size: 13px; letter-spacing: 2px; padding: 10px 30px; } }
+  .btn:hover { opacity: .9; }
+  .btn-orange { background: #f37435; color: #fff; border-color: #f37435; }
+  .btn-black { background: #1f2430; color: #fff; border-color: #1f2430; }
+  .btn-rounded { border-radius: 50px; letter-spacing: normal; }
+
+  .badge { display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase;
+           letter-spacing: .03em; padding: 2px 7px; border-radius: 3px; }
+  @media (min-width: 640px) { .badge { font-size: 11px; letter-spacing: .05em; padding: 3px 10px; } }
+  .badge-orange { background: #f37435; color: #fff; }
+  .badge-green { background: #4b8765; color: #fff; }
+  .badge-red { background: #ca3742; color: #fff; }
+  .badge-beige { background: #aa957f; color: #000; }
+  .badge-black { background: #1f2430; color: #fff; }
+  .badge-teal { background: #57a4b5; color: #fff; }
+  .badge-violet { background: #6e4d8b; color: #fff; }
+
+  .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
+            letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
+  @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  
+  <div id="header" class="header">
+    <div class="header-brand">
+      <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+        <rect x="2" y="2" width="44" height="44" rx="10" fill="#f37435"/>
+        <rect x="10" y="10" width="28" height="28" rx="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="24" cy="24" r="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="36" cy="13" r="3" fill="white"/>
+      </svg>
+      <span class="brand">WClock5</span>
+    </div>
+    <h1 id="page-title">Эпик — Медиатор данных клиент↔сервер (единый /api/data_mediator)</h1>
+    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
+    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">🚧</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.1</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-09-17</span></span></div>
+  </div>
+  
+
+  
+  <nav class="tabs" aria-label="Навигация по разделам">
+    <a href="#kontekst">Контекст</a>
+    <a href="#reshenie">Решение</a>
+    <a href="#zadachi">Задачи</a>
+    <a href="#proverka">Проверка</a>
+    <a href="#svyazi">Связи</a>
+    <a href="#list-izmeneniy">Лист изменений</a>
+    <span class="dl" data-dl="EPIC_mediator_data">
+      <button type="button" class="dl-btn" onclick="downloadPdf()">PDF</button>
+      <button type="button" class="dl-btn alt" onclick="downloadDoc()">DOCX</button>
+    </span>
+  </nav>
+  
+
+  
+  <div id="toc" class="panel">
+    <h2 id="toc-title" class="panel-title">Содержание</h2>
+    <div id="toc-links" class="toc"><ul><li>
+<a href="#kontekst">Контекст</a>
+</li>
+<li class="toc-parent" data-parent="reshenie">
+<div class="toc-row">
+<span class="toc-toggle" data-target="reshenie" title="Развернуть">+</span>
+<a href="#reshenie">Решение</a>
+</div>
+<ul class="toc-ac" id="toc-ac-reshenie">
+<li>
+<a href="#1-chtenie-edinyy-post-api-data-mediator">1. Чтение: единый POST /api/data_mediator</a>
+</li>
+<li>
+<a href="#2-sektsii-chteniya">2. Секции чтения</a>
+</li>
+<li>
+<a href="#3-zapis-write-sektsii-v-tom-zhe-post">3. Запись: write-секции в том же POST</a>
+</li>
+<li>
+<a href="#4-batareya-detalno">4. Батарея (детально)</a>
+</li>
+<li>
+<a href="#5-klient-panelmediator">5. Клиент: PanelMediator</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#zadachi">Задачи</a>
+</li>
+<li>
+<a href="#proverka">Проверка</a>
+</li>
+<li>
+<a href="#svyazi">Связи</a>
+</li>
+<li>
+<a href="#list-izmeneniy">Лист изменений</a>
+</li></ul></div>
+  </div>
+  
+
+  <div id="content" class="content prose">
+<p>Единая точка обмена клиент↔сервер вместо N отдельных периодических запросов:<br />
+<code>POST /api/data_mediator</code> с токенизированной дельтой по секциям. Клиент шлёт<br />
+известные токены секций, сервер возвращает только изменившиеся секции +<br />
+новые токены. Write-гранулярность настраивается per-секция.</p>
+<h2 id="kontekst">Контекст</h2>
+<p>Каждый 10-секундный тик дашборда выполняет 4+ независимых запроса:</p>
+<table>
+<thead>
+<tr>
+<th>Запрос</th>
+<th>Размер</th>
+<th>Частота</th>
+<th>Источник</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/api/weather</code></td>
+<td>~1–3 kB</td>
+<td>10 мин</td>
+<td>Яндекс Погода</td>
+</tr>
+<tr>
+<td><code>/api/charts_data</code></td>
+<td>~0.7 kB</td>
+<td>10 мин</td>
+<td>БД погоды</td>
+</tr>
+<tr>
+<td><code>/api/battery</code> (GET)</td>
+<td>~0.8 kB</td>
+<td>15 мин</td>
+<td>график батареи</td>
+</tr>
+<tr>
+<td><code>/api/invest/turnover</code></td>
+<td>~0.3 kB</td>
+<td>10 с</td>
+<td>оборот дня</td>
+</tr>
+<tr>
+<td><code>/api/invest/history</code> (full)</td>
+<td>до 952 kB</td>
+<td>30–60 с</td>
+<td>история капитала</td>
+</tr>
+<tr>
+<td><code>/api/invest/tickers</code></td>
+<td>208 kB→34 kB</td>
+<td>30 с (TTL)</td>
+<td>тикеры</td>
+</tr>
+<tr>
+<td><code>/api/invest/history</code> (delta)</td>
+<td>0.4 kB</td>
+<td>10 с</td>
+<td>после фикса кэша</td>
+</tr>
+<tr>
+<td><code>/api/battery</code> (POST write)</td>
+<td>~0.1 kB</td>
+<td>10–60 с</td>
+<td>телеметрия</td>
+</tr>
+<tr>
+<td><code>/api/settings</code></td>
+<td>~IL</td>
+<td>редкие</td>
+<td>настройки</td>
+</tr>
+</tbody>
+</table>
+<p>Итог до оптимизаций: ~1.2 МБ/тик. После дельты+gzip+TTL: ~1.1 kB/тик<br />
+(×1000). Но остаётся N запросов с независимой свежестью и дублированием<br />
+данных между виджетами (баннер и чарт держат одну историю в двух<br />
+клиентских кэшах).</p>
+<p>Цель медиатора — один транспорт, одна точка согласования свежести,<br />
+дельта по секциям с токенами, write-гранулярность из настроек.</p>
+<h2 id="reshenie">Решение</h2>
+<h3 id="1-chtenie-edinyy-post-api-data-mediator">1. Чтение: единый POST <code>/api/data_mediator</code></h3>
+<div class="codehilite"><pre><span></span><code>POST /api/data_mediator
+{ &quot;v&quot;: { &quot;&lt;секция&gt;&quot;: &quot;&lt;токен клиента&gt;&quot;, ... } }
+
+200
+{
+  &quot;changed&quot;: { &quot;&lt;секция&gt;&quot;: &lt;данные&gt;, ... },   // только изменившиеся
+  &quot;tokens&quot;: { &quot;&lt;секция&gt;&quot;: &quot;&lt;новый токен&gt;&quot;, ... },
+  &quot;ts&quot;: &lt;unix_epoch_sec&gt;
+}
+</code></pre></div>
+
+<ul>
+<li>Клиент хранит токен каждой секции (стиль <code>interval|period|start|end</code>).</li>
+<li>Сервер считает свежие данные, вычисляет их токен (hash payload) и<br />
+  сравнивает с присланным; расхождение → секция в <code>changed</code> + новый токен.</li>
+<li>Совпадение → секция не в <code>changed</code>, но токен всё равно обновляется<br />
+  (клиент всегда получает актуальные токены всех секций).</li>
+<li>Падение одной секции не роняет ответ: секция с ошибкой → поле<br />
+<code>errors: {&lt;секция&gt;: &lt;message&gt;}</code>.</li>
+</ul>
+<h3 id="2-sektsii-chteniya">2. Секции чтения</h3>
+<table>
+<thead>
+<tr>
+<th>Ключ секции</th>
+<th>Токен</th>
+<th>Данные</th>
+<th>TTL сервера</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>weather</code></td>
+<td>hash payload</td>
+<td><code>{fact, forecast_summary}</code></td>
+<td>300 с</td>
+</tr>
+<tr>
+<td><code>charts_data</code></td>
+<td>hash payload</td>
+<td>агрегированный timeline</td>
+<td>600 с</td>
+</tr>
+<tr>
+<td><code>battery.history</code></td>
+<td>hash payload</td>
+<td>история для графика батареи</td>
+<td>60 с</td>
+</tr>
+<tr>
+<td><code>invest.history</code></td>
+<td><code>hash(history)</code> или <code>_latest_epoch</code></td>
+<td>история капитала (delta-capable)</td>
+<td>30 с</td>
+</tr>
+<tr>
+<td><code>invest.tickers</code></td>
+<td>hash payload</td>
+<td>тикеры</td>
+<td>30 с (клиентский TTL)</td>
+</tr>
+<tr>
+<td><code>invest.turnover</code></td>
+<td>hash payload</td>
+<td>оборот дня</td>
+<td>90 с (in-memory)</td>
+</tr>
+<tr>
+<td><code>invest.turnover_details</code></td>
+<td>hash payload</td>
+<td>детализация оборота</td>
+<td>90 с</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td>hash payload</td>
+<td>настройки</td>
+<td>по изменению</td>
+</tr>
+<tr>
+<td><code>user_settings</code></td>
+<td>hash payload</td>
+<td>настройки пользователя</td>
+<td>по изменению</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Солнце не входит</strong>: восход/закат/долгота дня — клиентская формула<br />
+<code>getDaylight()</code> (солнечная геометрия, без серверной секции).</p>
+</blockquote>
+<h3 id="3-zapis-write-sektsii-v-tom-zhe-post">3. Запись: write-секции в том же POST</h3>
+<div class="codehilite"><pre><span></span><code>POST /api/data_mediator
+{ &quot;w&quot;: { &quot;&lt;секция&gt;&quot;: &lt;payload&gt; } }
+</code></pre></div>
+
+<p>Ответ:</p>
+<div class="codehilite"><pre><span></span><code>{
+  &quot;writes&quot;: {
+    &quot;&lt;секция&gt;&quot;: { &quot;applied&quot;: true|false, &quot;reason&quot;: &quot;ok|interval|unchanged|missing_key&quot; }
+  },
+  ...
+}
+</code></pre></div>
+
+<ul>
+<li><strong>Гранулярность настраивается</strong>: <code>write_interval_battery</code> (default 60 с),<br />
+<code>write_interval_weather</code>… Секция пишется, только если прошло ≥ интервала<br />
+<strong>и</strong> значение изменилось. Иначе <code>applied: false</code> + <code>reason</code>.</li>
+<li>Если писать не нужно — сервер не делает INSERT, отвечает<br />
+<code>{applied: false, reason: ...}</code>, токены секций всё равно обновляются<br />
+  (клиент не «застревает»).</li>
+</ul>
+<h3 id="4-batareya-detalno">4. Батарея (детально)</h3>
+<p>Сегодня POST <code>/api/battery</code> каждые 10 с: <code>INSERT OR REPLACE</code> + commit —<br />
+худший случай записи. В медиаторе:</p>
+<ul>
+<li>Write-секция <code>battery</code> c <code>write_interval_battery</code> (default 60 с).</li>
+<li>Клиент шлёт <code>{w: {battery: {device_id_local, value}}}</code> в общем POST.</li>
+<li>Сервер: если не прошёл интервал или значение не изменилось → skip,<br />
+  иначе INSERT. Отклик <code>{applied, reason}</code>.</li>
+<li>Чтение для графика — секция <code>battery.history</code> (<code>device_id_local</code>,<br />
+<code>interval</code>, <code>period</code>).</li>
+</ul>
+<h3 id="5-klient-panelmediator">5. Клиент: PanelMediator</h3>
+<p>Новый модуль <code>static/js/panel_mediator.js</code>:</p>
+<ul>
+<li>Единый цикл опроса <code>/api/data_mediator</code> (интервал 10 с — как сейчас cron).</li>
+<li>Словарь токенов по секциям, дельта-контракт с сервером.</li>
+<li>Диспетчеризация: секция изменилась → вызываются подписчики этого виджета<br />
+  (weather → <code>updateWeatherData</code>, battery.history → <code>updateBatteryChart</code>,<br />
+  invest.history → <code>InvestHistoryCache</code>/<code>InvestBanner</code>, tickers →<br />
+<code>loadTickersToChart</code>, turnover → <code>updateInvestBanner</code>).</li>
+<li>Write-планировщик батареи по интервалу настроек.</li>
+<li>Fallback: при недоступности <code>/api/data_mediator</code> — старые прямые запросы<br />
+  (обратная совместимость, поэтапная миграция).</li>
+</ul>
+<h2 id="zadachi">Задачи</h2>
+<table>
+<thead>
+<tr>
+<th>Код</th>
+<th>Задача</th>
+<th>Результат</th>
+<th>Статус</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MN-01</td>
+<td>Сервер: <code>POST /api/data_mediator</code> (read-скелет)</td>
+<td>парсинг <code>v</code>, токены, <code>changed/tokens/ts/errors</code></td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-02</td>
+<td>Секции: weather, charts_data</td>
+<td>переиспользование <code>get_weather</code>, charts query</td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-03</td>
+<td>Секции invest: history (delta), tickers, turnover</td>
+<td>обёртки над <code>invest_repo</code> + кэши</td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-04</td>
+<td>Секция battery.history + write-секция battery</td>
+<td>read для графика, write с <code>write_interval_battery</code></td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-05</td>
+<td>Секции settings / user_settings</td>
+<td>чтение настроек</td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-06</td>
+<td>Клиент: <code>panel_mediator.js</code></td>
+<td>токены, цикл, диспетчеризация, write-батарея</td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-07</td>
+<td>Миграция weather/battery на медиатор</td>
+<td><code>index.js</code>, <code>battery.js</code></td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-08</td>
+<td>Миграция invest_banner/invest_chart на медиатор</td>
+<td>баннер, чарт, легенда, tickers</td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-09</td>
+<td>Fallback + регресс старых эндпоинтов</td>
+<td>старые <code>/api/*</code> не ломаются</td>
+<td>⬜</td>
+</tr>
+<tr>
+<td>MN-10</td>
+<td>Эпик: MD + HTML</td>
+<td><code>EPIC_mediator_data.md</code>/<code>.html</code></td>
+<td>⬜</td>
+</tr>
+</tbody>
+</table>
+<h2 id="proverka">Проверка</h2>
+<ul>
+<li><code>py_compile app.py</code> после правок сервера.</li>
+<li><code>node --check static/js/panel_mediator.js</code> + правки виджетов.</li>
+<li>Smoke: <code>curl -X POST /api/data_mediator -d '{"v":{}}'</code> → все секции в <code>changed</code>;<br />
+  повтор с полученными токенами → <code>changed</code> пуст.</li>
+<li>Write: POST батареи дважды в пределах интервала → второй <code>applied:false</code>.</li>
+<li>MD5 после деплоя; рестарт <code>wclock5-app</code>.</li>
+</ul>
+<h2 id="svyazi">Связи</h2>
+<ul>
+<li>Беклог: <code>docs/02_project/backlogs/backlog_20260917.ldn.md</code> (MN-01..17)</li>
+<li>Конвенции: <code>docs/02_project/conventions.md</code> §10 «Медиатор данных» +<br />
+<code>conventions.html</code></li>
+<li>Код: <code>app.py</code>, <code>invest_repo.py</code>, <code>static/js/panel_mediator.js</code>,<br />
+<code>static/js/invest_banner.js</code>, <code>invest_chart.js</code>, <code>battery.js</code>,<br />
+<code>static/js/index.js</code></li>
+</ul>
+<h2 id="list-izmeneniy">Лист изменений</h2>
+<ul>
+<li><strong>0.1</strong> · 2026-09-17 — создан: контракт чтения/записи <code>/api/data_mediator</code>, секции,<br />
+  write-гранулярность батареи, PanelMediator, задачи MN-01..10.</li>
+</ul></div>
+
+  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+</div>
+
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs a'));
+  var h2s = Array.prototype.slice.call(document.querySelectorAll('h2[id]'));
+  function setActive(id) {
+    tabs.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+    });
+  }
+  if ('IntersectionObserver' in window && h2s.length) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          setActive(e.target.id);
+          if (location.hash !== '#' + e.target.id) {
+            history.replaceState(null, '', '#' + e.target.id);
+          }
+        }
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    h2s.forEach(function (h) { obs.observe(h); });
+  }
+  tabs.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var t = document.getElementById(id);
+      if (!t) { return; }
+      e.preventDefault();
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActive(id);
+      history.pushState(null, '', '#' + id);
+    });
+  });
+})();
+</script>
+
+
+<script>
+(function () {
+  function initToc() {
+    function setTocIcon(t, open) {
+      t.textContent = open ? '−' : '+';
+    }
+    var toggles = document.querySelectorAll('#toc .toc-toggle');
+    Array.prototype.forEach.call(toggles, function (t) {
+      t.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var target = t.getAttribute('data-target');
+        var ac = document.getElementById('toc-ac-' + target);
+        var open = t.classList.toggle('open');
+        if (ac) ac.classList.toggle('open', open);
+        setTocIcon(t, open);
+        t.title = open ? 'Свернуть' : 'Развернуть';
+      });
+    });
+    // Расширить путь до текущего якоря
+    function reveal(id) {
+      if (!id) return;
+      var parent = document.querySelector('#toc li[data-parent="' + id + '"]');
+      while (parent) {
+        var pid = parent.getAttribute('data-parent');
+        var ac = document.getElementById('toc-ac-' + pid);
+        var tg = parent.querySelector('.toc-toggle');
+        if (ac && !ac.classList.contains('open')) ac.classList.add('open');
+        if (tg && !tg.classList.contains('open')) { tg.classList.add('open'); setTocIcon(tg, true); }
+        parent = parent.parentElement && parent.parentElement.closest('li.toc-parent');
+      }
+    }
+    function active(id) {
+      document.querySelectorAll('#toc a.toc-active').forEach(function (a) {
+        a.classList.remove('toc-active');
+      });
+      var a = document.querySelector('#toc a[href="#' + id + '"]');
+      if (a) { a.classList.add('toc-active'); reveal(id); }
+    }
+    reveal(location.hash && location.hash.slice(1));
+    // Обратная совместимость: кириллические якоря (старые ссылки #пример-2-…)
+    // — транслитерировать и перейти к найденному латинскому id. Таблица
+    // инжектится из Python-словаря TRANSLIT (см. TRANSLIT_JSON), чтобы
+    // транслитерация совпадала с slugify_latin на 100%.
+    var TRANSLIT_MAP = JSON.parse('{"\u0430": "a", "\u0431": "b", "\u0432": "v", "\u0433": "g", "\u0434": "d", "\u0435": "e", "\u0451": "e", "\u0436": "zh", "\u0437": "z", "\u0438": "i", "\u0439": "y", "\u043a": "k", "\u043b": "l", "\u043c": "m", "\u043d": "n", "\u043e": "o", "\u043f": "p", "\u0440": "r", "\u0441": "s", "\u0442": "t", "\u0443": "u", "\u0444": "f", "\u0445": "kh", "\u0446": "ts", "\u0447": "ch", "\u0448": "sh", "\u0449": "sch", "\u044a": "", "\u044b": "y", "\u044c": "", "\u044d": "e", "\u044e": "yu", "\u044f": "ya"}');
+    function translitToSlug(s) {
+      s = s.toLowerCase().trim();
+      var out = [];
+      for (var i = 0; i < s.length; i++) {
+        var ch = s[i];
+        if (TRANSLIT_MAP.hasOwnProperty(ch)) out.push(TRANSLIT_MAP[ch]);
+        else if (/[a-z0-9]/.test(ch)) out.push(ch);
+        else out.push('-');
+      }
+      return out.join('').replace(/-{2,}/g, '-').replace(/^-|-$/g, '');
+    }
+    function resolveCyrillicHash() {
+      var h = (location.hash || '').slice(1);
+      if (!h) return;
+      var el = document.getElementById(h);
+      if (el) return;
+      var slug = translitToSlug(h);
+      var target = document.getElementById(slug) ||
+                   document.getElementById(document.querySelector('[href="#' + slug + '"]') && slug);
+      if (!target) {
+        // фрагмент может быть префиксом id (пропущен суффикс, напр. (Explore))
+        var alnum = slug.replace(/[^a-z0-9]/g, '');
+        if (alnum.length >= 12) {
+          var all = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id]');
+          var found = null;
+          Array.prototype.forEach.call(all, function (el) {
+            if (!found && el.id.replace(/[^a-z0-9]/g, '').indexOf(alnum) === 0) found = el;
+          });
+          if (!found) {
+            Array.prototype.forEach.call(all, function (el) {
+              if (!found && el.id.replace(/[^a-z0-9]/g, '') === alnum) found = el;
+            });
+          }
+          target = found;
+        }
+      }
+      if (target && target.scrollIntoView) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        history.replaceState(null, '', '#' + target.id);
+      }
+    }
+    if (document.readyState === 'loading') {
+      resolveCyrillicHash(); // hash уже в URL при загрузке
+    } else {
+      resolveCyrillicHash();
+    }
+    window.addEventListener('hashchange', resolveCyrillicHash);
+    if ('IntersectionObserver' in window) {
+      var obs = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) active(e.target.id);
+        });
+      }, { rootMargin: '-10% 0px -80% 0px' });
+      document.querySelectorAll('h2[id], h3[id], h4[id]').forEach(function (h) {
+        obs.observe(h);
+      });
+    }
+    window.addEventListener('hashchange', function () {
+      reveal(location.hash && location.hash.slice(1));
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initToc);
+  } else {
+    initToc();
+  }
+})();
+</script>
+
+<script>
+function dlFileName() {
+  var el = document.querySelector('.dl');
+  if (el && el.getAttribute('data-dl')) return el.getAttribute('data-dl');
+  return 'EPIC_mediator_data';
+}
+function downloadPdf() { window.print(); }
+function downloadDoc() {
+  var content = document.getElementById('content').innerHTML;
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Эпик — Медиатор данных клиент↔сервер (единый /api/data_mediator)</title></head><body>' + content + '</body></html>';
+  var blob = new Blob(['﻿', html], { type: 'application/msword' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = dlFileName() + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+</script>
+</body>
+</html>

@@ -827,6 +827,12 @@ def _invest_history_payload(interval="hour", period="-30 day", start_ts=None,
 
 def _invest_tickers_payload(interval="hour", period="-28 day", start_ts=None, end_ts=None):
     """Полный payload тикеров (тот же путь, что GET /api/invest/tickers)."""
+    # 'live' (и любые не-числа) из медиатор-параметров → None, как в GET-пути
+    # (_int_or_none на линии запроса). Конвертация ДО generate(): внутри генератора
+    # присваивание затенило бы closure (UnboundLocalError). Иначе секция падает
+    # ValueError и приходит {"_error": ...}, затирая тикеры на клиенте.
+    start_ts = _int_or_none(start_ts)
+    end_ts = _int_or_none(end_ts)
     bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600,
                    'sixhour': 21600, 'day': 86400}.get(interval, 3600)
 

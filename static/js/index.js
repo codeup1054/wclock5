@@ -124,6 +124,12 @@ $(document).ready(function () {
 
             window.updateWeatherData = function (arg) {
                 if (arg) { renderWeather(arg); return; }      // payload из медиатора → рендер без GET
+                const pm = window.PanelMediator;
+                if (pm && typeof pm.healthy === 'function' && pm.healthy() &&
+                    typeof pm.getLatest === 'function' && pm.getLatest('weather')) {
+                    renderWeather(pm.getLatest('weather'));    // медиатор свежее — не дёргаем GET
+                    return;
+                }
                 $.getJSON('/api/weather')
                     .done(renderWeather)
                     .fail(() => console.error('Failed to load /api/weather'));
@@ -355,6 +361,14 @@ $(document).ready(function () {
     // Инициализация перетаскивания и изменения размеров панелей
     if (typeof PanelResize !== 'undefined') {
         PanelResize.init();
+    }
+
+    // Настройки: обновления идут секцией settings медиатора; стартовый GET —
+    // только при недоступном медиаторе (первичная парама расписания).
+    if (window.PanelMediator && typeof window.PanelMediator.subscribe === 'function') {
+        window.PanelMediator.subscribe('settings', function (data) {
+            if (data && typeof data === 'object') window.settings = data;
+        });
     }
 
     // Регистрация задач для cron.js

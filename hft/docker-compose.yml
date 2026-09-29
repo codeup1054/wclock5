@@ -1,0 +1,36 @@
+services:
+  hft:
+    build: .
+    image: hft-app
+    container_name: hft-app
+    ports:
+      - "${HFT_PORT:-10406}:5001"
+    environment:
+      - HFT_PORT=5001
+      - HFT_SECRET_KEY=${HFT_SECRET_KEY:-hft-dev-secret}
+      - HFT_ADMIN_USER=${HFT_ADMIN_USER:-admin}
+      - HFT_ADMIN_PASS=${HFT_ADMIN_PASS}
+      - HFT_ADMIN_TG=${HFT_ADMIN_TG:-@codeup1054}
+      - ANALYTICS_DB=${ANALYTICS_DB:-/app/analytics/arbitrage.db}
+      - NEWS_DB=${NEWS_DB:-/app/news/news.db}
+      - NEWS_LOG_DIR=${NEWS_LOG_DIR:-/app/news/logs}
+      - NEWS_COLLECT_MIN=${NEWS_COLLECT_MIN:-10}
+      - NEWS_WORKER=${NEWS_WORKER:-1}
+    restart: unless-stopped
+    volumes:
+      # read-only доступ к данным wclock5 (общие .db и медиаслой)
+      - ./app.py:/app/app.py
+      - ./crm_db.py:/app/crm_db.py
+      - ./templates:/app/templates
+      - ./static:/app/static
+      - ./crm:/app/crm
+      # sqlite: только чтение — WAL-иды записей блокируют открытие r/o;
+      # монтируем файлы rw, приложение пишет только в ./crm
+      - ${WCLOCK_REPO_DIR:-/var/www/wclock5.startupassist.ru}/invest_repo.py:/app/wclock_repo/invest_repo.py
+      - ${WCLOCK_REPO_DIR:-/var/www/wclock5.startupassist.ru}/parsers/invest/invest_portfolio.db:/app/wclock_repo/parsers/invest/invest_portfolio.db
+      - ${WCLOCK_REPO_DIR:-/var/www/wclock5.startupassist.ru}/parsers/invest/tracked_tickers.db:/app/wclock_repo/parsers/invest/tracked_tickers.db
+      - ${WCLOCK_REPO_DIR:-/var/www/wclock5.startupassist.ru}/parsers/mail.ru/odintsovo_weather.db:/app/wclock_repo/parsers/mail.ru/odintsovo_weather.db
+      # аналитика рынка (54.Hft): arbitrage.db подмонтирован по env ANALYTICS_DB_DIR
+      - ${ANALYTICS_DB_DIR:-/var/www/analytics.startupassist.ru}/arbitrage.db:/app/analytics/arbitrage.db
+      # новостной конвейер: news.db на диске, чтобы переживал пересборку
+      - ${NEWS_DB_DIR:-/var/www/analytics.startupassist.ru}/news.db:/app/news/news.db

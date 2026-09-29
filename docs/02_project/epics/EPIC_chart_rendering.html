@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Эпик — Отрисовка графиков: производительность и ловушки</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
+         color: #1f2430; margin: 0; line-height: 1.55; }
+  .page { max-width: 1330px; margin: 0 auto; padding: 16px 12px 48px; }
+  @media (min-width: 640px) { .page { padding: 24px 16px 64px; } }
+
+  .header { background: #101418; color: #fff; padding: 22px 24px 24px;
+            border-bottom: 5px solid #f37435; margin-bottom: 24px; }
+  @media (min-width: 640px) { .header { padding: 32px 40px 36px; margin-bottom: 32px; } }
+  .header .header-brand { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+  .header .header-brand svg { flex-shrink: 0; }
+  .header .brand { font-size: 17px; font-weight: 700; letter-spacing: 1px; }
+  .header h1 { margin: 8px 0 6px; font-size: 21px; line-height: 1.2; font-weight: 700;
+               text-transform: uppercase; letter-spacing: .5px; }
+  @media (min-width: 640px) { .header h1 { font-size: 34px; } }
+  .header .sub { color: #aa957f; font-size: 11px; text-transform: uppercase;
+                 letter-spacing: 2px; font-weight: 500; margin: 0; }
+  @media (min-width: 640px) { .header .sub { font-size: 13px; } }
+
+  .doc-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .meta-item { background: #1f2430; border: 1px solid #3a4048; padding: 4px 10px;
+               font-size: 11px; border-radius: 4px; }
+  .meta-label { text-transform: uppercase; letter-spacing: .05em; color: #aa957f;
+                font-weight: 600; margin-right: 6px; }
+  .meta-value { font-weight: 700; color: #fff; }
+
+  .tabs { position: sticky; top: 0; z-index: 20; background: #101418;
+          border-bottom: 3px solid #f37435; margin-bottom: 24px;
+          display: flex; flex-wrap: wrap; gap: 2px; padding: 8px 10px; }
+  .tabs a { color: #cfd2d8; text-decoration: none; font-size: 12px; font-weight: 600;
+            padding: 7px 11px; border-radius: 6px; text-transform: uppercase;
+            letter-spacing: .5px; white-space: nowrap; }
+  .tabs a:hover { background: #1f2430; color: #fff; }
+  .tabs a.active { background: #f37435; color: #fff; }
+  h2[id] { scroll-margin-top: 64px; }
+  @media print { .tabs { display: none; } }
+
+  .panel { background: #fff; border: 1px solid #dbdbdb; padding: 18px 20px;
+           margin-bottom: 24px; }
+  @media (min-width: 640px) { .panel { padding: 28px 32px; margin-bottom: 32px; } }
+  .panel h2.panel-title { font-size: 15px; font-weight: 700; text-transform: uppercase;
+                          letter-spacing: .5px; margin: 0 0 12px; padding: 0; border: none; }
+  @media (min-width: 640px) { .panel h2.panel-title { font-size: 18px; } }
+
+  /* Дерево содержания (раскрывающееся, как в SDK/MSDN) */
+  .toc { font-size: 13px; line-height: 1.7; }
+  @media (min-width: 640px) { .toc { font-size: 14px; line-height: 1.6; } }
+  .toc ul { list-style: none; margin: 0; padding: 0; }
+  .toc ul ul { margin-left: 18px; border-left: 1px dashed #d5d0c7; padding-left: 6px; }
+  .toc li { margin: 0; }
+  .toc li.toc-parent { position: relative; }
+  .toc a { color: #1553a3; text-decoration: none; display: block; padding: 2px 4px;
+           border-radius: 3px; line-height: 1.5; }
+  .toc a:hover { color: #f37435; background: #f5f2ea; text-decoration: none; }
+  .toc a.toc-active { color: #f37435; background: #f5f2ea; }
+  .toc ul ul a { color: #2c5f96; }
+  .toc ul ul ul a { color: #4a6b8c; }
+  .toc .toc-toggle { display: inline-block; width: 18px; height: 18px; text-align: center;
+                     cursor: pointer; color: #8a8478; font-size: 12px; line-height: 18px;
+                     user-select: none; flex: 0 0 auto; }
+  .toc .toc-row { display: flex; align-items: flex-start; }
+  .toc .toc-row > a { flex: 1 1 auto; }
+  .toc .toc-ac { display: none; }
+  .toc .toc-ac.open { display: block; }
+
+  .content { background: #fff; border: 1px solid #dbdbdb; padding: 20px; }
+  @media (min-width: 640px) { .content { padding: 32px; } }
+  @media (min-width: 768px) { .content { padding: 48px; } }
+
+  .prose h1 { font-size: 22px; margin: 0 0 14px; }
+  .prose h2 { font-size: 19px; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 32px; margin-bottom: 12px;
+              padding-bottom: 6px; border-bottom: 2px solid #f37435; }
+  @media (min-width: 640px) { .prose h2 { font-size: 26px; margin-top: 44px; margin-bottom: 16px; } }
+  .prose h3 { font-size: 15px; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .02em; color: #1f2430; margin-top: 24px; margin-bottom: 8px; }
+  @media (min-width: 640px) { .prose h3 { font-size: 19px; margin-top: 32px; margin-bottom: 12px; } }
+  .prose h4 { font-size: 13px; font-weight: 600; color: #585858;
+              margin-top: 16px; margin-bottom: 6px; }
+  @media (min-width: 640px) { .prose h4 { font-size: 16px; margin-top: 24px; margin-bottom: 8px; } }
+  .prose p { font-size: 14px; line-height: 1.6; color: #272727; margin-bottom: 12px; }
+  @media (min-width: 640px) { .prose p { font-size: 15px; } }
+  .prose ul, .prose ol { font-size: 14px; line-height: 1.6; color: #272727;
+                         margin-bottom: 16px; padding-left: 20px; }
+  @media (min-width: 640px) { .prose ul, .prose ol { font-size: 15px; } }
+  .prose li { margin-bottom: 4px; }
+  .prose a { color: #1553a3; font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+  .prose a:hover { color: #f37435; }
+  .prose table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11px; }
+  @media (min-width: 640px) { .prose table { font-size: 13px; } }
+  @media (max-width: 640px) {
+    .prose table { font-size: 10px; overflow-wrap: break-word; word-break: break-word; line-height: 1.3; }
+    .prose td:first-child, .prose th:first-child { min-width: 88px; }
+  }
+  .prose th { background: #101418; color: #fff; font-weight: 600; text-transform: uppercase;
+              letter-spacing: .05em; text-align: left; padding: 6px 8px; border: 1px solid #101418;
+              font-size: 9px; }
+  @media (min-width: 640px) { .prose th { padding: 10px 12px; font-size: 12px; } }
+  .prose td { border: 1px solid #dbdbdb; padding: 6px 8px; color: #272727; vertical-align: top; }
+  @media (min-width: 640px) { .prose td { padding: 8px 12px; } }
+  .prose tr:nth-child(even) td { background: #f1f1ea; }
+  .prose code { font-family: Consolas, 'Courier New', monospace; background: #efe9de;
+                color: #1553a3; padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+  .prose pre { background: #101418; color: #d9dce1; padding: 14px 16px; border-radius: 8px;
+               overflow-x: auto; margin-bottom: 16px; font-size: 12.5px; line-height: 1.5; }
+  .prose pre code { background: transparent; color: inherit; padding: 0; border-radius: 0; }
+  .prose hr { border: none; border-top: 2px solid #e2dbd3; margin: 40px 0; }
+  .prose img, .prose .dimg { max-width: 100%; margin: 16px auto; display: block; }
+  .prose blockquote { border-left: 4px solid #f37435; padding: 10px 12px; margin: 16px 0;
+                      background: #f1f1ea; font-style: italic; color: #585858; font-size: 14px; }
+  @media (min-width: 640px) { .prose blockquote { padding: 12px 16px; font-size: 15px; } }
+
+  .icon { display: inline-block; width: 20px; height: 20px; vertical-align: text-bottom; }
+
+  .tabs .dl { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .dl-btn { display: inline-block; padding: 2px 9px; font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+            color: #101418; background: #f37435; border: 1px solid #f37435; border-radius: 3px;
+            cursor: pointer; line-height: 1.5; text-decoration: none; }
+  @media (min-width: 640px) { .dl-btn { font-size: 10px; padding: 3px 12px; } }
+  .dl-btn:hover { background: #fff; border-color: #fff; }
+  .dl-btn.alt { background: transparent; color: #f37435; }
+  .dl-btn.alt:hover { color: #101418; background: #101418; border-color: #101418; }
+  @media print { .dl, .dl-btn { display: none !important; } }
+  .btn { display: inline-block; font-family: 'Segoe UI', Arial, sans-serif;
+         font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+         padding: 8px 20px; border: 2px solid transparent; cursor: pointer;
+         text-align: center; text-decoration: none; }
+  @media (min-width: 640px) { .btn { font-size: 13px; letter-spacing: 2px; padding: 10px 30px; } }
+  .btn:hover { opacity: .9; }
+  .btn-orange { background: #f37435; color: #fff; border-color: #f37435; }
+  .btn-black { background: #1f2430; color: #fff; border-color: #1f2430; }
+  .btn-rounded { border-radius: 50px; letter-spacing: normal; }
+
+  .badge { display: inline-block; font-size: 9px; font-weight: 600; text-transform: uppercase;
+           letter-spacing: .03em; padding: 2px 7px; border-radius: 3px; }
+  @media (min-width: 640px) { .badge { font-size: 11px; letter-spacing: .05em; padding: 3px 10px; } }
+  .badge-orange { background: #f37435; color: #fff; }
+  .badge-green { background: #4b8765; color: #fff; }
+  .badge-red { background: #ca3742; color: #fff; }
+  .badge-beige { background: #aa957f; color: #000; }
+  .badge-black { background: #1f2430; color: #fff; }
+  .badge-teal { background: #57a4b5; color: #fff; }
+  .badge-violet { background: #6e4d8b; color: #fff; }
+
+  .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
+            letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
+  @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  
+  <div id="header" class="header">
+    <div class="header-brand">
+      <svg viewBox="0 0 48 48" width="36" height="36" fill="none">
+        <rect x="2" y="2" width="44" height="44" rx="10" fill="#f37435"/>
+        <rect x="10" y="10" width="28" height="28" rx="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="24" cy="24" r="7" stroke="white" stroke-width="2.5" fill="none"/>
+        <circle cx="36" cy="13" r="3" fill="white"/>
+      </svg>
+      <span class="brand">WClock5</span>
+    </div>
+    <h1 id="page-title">Эпик — Отрисовка графиков: производительность и ловушки</h1>
+    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
+    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">🚧</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.2</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-09-16</span></span></div>
+  </div>
+  
+
+  
+  <nav class="tabs" aria-label="Навигация по разделам">
+    <a href="#kontekst">Контекст</a>
+    <a href="#koren-problemy">Корень проблемы</a>
+    <a href="#zadachi-epika">Задачи эпика</a>
+    <a href="#pravila-otrisovki-spravochnik-dlya-novykh-grafikov">Правила отрисовки (…</a>
+    <a href="#chisla-do-posle-provereno-31-08-2026">Числа до/после (про…</a>
+    <a href="#primenenie">Применение</a>
+    <a href="#svyazi">Связи</a>
+    <a href="#list-izmeneniy">Лист изменений</a>
+    <span class="dl" data-dl="EPIC_chart_rendering">
+      <button type="button" class="dl-btn" onclick="downloadPdf()">PDF</button>
+      <button type="button" class="dl-btn alt" onclick="downloadDoc()">DOCX</button>
+    </span>
+  </nav>
+  
+
+  
+
+  <div id="content" class="content prose">
+<p>Правила и проверенные решения по отрисовке инвестиционных графиков Chart.js<br />
+(портфель/тикеры) в wclock5 и hft: не допускать «зависания» рендера,<br />
+отсутствия линий и «застрявшего» обновления. Собран опыт из инцидента<br />
+31.08.2026.</p>
+<h2 id="kontekst">Контекст</h2>
+<p>31.08.2026 <code>updateInvestPlot()</code> на классике (wclock5, порт 10405) выдавал<br />
+в консоли <code>[InvestPlot] Timeout 30s, isUpdating reset</code>, затем на каждый клик<br />
+<code>Update already in progress, skipping</code>, и портфели Тинькофф/Финам не<br />
+отрисовывались. Причина — не логика/данные, а <strong>взрыв числа точек</strong> при<br />
+сочетании мелкого интервала и длинного периода. Разбор и фикс применимы к<br />
+любому Chart.js-графику.</p>
+<h2 id="koren-problemy">Корень проблемы</h2>
+<ul>
+<li><code>aggregateData()</code> заполняет пропуски (<code>gap &gt; intervalMs*1.5</code>) интерполяцией<br />
+  до полного минутного разрешения по ВСЕМУ периоду.</li>
+<li>Клик по кнопке интервала <code>1M</code> (minute) при периоде по умолчанию <code>-35 day</code><br />
+  → 49 663 точки для портфеля + по ~49 000 точек на каждый тикер<br />
+  (<code>/api/invest/tickers</code> отдавал 9 MB).</li>
+<li>Итог ~200 000 точек в Chart.js блокирует главный поток на десятки секунд<br />
+  → срабатывает 30-секундный таймер-предохранитель, флаг <code>isUpdating</code> до его<br />
+  сброса остаётся <code>true</code>, все последующие клики отбрасываются как<br />
+  «in progress». Портфели не рисуются.</li>
+</ul>
+<h2 id="zadachi-epika">Задачи эпика</h2>
+<table>
+<thead>
+<tr>
+<th>Код</th>
+<th>Задача</th>
+<th>Результат</th>
+<th>Статус</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GRD-01</td>
+<td>Кап точек в <code>aggregateData</code></td>
+<td><code>MAX_AGG_POINTS = 3000</code>, прореживание с сохранением последней точки</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-02</td>
+<td>Кап тикеров на бэкенде</td>
+<td><code>MAX_TICKER_POINTS = 3000</code> (<code>app.py</code> классика + <code>hft/app.py</code>)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-03</td>
+<td>Проверка «застрявшего» <code>isUpdating</code></td>
+<td>Нормальные комбо под капом не блокируют основной поток</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-04</td>
+<td>Документация правил отрисовки</td>
+<td>Раздел «Правила» ниже</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-05</td>
+<td>Порт фикса в hft</td>
+<td><code>invest_chart_helpers.js</code> + <code>hft/app.py</code> + cache-bust <code>.4</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-06</td>
+<td>Плагин apiErrorPoints</td>
+<td>Замена вертикальных красных пунктиров на точки на верхней оси X; ховер-тултип (дата + % скачка); хук afterEvent + hit-test radius 7px; destroy чистит тултип</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-07</td>
+<td>Метки периода для XAU</td>
+<td>PeriodLabelsPlugin: <code>s.fmt</code> для кастомного формата; XAU fmt <code>(v/1000).toFixed(3)</code>; метки в loadTickersToChart из first/last valid price</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-08</td>
+<td>Линия 100% полупрозрачная белая</td>
+<td><code>rgba(255,255,255,0.85)</code>, <code>borderDash [8,6]</code>; в обоих местах (создание и обновление)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+</tbody>
+</table>
+<h2 id="pravila-otrisovki-spravochnik-dlya-novykh-grafikov">Правила отрисовки (справочник для новых графиков)</h2>
+<ol>
+<li><strong>Бюджет точек</strong> — не отдавать в Chart.js больше ~3000 точек на серию.<br />
+   Кап на клиенте (<code>MAX_AGG_POINTS</code>) и на сервере (<code>MAX_TICKER_POINTS</code>).<br />
+   Прореживание равномерное (<code>step</code> по индексам), <strong>последняя точка всегда<br />
+   сохраняется</strong> (иначе «запаздывает»/обрезается конец линии).</li>
+<li><strong>Главный поток не блокируем</strong> — тяжёлый рендер (50к+ точек) вешает<br />
+   вкладку и роняет таймеры. Если нужна высокая детализация — даунсэмпл до<br />
+   объёма, рендерящегося за доли секунды.</li>
+<li><strong><code>isUpdating</code> — одиночный замок</strong> — до сброса флага в <code>finally</code>/<code>.done</code>/<br />
+<code>.fail</code>/<code>.always</code> любые новые вызовы отбрасываются «in progress».<br />
+   Рендер должен завершаться существенно быстрее тайм-аута-предохранителя,<br />
+   иначе самый первый медленный вызов «убивает» график до перезагрузки.</li>
+<li><strong>Масштаб запроса = масштабу показа</strong> — сервер режется по <code>bucket_size</code><br />
+   интервала; но при <code>minute × -35 day</code> это всё ещё 49к точек. Дополнительный<br />
+   кап обязателен для узких интервалов на длинных периодах.</li>
+<li><strong>Видимость серий</strong> — портфели Тинькофф/Финам дефолтно <code>hidden:true</code>,<br />
+   показываются кликом по легенде (состояние в cookie <code>wclock_invest_legend</code><br />
+   / localStorage <code>hft_chart_legend</code>). Если «линия не видна» — сперва проверить<br />
+   рендер (нет ли тайм-аута), затем легенду.</li>
+<li><strong>Диагностика</strong> — при «график не отображается» смотреть в первую очередь<br />
+    Console: <code>Timeout 30s</code> + <code>Update already in progress</code> = блокажа рендера<br />
+    (не логика). Симуляция пайплайна в node (<code>aggregateData</code> → <code>validateGraphData</code>)<br />
+    позволяет отделить «данные плохие» от «рендер виснет» без браузера.</li>
+<li><strong>Авто-ось схлопывается</strong> — нормированным рядам (<code>%</code>) не давать auto-ось<br />
+   (<code>y_pct</code> без min/max): при малом разбросе (портфель двинулся на ~0.2%)<br />
+   Chart.js схлопывает диапазон, и линии <code>Tinkoff,%</code>/<code>Finam,%</code> выглядят<br />
+   горизонтальными. Задавать явный симметричный диапазон с запасом<br />
+   (<code>min: -bound, max: +bound</code>, floor 0.2), как у <code>₽</code>-осей с <code>portfolioPadding</code>.</li>
+<li><strong><code>₽</code> vs <code>%</code> отладка</strong> — если «горизонтальными» становятся только<br />
+<code>%</code>-линии, а <code>₽</code>-линии (абсолют, с явным min/max) в порядке → проблема<br />
+   в авто-шкале нормированной оси, а не в данных.</li>
+</ol>
+<h2 id="chisla-do-posle-provereno-31-08-2026">Числа до/после (проверено 31.08.2026)</h2>
+<table>
+<thead>
+<tr>
+<th>combo</th>
+<th>до (точек)</th>
+<th>после (точек)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>minute / -35 day (портфель)</td>
+<td>49 663</td>
+<td>2 922</td>
+</tr>
+<tr>
+<td>fivemin / -35 day</td>
+<td>9 933</td>
+<td>2 484</td>
+</tr>
+<tr>
+<td>hour / -35 day</td>
+<td>828</td>
+<td>828 (без изменений)</td>
+</tr>
+<tr>
+<td>день / -35 day</td>
+<td>36</td>
+<td>36</td>
+</tr>
+<tr>
+<td>тикеры minute / -35 day</td>
+<td>~49 000 (9 MB)</td>
+<td>~2 900 (~0.9 MB)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="primenenie">Применение</h2>
+<ul>
+<li><strong>wclock5</strong> классика <code>static/js/invest_chart.js</code> + <code>invest_chart_helpers.js</code></li>
+<li><strong>hft</strong> <code>hft/static/js/invest_chart.js</code> + <code>invest_chart_helpers.js</code></li>
+<li>Новые графики (погода, часы, отчёты) — применять п.1–3 бюджета точек.</li>
+<li>Инвест-модуль фреймворка — см. <code>PROC_graph_approaches.md</code>.</li>
+<li>Плагины Chart.js: <code>chart_plugins.js</code> (apiErrorPoints, PeriodLabelsPlugin)<br />
+  — подключаются через <code>initChartPlugin</code> в <code>invest_chart.js:920–929</code>.</li>
+</ul>
+<h2 id="svyazi">Связи</h2>
+<ul>
+<li>Конвенции: <code>wclock5/docs/02_project/conventions.md</code> §3 «Графики»</li>
+<li>Код: <code>wclock5/static/js/invest_chart_helpers.js</code>, <code>wclock5/app.py</code>,<br />
+<code>wclock5/hft/static/js/invest_chart_helpers.js</code>, <code>wclock5/hft/app.py</code></li>
+<li>Беклог: <code>wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md</code> (CHRT-FIX)</li>
+<li>Фреймворк: <code>01.lab/02_project/PROC_graph_approaches.md</code></li>
+</ul>
+<h2 id="list-izmeneniy">Лист изменений</h2>
+<ul>
+<li><strong>0.2</strong> · 2026-09-16 — GRD-06 (apiErrorPoints: красные точки + ховер-тултип<br />
+  вместо вертикальных пунктиров), GRD-07 (XAU метки периода + s.fmt в<br />
+  PeriodLabelsPlugin), GRD-08 (линия 100% полупрозрачная белая<br />
+<code>rgba(255,255,255,0.85)</code> + <code>borderDash [8,6]</code>); добавлены ссылки на<br />
+  chart_plugins.js.</li>
+<li><strong>0.1</strong> · 2026-08-31 — создан: разбор инцидента (взрыв точек), правила<br />
+  бюджета точек/замка обновления, GRD-01..05, числа до/после.</li>
+</ul></div>
+
+  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+</div>
+
+<script>
+(function () {
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tabs a'));
+  var h2s = Array.prototype.slice.call(document.querySelectorAll('h2[id]'));
+  function setActive(id) {
+    tabs.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+    });
+  }
+  if ('IntersectionObserver' in window && h2s.length) {
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (e.isIntersecting) {
+          setActive(e.target.id);
+          if (location.hash !== '#' + e.target.id) {
+            history.replaceState(null, '', '#' + e.target.id);
+          }
+        }
+      });
+    }, { rootMargin: '-15% 0px -75% 0px' });
+    h2s.forEach(function (h) { obs.observe(h); });
+  }
+  tabs.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var t = document.getElementById(id);
+      if (!t) { return; }
+      e.preventDefault();
+      t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setActive(id);
+      history.pushState(null, '', '#' + id);
+    });
+  });
+})();
+</script>
+
+
+<script>
+function dlFileName() {
+  var el = document.querySelector('.dl');
+  if (el && el.getAttribute('data-dl')) return el.getAttribute('data-dl');
+  return 'EPIC_chart_rendering';
+}
+function downloadPdf() { window.print(); }
+function downloadDoc() {
+  var content = document.getElementById('content').innerHTML;
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Эпик — Отрисовка графиков: производительность и ловушки</title></head><body>' + content + '</body></html>';
+  var blob = new Blob(['﻿', html], { type: 'application/msword' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = dlFileName() + '.doc';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
+}
+</script>
+</body>
+</html>

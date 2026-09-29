@@ -14,6 +14,26 @@ window.sendBatteryLevel = function sendBatteryLevel() {
 
     navigator.getBattery().then(battery => {
         const level = Math.round(battery.level * 100);
+        // Write через медиатор: единый POST /api/data_mediator (w-слой),
+        // сервер сам решает apply/skip по write_interval_battery (60с).
+        const pm = window.PanelMediator;
+        if (pm && typeof pm.write === 'function' && pm.healthy()) {
+            pm.write('battery', { device_id: deviceId, value: level })
+                .done(() => dfd.resolve())
+                .fail(() => {
+                    // Медиатор не подтвердил запись — fallback на прямой POST.
+                    $.ajax({
+                        url: '/api/battery',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({ device_id_local: deviceId, value: level }),
+                    }).done(() => dfd.resolve()).fail(xhr => {
+                        console.warn('Battery send error:', xhr.responseText || xhr.statusText);
+                        dfd.reject(xhr);
+                    });
+                });
+            return;
+        }
         $.ajax({
             url: '/api/battery',
             method: 'POST',
@@ -35,15 +55,8 @@ window.sendBatteryLevel = function sendBatteryLevel() {
  * Renders battery chart
  * Called on switch to battery chart view
  */
-function batteryLevel() {
-    const deviceId = getOrCreateDeviceId();
-        const renderChart = (level) => {
-        const currentInterval = window.currentInterval || 'hour';
-        const batteryPeriod = getSetting('battery_chart_period', '-7 day');
-        
-        $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}&period=${encodeURIComponent(batteryPeriod)}`)
-                .done(dataArray => {
-                    const labels = [];
+function drawBatteryChart(dataArray) {
+        const labels = [];
                     const values = [];
                     const timestamps = [];
 
@@ -215,25 +228,43 @@ function batteryLevel() {
                         }
                     });
 
-                })
-                .fail(xhr => {
-                    console.warn(`⚠️ Ошибка загрузки истории: ${xhr.responseText || xhr.statusText}`);
-                });
-    };
+                // --- конец drawBatteryChart(dataArray) ---
+}
 
-    // Get battery level for chart render
-    if (navigator.getBattery) {
-        navigator.getBattery().then(battery => {
-            const level = Math.round(battery.level * 100);
-            renderChart(level);
-        }).catch(err => {
-            console.warn("navigator.getBattery unavailable:", err);
-            renderChart(50);
-        });
-    } else {
-        renderChart(50);
+// Рендер из медиаторной секции battery.history (массив [{datetime, battery_level}]),
+// тот же shape, что и GET /api/battery → тот же drawBatteryChart.
+window.renderBatteryHistory = function (payload) {
+    if (!Array.isArray(payload)) return;
+    window.__batteryHistoryCache = { data: payload, at: Date.now() };
+    drawBatteryChart(payload);
+};
+
+// Поиск свежей истории батареи в медиаторе (без GET).
+function batteryHistoryFromMediator() {
+    const pm = window.PanelMediator;
+    if (pm && typeof pm.healthy === 'function' && pm.healthy() &&
+            typeof pm.getLatest === 'function') {
+        const p = pm.getLatest('battery.history');
+        if (Array.isArray(p)) return p;
     }
-    
+    return null;
+}
+
+function batteryLevel() {
+    const fromMed = batteryHistoryFromMediator();
+    if (fromMed) {
+        drawBatteryChart(fromMed);
+    } else {
+        const deviceId = getOrCreateDeviceId();
+        const currentInterval = window.currentInterval || 'hour';
+        const batteryPeriod = getSetting('battery_chart_period', '-7 day');
+        $.getJSON(`/api/battery?device_id_local=${deviceId}&interval=${currentInterval}&period=${encodeURIComponent(batteryPeriod)}`)
+            .done(dataArray => drawBatteryChart(dataArray))
+            .fail(xhr => {
+                console.warn(`⚠️ Ошибка загрузки истории: ${xhr.responseText || xhr.statusText}`);
+            });
+    }
+
     if (typeof updateToggleButtonText === 'function') updateToggleButtonText();
 }
 
@@ -281,6 +312,24 @@ window.initBatteryUI = function initBatteryUI() {
 window.updateBatteryChart = function updateBatteryChart() {
     if (!window.batteryChart) {
         batteryLevel();
+        return;
+    }
+
+    const fromMed = batteryHistoryFromMediator();
+    if (fromMed) {
+        const labels = [];
+        const values = [];
+        fromMed.reverse();
+        fromMed.forEach(e => {
+            const dt = new Date(e.datetime || e.timestamp);
+            labels.push(isNaN(dt) ? 'N/A' : dt.toLocaleDateString([], { day: '2-digit' }));
+            values.push(Number(e.battery_level ?? 0));
+        });
+
+        const chart = window.batteryChart;
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = values;
+        chart.update('none');
         return;
     }
 

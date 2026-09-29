@@ -327,7 +327,7 @@ window.InvestHistoryCache = (function() {
     var INTERVAL_MS = { minute: 60000, fivemin: 300000, twentymin: 1200000, hour: 3600000, sixhour: 21600000, day: 86400000 };
 
     var _entries = {};  // key -> { data, latestEpoch, loadedAt }
-    var _pending = null; // { promise, key }
+    var _inflight = {}; // key -> promise (дедуп По КЛЮЧУ: два full одного ключа невозможны)
     var _med = null;    // { key, data, latestEpoch, at } — свежее full-полно из медиатора
 
     function cacheKey(interval, apiPeriod, startTs, endTs) {
@@ -438,7 +438,7 @@ window.InvestHistoryCache = (function() {
             return Promise.resolve(_med.data);
         }
 
-        if (_pending && _pending.key === key) return _pending.promise;
+        if (_inflight[key]) return _inflight[key];
 
         evictIfNeeded();
 
@@ -448,9 +448,9 @@ window.InvestHistoryCache = (function() {
                 .then(function(r) {
                     var e = { data: r.data, latestEpoch: r.latestEpoch, loadedAt: Date.now() };
                     _entries[key] = e;
-                    _pending = null; return e.data;
+                    delete _inflight[key]; return e.data;
                 })
-                .catch(function(e) { _pending = null; throw e; });
+                .catch(function(e) { delete _inflight[key]; throw e; });
         } else {
             promise = doDelta(interval, apiPeriod, startTs, endTs, entry.latestEpoch)
                 .then(function(r) {
@@ -459,22 +459,22 @@ window.InvestHistoryCache = (function() {
                         return doFull(interval, apiPeriod, startTs, endTs).then(function(r2) {
                             var e2 = { data: r2.data, latestEpoch: r2.latestEpoch, loadedAt: Date.now() };
                             _entries[key] = e2;
-                            _pending = null; return e2.data;
+                            delete _inflight[key]; return e2.data;
                         });
                     }
                     entry.data = mergeDelta(entry.data, r.delta, interval);
                     if (r.serverLatest != null && r.serverLatest > entry.latestEpoch) entry.latestEpoch = r.serverLatest;
                     entry.loadedAt = Date.now();
-                    _pending = null;
+                    delete _inflight[key];
                     return entry.data;
                 })
-                .catch(function(e) { _pending = null; throw e; });
+                .catch(function(e) { delete _inflight[key]; throw e; });
         }
-        _pending = { promise: promise, key: key };
+        _inflight[key] = promise;
         return promise;
     }
 
-    function invalidate() { _entries = {}; _pending = null; }
+    function invalidate() { _entries = {}; _inflight = {}; }
 
     // Полный payload из медиатора (секция invest.history): кладём в _med
     // и в обычный кэш — get() ниже отдаёт его без GET, пока медиатор свежий.
@@ -494,7 +494,6 @@ window.InvestHistoryCache = (function() {
         }
         _med = { key: key, data: data, latestEpoch: maxE, at: Date.now() };
         _entries[key] = { data: data, latestEpoch: maxE, loadedAt: Date.now() };
-        _pending = null;
         return data;
     }
 
@@ -522,7 +521,6 @@ window.InvestHistoryCache = (function() {
         if (maxE > entry.latestEpoch) entry.latestEpoch = maxE;   // монотонно
         entry.loadedAt = Date.now();
         _med = { key: key, data: merged, latestEpoch: entry.latestEpoch, at: Date.now() };
-        _pending = null;
         return merged;
     }
 

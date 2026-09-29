@@ -28,6 +28,14 @@ const PANEL_CONFIG_DESKTOP = {
         "width": "448px",
         "height": "135px"
     },
+    "invest_banner_total": {
+        "top": "326px",
+        "left": "5px",
+        "right": "",
+        "bottom": "",
+        "width": "448px",
+        "height": "64px"
+    },
     "weather_panel": {
         "top": "193px",
         "left": "579px",
@@ -115,6 +123,22 @@ const PANEL_CONFIG_DESKTOP = {
         "bottom": "",
         "width": "400px",
         "height": "60px"
+    },
+    "browser_fullscreen": {
+        "top": "5vh",
+        "left": "1vw",
+        "right": "",
+        "bottom": "",
+        "width": "22vw",
+        "height": "22vh"
+    },
+    "browser_reload": {
+        "top": "5vh",
+        "left": "22vw",
+        "right": "",
+        "bottom": "",
+        "width": "22vw",
+        "height": "22vh"
     }
 };
 
@@ -142,6 +166,14 @@ const PANEL_CONFIG_TABLET = {
         "bottom": "",
         "width": "318px",
         "height": "235px"
+    },
+    "invest_banner_total": {
+        "top": "400px",
+        "left": "5px",
+        "right": "",
+        "bottom": "",
+        "width": "318px",
+        "height": "64px"
     },
     "weather_panel": {
         "top": "142px",
@@ -238,5 +270,21 @@ const PANEL_CONFIG_TABLET = {
         "bottom": "",
         "width": "250px",
         "height": "60px"
+    },
+    "browser_fullscreen": {
+        "top": "5vh",
+        "left": "1vw",
+        "right": "",
+        "bottom": "",
+        "width": "22vw",
+        "height": "22vh"
+    },
+    "browser_reload": {
+        "top": "5vh",
+        "left": "22vw",
+        "right": "",
+        "bottom": "",
+        "width": "22vw",
+        "height": "22vh"
     }
 };

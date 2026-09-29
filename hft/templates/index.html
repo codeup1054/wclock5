@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HFT Monitor · startupassist</title>
+<link rel="stylesheet" href="/static/css/hft.css?v=20260831.7">
+</head>
+<body>
+<div id="login-screen" class="login-screen hidden">
+  <form id="login-form" class="login-card" autocomplete="off">
+    <h1>HFT <span>Monitor</span></h1>
+    <p class="login-sub">Мониторинг стратегии · CRM</p>
+    <label>Логин
+      <input id="login-username" name="username" autocomplete="username" required>
+    </label>
+    <label>Пароль
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <div id="login-error" class="login-error"></div>
+    <button type="submit">Войти</button>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <header class="topbar">
+    <div class="brand">HFT<span>.Monitor</span></div>
+    <div class="pm-bar">
+      <a href="/analytics" title="Аналитика рынка — пары, спреды, подбор параметров">Аналитика</a>
+      <button id="pm-report-btn" title="Отчёт">Отчёт</button>
+      <button id="pm-edit-btn" title="Режим расстановки панелей">✥</button>
+      <button id="pm-panels-btn" title="Настройки панелей">▦</button>
+      <button id="pm-reset-btn" class="btn danger" title="Сбросить раскладку">Сбросить</button>
+    </div>
+    <div class="userbox">
+      <span id="user-info"></span>
+      <button id="logout-btn" title="Выйти">Выход</button>
+    </div>
+  </header>
+  <main id="stage" class="main"></main>
+</div>
+
+<template id="tpl-login-footer"></template>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-crosshair@2.0.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/suncalc@1.9.0/suncalc.min.js"></script>
+<script src="/static/js/invest_chart_helpers.js?v=20260831.7"></script>
+<script src="/static/js/chart_plugins.js?v=20260831.7"></script>
+<script src="/static/js/invest_chart.js?v=20260831.7"></script>
+<script src="/static/js/hft_banner.js?v=20260831.7"></script>
+<script src="/static/js/hft_weather.js?v=20260831.7"></script>
+<script src="/static/js/hft_clock.js?v=20260831.7"></script>
+<script src="/static/js/panels.js?v=20260831.7"></script>
+<script src="/static/js/hft_panel_settings.js?v=20260831.7"></script>
+<script src="/static/js/report.js?v=20260831.7"></script>
+<script src="/static/js/hft.js?v=20260831.7"></script>
+</body>
+</html>
