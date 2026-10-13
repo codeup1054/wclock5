@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Стакан — hft.startupassist.ru</title>
+<link rel="stylesheet" href="/static/css/hft.css">
+<style>
+  .ob-wrap { padding: 16px; max-width: 1500px; margin: 0 auto; }
+  .ob-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .ob-head h2 { margin: 0; }
+  .ob-head a { font-size: 13px; }
+  .ob-stats { display: flex; gap: 20px; flex-wrap: wrap; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+  .ob-stat { display: flex; flex-direction: column; min-width: 80px; }
+  .ob-stat .l { font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .ob-stat .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ob-status { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .ob-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .ob-dot.ok { background: var(--pos); }
+  .ob-dot.warn { background: var(--warn); }
+  .ob-dot.bad { background: var(--neg); }
+  .ob-grid { display: grid; grid-template-columns: minmax(440px,1fr) minmax(440px,1fr); gap: 12px; }
+  @media (max-width: 1000px) { .ob-grid { grid-template-columns: 1fr; } }
+  .ob-panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; overflow: auto; }
+  .ob-panel h3 { margin: 0 0 8px; font-size: 14px; }
+  .ob-panel h3 .muted { font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .ob-book { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ob-side-title { font-size: 12px; text-transform: uppercase; margin-bottom: 6px; font-weight: 600; }
+  .ob-bid { color: var(--pos); }
+  .ob-ask { color: var(--neg); }
+  .ob-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .ob-table th, .ob-table td { padding: 3px 8px; text-align: right; white-space: nowrap; }
+  .ob-table th { color: var(--muted); font-size: 11px; text-transform: uppercase; font-weight: 500; border-bottom: 1px solid var(--line); }
+  .ob-table td { font-size: 13px; }
+  .ob-bar-cell { position: relative; min-width: 110px; }
+  .ob-bar { position: absolute; left: 2px; top: 3px; bottom: 3px; border-radius: 3px; opacity: .22; }
+  .ob-bar.bid { background: var(--pos); }
+  .ob-bar.ask { background: var(--neg); }
+  .ob-bar-val { position: relative; }
+  .ob-spark { width: 100%; display: block; margin-bottom: 10px; background: var(--bg2);
+    border: 1px solid var(--line); border-radius: 6px; }
+  .ob-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ob-chart-head h3 { margin: 0; }
+  .ob-chart-ctl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .interval-group { display: flex; gap: 4px; flex-wrap: wrap; }
+  .interval-btn { background: var(--bg2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .interval-btn:hover { color: var(--txt); }
+  .interval-btn.active { background: var(--panel2); color: var(--txt); border-color: var(--acc); }
+  .period-trigger { background: var(--bg2); color: var(--acc); border: 1px solid var(--acc);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .period-range-modal { display: none; position: fixed; z-index: 10001; min-width: 300px;
+    background: var(--panel); border: 1px solid var(--acc); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,.55); }
+  .period-range-modal-header { display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px; border-bottom: 1px solid var(--acc); color: var(--acc); font-weight: 700; cursor: move; user-select: none; }
+  .period-range-close { background: none; border: none; color: var(--txt); font-size: 1.3rem; cursor: pointer; line-height: 1; }
+  .period-range-close:hover { color: var(--acc); }
+  .period-range-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .period-range-row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .period-range-row span { color: var(--muted); font-size: .85rem; }
+  .period-range-input { background: var(--bg2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 5px; font-size: .8rem; flex: 1; min-width: 128px; }
+  .period-range-input:disabled { opacity: .4; }
+  .period-range-live-label { display: inline-flex; align-items: center; gap: 4px; color: var(--muted);
+    font-size: .85rem; white-space: nowrap; cursor: pointer; user-select: none; }
+  .period-range-live-label input { accent-color: var(--acc); cursor: pointer; }
+  .period-range-apply { background: var(--acc); color: #06070d; border: none; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-weight: 700; }
+  .period-range-apply:hover { filter: brightness(1.1); }
+  .panel-view-select { background: var(--bg2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 4px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+  .panel-view-select:focus { outline: none; border-color: var(--acc); }
+  .ob-candles { width: 100%; display: block; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; cursor: crosshair; }
+  .ob-tabs { display: flex; gap: 6px; margin: 12px 0 0; border-bottom: 1px solid var(--line); }
+  .ob-tab { background: transparent; color: var(--muted); border: 1px solid transparent; border-bottom: none;
+    padding: 8px 16px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 13px; font-weight: 600; }
+  .ob-tab:hover { color: var(--txt); }
+  .ob-tab.active { background: var(--panel2); color: var(--txt); border-color: var(--line); }
+  .ob-tabpane { padding-top: 12px; }
+  .ob-history td { font-size: 12px; }
+  .ob-foot { padding: 10px 16px 16px; font-size: 12px; color: var(--muted); }
+
+  /* панель настроек ▦ */
+  .ob-icon-btn { margin-left: auto; background: var(--bg2); color: var(--txt); border: 1px solid var(--line);
+    border-radius: 8px; width: 34px; height: 34px; font-size: 16px; cursor: pointer; line-height: 1; }
+  .ob-icon-btn:hover { border-color: var(--acc); color: var(--acc); }
+
+  /* Сводка */
+  .ob-summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .ob-summary-card { background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .ob-summary-label { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+  .ob-summary-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Аналитика */
+  .ob-analytics-host { margin-top: 8px; }
+  .ob-analytics-frame { width: 100%; height: 70vh; min-height: 480px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg2); }
+
+  /* Чат MCP (заглушка) */
+  .ob-chat-placeholder { padding: 24px 8px; text-align: center; color: var(--muted); }
+  .ob-chat-placeholder code { color: var(--acc); }
+
+  /* настройки панелей внутри модалки ▦ */
+  .panels-modal-content .ob-settings { gap: 8px; flex-wrap: wrap; }
+  .panels-modal-content .ob-settings-label { font-size: 12px; color: var(--muted); }
+  .panels-modal-content .ob-settings-val { flex: 0 0 52px; text-align: right; font-size: 12px; color: var(--txt); }
+  .panels-modal-content .ob-settings-refresh { display: inline-flex; align-items: center; gap: 6px; }
+  .panels-modal-content .ob-settings select,
+  .panels-modal-content .chart-flag-toggle select { background: var(--panel2); color: var(--txt);
+    border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; font-size: 12px; }
+  .panels-modal-content .chart-flags-settings { gap: 14px; flex-wrap: wrap; }
+  .panels-modal-content .chart-flag-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--txt); }
+  .panels-modal-content .summary-settings { flex-wrap: wrap; gap: 6px 12px; }
+  .panels-modal-content .summary-metric-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--txt); }
+  .panels-modal-content .summary-metric-toggle input { accent-color: var(--acc); }
+  .switch.switch-sm { width: 30px; height: 16px; }
+  .switch.switch-sm .slider::before { width: 12px; height: 12px; }
+  .switch.switch-sm input:checked + .slider::before { transform: translateX(14px); }
+</style>
+</head>
+<body>
+
+<div id="o-login-screen" class="login-screen">
+  <form id="o-login-form" class="login-card" autocomplete="off">
+    <h1>HFT <span>Order Book</span></h1>
+    <p class="login-sub">Стакан · hft.startupassist.ru</p>
+    <label>Логин
+      <input id="o-login-username" name="username" autocomplete="username" required>
+    </label>
+    <label>Пароль
+      <input id="o-login-password" name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <div id="o-login-error" class="login-error"></div>
+    <button type="submit">Войти</button>
+  </form>
+</div>
+
+<div id="o-wrap" class="ob-wrap" style="display:none;">
+  <div class="ob-head">
+    <h2>Стакан <span id="o-ticker" class="muted"></span></h2>
+    <a href="/">← к панелям</a>
+    <a href="/analytics">Аналитика</a>
+    <button id="o-panels-btn" class="ob-icon-btn" type="button" title="Настройки панелей">▦</button>
+  </div>
+
+  <div class="ob-stats">
+    <div class="ob-stat"><span class="l">Bid</span><span id="o-best-bid" class="v ob-bid">—</span></div>
+    <div class="ob-stat"><span class="l">Ask</span><span id="o-best-ask" class="v ob-ask">—</span></div>
+    <div class="ob-stat"><span class="l">Mid</span><span id="o-mid" class="v">—</span></div>
+    <div class="ob-stat"><span class="l">Спред</span><span id="o-spread" class="v">—</span></div>
+    <div class="ob-stat"><span class="l">Стакан от</span><span id="o-book-time" class="v" style="font-size:12px;">—</span></div>
+    <div class="ob-status"><span id="o-dot" class="ob-dot"></span><span id="o-status">запуск…</span></div>
+  </div>
+
+  <div class="ob-tabs" id="o-tabs">
+    <button data-tab="book" class="ob-tab active">Текущий стакан</button>
+    <button data-tab="chart" class="ob-tab">График котировок</button>
+    <button data-tab="history" class="ob-tab">История</button>
+    <button data-tab="summary" class="ob-tab">Сводка</button>
+    <button data-tab="analytics" class="ob-tab">Аналитика</button>
+    <button data-tab="chat" class="ob-tab">Чат MCP</button>
+  </div>
+
+  <div id="o-tab-book" class="ob-tabpane">
+    <section class="ob-panel">
+      <h3>Действующие заявки (книга рынка) <span id="o-depth" class="muted"></span></h3>
+      <div class="ob-book">
+        <div>
+          <div class="ob-side-title ob-bid">Биды <span id="o-bid-count" class="muted"></span></div>
+          <table class="ob-table" id="o-bids"><thead><tr><th>Цена</th><th>Лоты</th><th>Накоплено</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div>
+          <div class="ob-side-title ob-ask">Аски <span id="o-ask-count" class="muted"></span></div>
+          <table class="ob-table" id="o-asks"><thead><tr><th>Цена</th><th>Лоты</th><th>Накоплено</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="o-tab-chart" class="ob-tabpane" style="display:none;">
+    <section class="ob-panel ob-chart-panel">
+      <div class="ob-chart-head">
+        <h3>График котировок <span class="muted" id="o-chart-info"></span></h3>
+        <div class="ob-chart-ctl">
+          <div class="interval-group" id="o-chart-type-group"></div>
+          <div class="interval-group" id="o-interval-group"></div>
+          <button class="period-trigger" id="o-period-trigger" type="button" title="Период графика">—</button>
+        </div>
+      </div>
+      <canvas id="o-candles" class="ob-candles" height="360"></canvas>
+    </section>
+  </div>
+
+  <div id="o-tab-history" class="ob-tabpane" style="display:none;">
+    <section class="ob-panel">
+      <h3>История стакана <span class="muted">снапшоты раз в секунду</span></h3>
+      <canvas id="o-spark" class="ob-spark" height="120"></canvas>
+      <table class="ob-table ob-history" id="o-history">
+        <thead><tr><th>Время (UTC)</th><th>Mid</th><th>Спред</th><th>Σ бид</th><th>Σ аск</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div id="o-tab-summary" class="ob-tabpane" style="display:none;">
+    <section class="ob-panel">
+      <h3>Сводка <span class="muted">ключевые метрики стакана</span></h3>
+      <div id="o-summary-grid" class="ob-summary-grid"></div>
+    </section>
+  </div>
+
+  <div id="o-tab-analytics" class="ob-tabpane" style="display:none;">
+    <section class="ob-panel ob-analytics-panel">
+      <h3>Аналитика рынка <span class="muted">/analytics</span></h3>
+      <div id="o-analytics-host" class="ob-analytics-host"></div>
+    </section>
+  </div>
+
+  <div id="o-tab-chat" class="ob-tabpane" style="display:none;">
+    <section class="ob-panel">
+      <h3>Чат MCP <span class="muted">T-Invest MCP</span></h3>
+      <div class="ob-chat-placeholder">
+        <p>ИИ-агент с доступом к T-Invest MCP — в разработке (эпик <code>WWW-01-EPC-02</code>).</p>
+        <p class="muted">Здесь появится чат: котировки, портфель, аналитика и торговые операции через MCP.</p>
+      </div>
+    </section>
+  </div>
+
+  <div class="period-range-modal" id="o-period-modal" style="display:none;">
+    <div class="period-range-modal-header"><span>Период графика</span><button class="period-range-close" type="button">&times;</button></div>
+    <div class="period-range-body">
+      <button class="period-range-apply" id="o-period-apply" type="button">Применить</button>
+      <select class="panel-view-select" id="o-period-preset" title="Быстрый период">
+        <option value="__none__">Быстрый период...</option>
+      </select>
+      <div class="period-range-row">
+        <span>с</span>
+        <input type="datetime-local" class="period-range-input" id="o-period-from" title="С">
+        <span>по</span>
+        <input type="datetime-local" class="period-range-input" id="o-period-to" title="По">
+        <label class="period-range-live-label">сейчас<input type="checkbox" class="period-range-live" id="o-period-live" checked title="До текущего момента"></label>
+      </div>
+    </div>
+  </div>
+
+  <div class="ob-foot">Данные: T-Invest API · <span id="o-updates">—</span></div>
+</div>
+
+<script src="/static/js/ob_panel_settings.js?v=20261009.1"></script>
+<script src="/static/js/orderbook.js?v=20261009.6"></script>
+</body>
+</html>

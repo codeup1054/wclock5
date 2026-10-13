@@ -17,6 +17,7 @@ PANELS = [
     "chart",
     "weather",
     "clock",
+    "orderbook",
     "crm",
 ]
 

@@ -16,6 +16,18 @@ services:
       - NEWS_LOG_DIR=${NEWS_LOG_DIR:-/app/news/logs}
       - NEWS_COLLECT_MIN=${NEWS_COLLECT_MIN:-10}
       - NEWS_WORKER=${NEWS_WORKER:-1}
+      # стакан (T-Invest gRPC): токен обязателен, тикер/класс — SPB-листинг TRUR
+      - TBANK_TOKEN=${TBANK_TOKEN}
+      - OB_TICKER=${OB_TICKER:-TRUR}
+      - OB_CLASS_CODE=${OB_CLASS_CODE:-SPBRU}
+      - OB_DEPTH=${OB_DEPTH:-20}
+      # персистентная история стакана (SQLite): агрегаты + уровни + downsample 1м
+      - OB_DB_PATH=${OB_DB_PATH:-/app/orderbook/orderbook.db}
+      - OB_STORE_DB=${OB_STORE_DB:-1}
+      - OB_STORE_LEVELS=${OB_STORE_LEVELS:-1}
+      - OB_RETENTION_DAYS=${OB_RETENTION_DAYS:-30}
+      - OB_RETENTION_1M_DAYS=${OB_RETENTION_1M_DAYS:-365}
+      - OB_HISTORY_MAXLEN=${OB_HISTORY_MAXLEN:-3600}
     restart: unless-stopped
     volumes:
       # read-only доступ к данным wclock5 (общие .db и медиаслой)
@@ -34,3 +46,5 @@ services:
       - ${ANALYTICS_DB_DIR:-/var/www/analytics.startupassist.ru}/arbitrage.db:/app/analytics/arbitrage.db
       # новостной конвейер: news.db на диске, чтобы переживал пересборку
       - ${NEWS_DB_DIR:-/var/www/analytics.startupassist.ru}/news.db:/app/news/news.db
+      # история стакана: orderbook.db на диске, чтобы переживал пересборку
+      - ${OB_DB_DIR:-/var/www/hft.startupassist.ru/orderbook}:/app/orderbook

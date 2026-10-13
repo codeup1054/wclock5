@@ -304,7 +304,10 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     function mediatorTickersParams() {
         const p = getSetting('invest_panel_period', '-35 day');
         const apiPeriod = p === '-1 day' ? '-1.5 day' : p;
-        const params = { period: apiPeriod };
+        // Интервал тикеров должен СОВПАДАТЬ с интервалом чарта (window.currentInterval),
+        // иначе секция invest.tickers в медиаторе агрегируется сервером в hour
+        // (default), а чарт рисует TGLD/XAU из её payload часовыми бакетами.
+        const params = { interval: currentHistoryInterval(), period: apiPeriod };
         const sTs = getSetting('invest_panel_start_ts', null);
         const eTs = getSetting('invest_panel_end_ts', null);
         if (sTs) params.start_ts = sTs;
@@ -558,17 +561,18 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const periodClass = periodPct !== null ? (periodPct >= 0 ? 'change-positive' : 'change-negative') : '';
 
         const absStyle = 'opacity:0.2';
-        const rowCls = 'banner-row-asset ' + label.toLowerCase();
+        const assetId = label.toLowerCase();
+        const rowCls = 'banner-row-asset ' + assetId;
 
-        return `<tr class="${rowCls}">
-            <td class="banner-td-empty"></td>
-            <td class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
-            <td class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
-            <td class="banner-td-change ${dayClass}" style="${absStyle}">${formatTickerAbs(dayAbs)}</td>
-            <td class="banner-td-pct ${weekClass}">${weekPct !== null ? formatPercent(weekPct) : '—'}</td>
-            <td class="banner-td-change ${weekClass}" style="${absStyle}">${weekAbs !== null ? formatTickerAbs(weekAbs) : '—'}</td>
-            <td class="banner-td-pct ${periodClass}">${periodPct !== null ? formatPercent(periodPct) : '—'}</td>
-            <td class="banner-td-change ${periodClass}" style="${absStyle}">${periodAbs !== null ? formatTickerAbs(periodAbs) : '—'}</td>
+        return `<tr id="banner-row-${assetId}" class="${rowCls}">
+            <td id="banner-td-${assetId}-marker" class="banner-td-empty"></td>
+            <td id="banner-td-${assetId}-value" class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
+            <td id="banner-td-${assetId}-day-pct" class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
+            <td id="banner-td-${assetId}-day-change" class="banner-td-change ${dayClass}" style="${absStyle}">${formatTickerAbs(dayAbs)}</td>
+            <td id="banner-td-${assetId}-week-pct" class="banner-td-pct ${weekClass}">${weekPct !== null ? formatPercent(weekPct) : '—'}</td>
+            <td id="banner-td-${assetId}-week-change" class="banner-td-change ${weekClass}" style="${absStyle}">${weekAbs !== null ? formatTickerAbs(weekAbs) : '—'}</td>
+            <td id="banner-td-${assetId}-period-pct" class="banner-td-pct ${periodClass}">${periodPct !== null ? formatPercent(periodPct) : '—'}</td>
+            <td id="banner-td-${assetId}-period-change" class="banner-td-change ${periodClass}" style="${absStyle}">${periodAbs !== null ? formatTickerAbs(periodAbs) : '—'}</td>
         </tr>`;
     }
 
@@ -853,28 +857,29 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfWeekCls = tfAbsW >= 0 ? 'change-positive' : 'change-negative';
             var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
 
-            tblHtml += `<tr class="banner-row-portfolio-total">
-            <td class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;">T+F</td>
-            <td class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
-            <td class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
-            <td class="banner-td-change ${tfWeekCls}">${formatChange(tfAbsW)}</td>
-            <td class="banner-td-pct ${tfWeekCls}">${formatPercent(tfPctW)}</td>
-            <td class="banner-td-change ${tfPeriodCls}">${formatChange(tfAbsP)}</td>
-            <td class="banner-td-pct ${tfPeriodCls}">${formatPercent(tfPctP)}</td>
+            tblHtml += `<tr id="banner-row-total" class="banner-row-portfolio-total">
+            <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;">T+F</td>
+            <td id="banner-td-total-day-change" class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
+            <td id="banner-td-total-day-pct" class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
+            <td id="banner-td-total-week-change" class="banner-td-change ${tfWeekCls}">${formatChange(tfAbsW)}</td>
+            <td id="banner-td-total-week-pct" class="banner-td-pct ${tfWeekCls}">${formatPercent(tfPctW)}</td>
+            <td id="banner-td-total-period-change" class="banner-td-change ${tfPeriodCls}">${formatChange(tfAbsP)}</td>
+            <td id="banner-td-total-period-pct" class="banner-td-pct ${tfPeriodCls}">${formatPercent(tfPctP)}</td>
         </tr>`;
         }
 
         portfolioRows.forEach(function(row) {
+            const rowId = row.source === 'finam' ? 'finam' : 'tinkoff';
             const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
-            tblHtml += `<tr class="${row.cssClass}" style="opacity:${rowOpacity};">
-            <td class="banner-td-num" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
-            <td class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
-            <td class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
-            <td class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
-            <td class="banner-td-pct ${row.weekChangeClass}">${formatPercent(row.pctChangeWeek)}</td>
-            <td class="banner-td-change ${row.weekChangeClass}">${formatChange(row.absChangeWeek)}</td>
-            <td class="banner-td-pct ${row.periodChangeClass}">${formatPercent(row.pctChangePeriod)}</td>
-            <td class="banner-td-change ${row.periodChangeClass}">${formatChange(row.absChangePeriod)}</td>
+            tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};">
+            <td id="banner-td-${rowId}-marker" class="banner-td-num" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
+            <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
+            <td id="banner-td-${rowId}-day-pct" class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
+            <td id="banner-td-${rowId}-day-change" class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
+            <td id="banner-td-${rowId}-week-pct" class="banner-td-pct ${row.weekChangeClass}">${formatPercent(row.pctChangeWeek)}</td>
+            <td id="banner-td-${rowId}-week-change" class="banner-td-change ${row.weekChangeClass}">${formatChange(row.absChangeWeek)}</td>
+            <td id="banner-td-${rowId}-period-pct" class="banner-td-pct ${row.periodChangeClass}">${formatPercent(row.pctChangePeriod)}</td>
+            <td id="banner-td-${rowId}-period-change" class="banner-td-change ${row.periodChangeClass}">${formatChange(row.absChangePeriod)}</td>
         </tr>`;
         });
 

@@ -37,12 +37,12 @@
             yAxisID: 'y_tgold',
             tickColor: '#ffd9007e',
             tickFormat: function(v) { return v.toFixed(2); },
-            borderWidth: 0.75,
+            borderWidth: dpiLine(ChartTheme.get('line.ticker')),
             borderDash: [],
             pointRadius: 0,
             hidden: false,
             aggregation: 'last',
-            axisPosition: 'right',
+            axisPosition: 'left',
             maxTicksLimit: 6,
         },
         'XAU/USD': {
@@ -51,7 +51,7 @@
             yAxisID: 'y_xau',
             tickColor: '#cc7722',
             tickFormat: function(v) { return (v / 1000).toFixed(3); },
-            borderWidth: 0.75,
+            borderWidth: dpiLine(ChartTheme.get('line.ticker')),
             borderDash: [1, 1],
             pointRadius: 0,
             hidden: true,
@@ -236,7 +236,7 @@
                 padding: showTime ? 0 : -30,
                     autoSkip: true,
                     maxTicksLimit: showTime ? 20 : 30,
-                    font: { size: dpiFont(10) },
+                    font: { size: dpiFont(ChartTheme.get('font.axis')) },
                     color: xTickColor,
                     callback: xTickCallback
                 },
@@ -254,13 +254,13 @@
                 display: true,
                 ticks: {
                     beginAtZero: false,
-                    display: true,
+                    display: false,
                     callback: function(value) {
                         if (value >= 1e6) return '' + (value / 1e6).toFixed(2);
                         return '' + Number(value).toLocaleString('ru-RU');
                     },
-                    font: { size: dpiFont(10) },
-                    color: '#2cba99',
+                    font: { size: dpiFont(ChartTheme.get('font.portfolio')) },
+                    color: ChartTheme.get('color.portfolio'),
                     autoSkip: true,
                     padding: -1,
                     maxTicksLimit: 8
@@ -270,7 +270,7 @@
                     color: 'rgba(46, 167, 151, 0.28)',
                     lineWidth: 1
                 },
-                title: { display: false, text: 'Портфель', color: '#2cbaa3', font: { size: dpiFont(14) } }
+                title: { display: false, text: 'Портфель', color: '#2cbaa3', font: { size: dpiFont(ChartTheme.get('font.axisTitle')) } }
             }
         };
 
@@ -289,8 +289,8 @@
                     callback: function(value) {
                         return '' + (value / 1e6).toFixed(3).replace('.', ',');
                     },
-                    font: { size: dpiFont(10) },
-                    color: '#5b6ee8',
+                    font: { size: dpiFont(ChartTheme.get('font.portfolio')) },
+                    color: ChartTheme.get('color.finam'),
                     autoSkip: true,
                     padding: -1,
                     maxTicksLimit: 8
@@ -311,7 +311,7 @@
             ticks: {
                 display: true,
                 callback: function(value) { return value + '%'; },
-                font: { size: dpiFont(9) },
+                font: { size: dpiFont(ChartTheme.get('font.share')) },
                 color: '#888',
                 stepSize: 25
             },
@@ -357,7 +357,7 @@
                     ticks: {
                         display: true,
                         callback: cfg.tickFormat,
-                        font: { size: dpiFont(13) },
+                        font: { size: dpiFont(ChartTheme.get('font.ticker')) },
                         color: cfg.tickColor,
                         autoSkip: true,
                         padding: -1,
@@ -368,7 +368,7 @@
                         display: false,
                         text: cfg.label.replace(/\/.*/, ''),
                         color: cfg.tickColor,
-                        font: { size: dpiFont(14) },
+                        font: { size: dpiFont(ChartTheme.get('font.axisTitle')) },
                         padding: -10
                     }
                 };
@@ -390,7 +390,7 @@
                 label: cfg.label,
                 data: [],
                 borderColor: cfg.color,
-                borderWidth: cfg.borderWidth || 2,
+                borderWidth: dpiLine(cfg.borderWidth || ChartTheme.get('line.total')),
                 borderDash: cfg.borderDash || [],
                 tension: chartTension(0.2),
                 fill: false,
@@ -549,7 +549,7 @@
                 data: pctArr,
                 borderColor: rgba(color, 0.5),
                 backgroundColor: bg,
-                borderWidth: 0.5,
+                borderWidth: dpiLine(0.5),
                 borderDash: [],
                 tension: chartTension(0.2),
                 fill: '-1',
@@ -578,7 +578,7 @@
             label: '\u0422:TGLD', data: tgldPct,
             borderColor: rgba(TICKER_COLORS.tgld, 0.5),
             backgroundColor: rgba(TICKER_COLORS.tgld, 0.30),
-            borderWidth: 0.5, borderDash: [], tension: chartTension(0.2),
+            borderWidth: dpiLine(0.5), borderDash: [], tension: chartTension(0.2),
             fill: { target: 'origin' }, pointRadius: 0, pointHoverRadius: 0,
             spanGaps: true, yAxisID: 'y_tgld', stack: 'tf'
         });
@@ -600,7 +600,7 @@
                 label: '\u0424:TGLD', data: fTgldPct,
                 borderColor: 'rgba(74,123,216,0.9)',
                 backgroundColor: 'rgba(74,123,216,0.12)',
-                borderWidth: 0.5, borderDash: [], tension: chartTension(0.2),
+                borderWidth: dpiLine(0.5), borderDash: [], tension: chartTension(0.2),
                 fill: { target: 'origin' }, pointRadius: 0, pointHoverRadius: 0,
                 spanGaps: true, yAxisID: 'y_tgld_finam', stack: 'fn'
             });            ds.push(makeLayer('\u0424:TMON', fTmonPct, TICKER_COLORS.tmon, 'fn', 'y_tgld_finam', true, 45));
@@ -670,7 +670,7 @@
                                 label: cfg.label,
                                 data: filledData,
                                 borderColor: cfg.color,
-                                borderWidth: cfg.borderWidth || 2,
+                                borderWidth: dpiLine(cfg.borderWidth || ChartTheme.get('line.total')),
                                 borderDash: cfg.borderDash || [],
                                 tension: chartTension(0.2),
                                 fill: false,
@@ -832,7 +832,7 @@ try {
             var initialVal = s.initialValue || 0;
             var finalVal = s.finalValue || 0;
             var delta = s.delta || 0;
-            var color = s.color || '#2cba99';
+            var color = s.color || ChartTheme.get('color.portfolio');
 
             function fmt(v) {
                 if (s.fmt) return s.fmt(v);
@@ -1106,6 +1106,15 @@ try {
     }
 
     function updateInvestPlot() {
+        function hexToRgba(base, alpha) {
+            if (base.charAt(0) === '#') {
+                return 'rgba(' + parseInt(base.slice(1, 3), 16) + ',' +
+                    parseInt(base.slice(3, 5), 16) + ',' +
+                    parseInt(base.slice(5, 7), 16) + ',' + alpha + ')';
+            }
+            return base.replace(/[\d.]+\)$/, alpha + ')');
+        }
+
         var savedView = getSetting('chartView');
         if (savedView === 'energy') {
             console.log('[InvestPlot] Battery chart active, skip update');
@@ -1365,10 +1374,10 @@ try {
                 min: -pctBound,
                 max: pctBound,
                 ticks: {
-                    display: true,
+                    display: false,
                     callback: function(v) { return v.toFixed(2); },
                     color: '#c9c9c9',
-                    font: { size: dpiFont(10) },
+                    font: { size: dpiFont(ChartTheme.get('font.axis')) },
                     autoSkip: true,
                     maxTicksLimit: 6
                 },
@@ -1386,7 +1395,7 @@ try {
                     delta: tinkoffDelta,
                     prevDelta: tinkoffPrevDelta,
                     yAxisID: 'y_portfolio',
-                    color: '#2cba99'
+                    color: ChartTheme.get('color.portfolio')
                 }
             ];
             if (finamMax > 0) {
@@ -1397,7 +1406,7 @@ try {
                     delta: finamDelta,
                     prevDelta: finamPrevDelta,
                     yAxisID: finamAxis,
-                    color: '#5b6ee8'
+                    color: ChartTheme.get('color.finam')
                 });
             }
 
@@ -1405,9 +1414,9 @@ try {
                 {
                     label: 'Tinkoff, \u20BD',
                     data: tinkoffSeries,
-                    borderColor: '#2cba99',
+                    borderColor: ChartTheme.get('color.portfolio'),
                     backgroundColor: 'rgba(25, 150, 89, 0.15)',
-                    borderWidth: 0.7,
+                    borderWidth: dpiLine(ChartTheme.get('line.portfolio')),
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1419,9 +1428,9 @@ try {
                 {
                     label: 'Finam, \u20BD',
                     data: finamSeries,
-                    borderColor: '#5b6ee8',
+                    borderColor: ChartTheme.get('color.finam'),
                     backgroundColor: 'rgba(91, 110, 232, 0.12)',
-                    borderWidth: 0.7,
+                    borderWidth: dpiLine(ChartTheme.get('line.portfolio')),
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1433,9 +1442,9 @@ try {
                 {
                     label: 'Tinkoff, %',
                     data: tinkoffPct,
-                    borderColor: '#2cba99',
+                    borderColor: ChartTheme.get('color.portfolio'),
                     borderDash: [6, 4],
-                    borderWidth: 1.5,
+                    borderWidth: dpiLine(ChartTheme.get('line.pct')),
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1447,9 +1456,9 @@ try {
                 {
                     label: 'Finam, %',
                     data: finamPct,
-                    borderColor: '#5b6ee8',
+                    borderColor: ChartTheme.get('color.finam'),
                     borderDash: [6, 4],
-                    borderWidth: 1.5,
+                    borderWidth: dpiLine(ChartTheme.get('line.pct')),
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1466,8 +1475,8 @@ try {
                         for (var i = 0; i < len; i++) r.push((tinkoffSeries[i] || 0) + (finamSeries[i] || 0));
                         return r;
                     })(),
-                    borderColor: '#aaa',
-                    borderWidth: 2,
+                    borderColor: ChartTheme.get('color.total'),
+                    borderWidth: dpiLine(ChartTheme.get('line.total')),
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1484,9 +1493,9 @@ try {
                         for (var i = 0; i < len; i++) sum.push((tinkoffSeries[i] || 0) + (finamSeries[i] || 0));
                         return toPctSeries(sum);
                     })(),
-                    borderColor: '#aaa',
+                    borderColor: ChartTheme.get('color.total'),
                     borderDash: [6, 4],
-                    borderWidth: 1.5,
+                    borderWidth: dpiLine(ChartTheme.get('line.pct')),
                     tension: chartTension(0.2),
                     fill: false,
                     pointRadius: 0,
@@ -1512,9 +1521,9 @@ try {
             datasets.push({
                 label: '100%',
                 data: labels.map(function() { return 100; }),
-                borderColor: 'rgba(255, 255, 255, 0.85)',
+                borderColor: hexToRgba(ChartTheme.get('color.ref'), 0.85),
                 borderDash: [8, 6],
-                borderWidth: 0.5,
+                borderWidth: dpiLine(0.5),
                 fill: false,
                 pointRadius: 0,
                 pointHoverRadius: 0,
@@ -1535,10 +1544,10 @@ try {
 
                 // Update period label sources
                 var newSources = [
-                    { label: 'Tinkoff', initialValue: tinkoffInit, finalValue: tinkoffFinal, delta: tinkoffDelta, prevDelta: tinkoffPrevDelta, yAxisID: 'y_portfolio', color: '#2cba99' }
+                    { label: 'Tinkoff', initialValue: tinkoffInit, finalValue: tinkoffFinal, delta: tinkoffDelta, prevDelta: tinkoffPrevDelta, yAxisID: 'y_portfolio', color: ChartTheme.get('color.portfolio') }
                 ];
                 if (finamMax > 0) {
-                    newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: '#5b6ee8' });
+                    newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: ChartTheme.get('color.finam') });
                 }
                 investChart._periodSources = newSources;
 
@@ -1583,9 +1592,9 @@ try {
                 investChart.data.datasets.push({
                     label: '100%',
                     data: labels.map(function() { return 100; }),
-                    borderColor: 'rgba(255, 255, 255, 0.85)',
+                    borderColor: hexToRgba(ChartTheme.get('color.ref'), 0.85),
                     borderDash: [8, 6],
-                    borderWidth: 0.5,
+                    borderWidth: dpiLine(0.5),
                     fill: false,
                     pointRadius: 0,
                     pointHoverRadius: 0,
@@ -2333,6 +2342,14 @@ try {
     });
 
     $(document).on('investDpiChange', function() {
+        if (investChart) {
+            investChart.destroy();
+            investChart = null;
+        }
+        updateInvestPlot();
+    });
+
+    $(document).on('chartThemeChange', function() {
         if (investChart) {
             investChart.destroy();
             investChart = null;

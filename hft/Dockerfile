@@ -18,6 +18,9 @@ COPY news_collector.py /app/news_collector.py
 COPY text_signature.py /app/text_signature.py
 COPY signature_validation.py /app/signature_validation.py
 COPY news_ml.py /app/news_ml.py
+COPY orderbook.py /app/orderbook.py
+COPY proto /app/proto
+COPY certs /app/certs
 COPY templates /app/templates
 COPY static /app/static
 

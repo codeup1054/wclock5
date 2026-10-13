@@ -151,3 +151,10 @@ nul
 start_flask.bat
 ticker_raw.json
 *.db
+
+# Локальный мусор / секреты (не коммитить)
+*.bak*
+tools/
+hft/certs/
+parsers/invest/local_data.sql
+tmon_preview.html

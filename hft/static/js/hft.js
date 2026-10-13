@@ -117,6 +117,13 @@
       async load() { return { ok: true }; },
       render() { return '<div id="hft-clock-host"></div>'; }
     },
+    orderbook: {
+      label: 'Стакан',
+      // панель дашборда: компактная книга заявок (виджет hft_orderbook_panel.js);
+      // полная версия со свечами/историей — отдельная страница /orderbook
+      async load() { return { ok: true }; },
+      render() { return '<div class="ob-widget-host"></div>'; }
+    },
     crm: {
       label: 'CRM · пользователи',
       async load() { return api('/api/crm/meta').then(function () { return api('/api/crm/users'); }); },
@@ -212,6 +219,7 @@
     var u = state.user;
     if (!u) return [];
     var src = u.role === 'admin' ? Object.keys(PANELS) : (u.panels || []).filter(function (p) { return PANELS[p]; });
+    // report — отдельная страница, не панель дашборда (orderbook — полноценная панель)
     return src.filter(function (p) { return p !== 'report'; });
   }
 
@@ -238,6 +246,7 @@
     if (window.HftInvestChart) { try { window.HftInvestChart.stop(); } catch (e) { /* noop */ } }
     if (window.HftWeather) { try { window.HftWeather.stop(); } catch (e) { /* noop */ } }
     if (window.HftClock) { try { window.HftClock.stop(); } catch (e) { /* noop */ } }
+    if (window.HftOrderbook) { try { window.HftOrderbook.stop(); } catch (e) { /* noop */ } }
   }
 
   function startWidget(p, panel) {
@@ -252,6 +261,10 @@
     if (p === 'clock') {
       var clkHost = panel.querySelector('#hft-clock-host');
       if (clkHost && window.HftClock) window.HftClock.start(clkHost);
+    }
+    if (p === 'orderbook') {
+      var obHost = panel.querySelector('.ob-widget-host');
+      if (obHost && window.HftOrderbook) window.HftOrderbook.start(obHost);
     }
     if (p === 'capital') {
       var bannerHost = panel.querySelector('.hft-banner-host');

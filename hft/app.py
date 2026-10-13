@@ -498,6 +498,62 @@ def analytics_page():
     return render_template("analytics.html")
 
 
+# ── Стакан (T-Invest gRPC, поток в orderbook.py) ──────────────────────
+import orderbook  # noqa: E402
+
+
+@app.route("/orderbook")
+def orderbook_page():
+    """Страница стакана. Без сессии JS показывает форму логина (без редиректа)."""
+    return render_template("orderbook.html")
+
+
+@app.route("/api/hft/orderbook")
+@require_login
+@require_panel("orderbook")
+def hft_orderbook(user):
+    return jsonify({"ok": True, **orderbook.feed.state.book()})
+
+
+@app.route("/api/hft/orderbook/history")
+@require_login
+@require_panel("orderbook")
+def hft_orderbook_history(user):
+    limit = request.args.get("limit", default=200, type=int)
+    limit = min(max(limit, 1), 3600)
+    return jsonify({"ok": True, "rows": orderbook.feed.state.history(limit)})
+
+
+@app.route("/api/hft/orderbook/health")
+@require_login
+@require_panel("orderbook")
+def hft_orderbook_health(user):
+    return jsonify({"ok": True, **orderbook.feed.state.health()})
+
+
+@app.route("/api/hft/orderbook/db")
+@require_login
+@require_panel("orderbook")
+def hft_orderbook_db(user):
+    store = orderbook.feed.state.store
+    stats = store.stats() if store is not None else {"enabled": False}
+    return jsonify({"ok": True, **stats})
+
+
+@app.route("/api/hft/orderbook/candles")
+@require_login
+@require_panel("orderbook")
+def hft_orderbook_candles(user):
+    interval = request.args.get("interval", default="5_MIN", type=str)
+    hours = request.args.get("hours", default=24.0, type=float)
+    from_ts = request.args.get("from", default=None, type=str)
+    to_ts = request.args.get("to", default=None, type=str)
+    try:
+        return jsonify({"ok": True, **orderbook.get_candles(interval, hours, from_ts, to_ts)})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)[:300]}), 502
+
+
 _NEWS_MIN = int(os.environ.get("NEWS_COLLECT_MIN", "45"))
 _NEWS_WORKER = None
 _NEWS_LOCK = None
@@ -563,5 +619,6 @@ def _start_news_worker():
 
 if __name__ == "__main__":
     _start_news_worker()
+    orderbook.feed.start()
     port = int(os.environ.get("HFT_PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("HFT_DEBUG") == "1")

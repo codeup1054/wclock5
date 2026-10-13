@@ -617,6 +617,38 @@ var rows = botSortedEvents(ev).slice(0, 3000);
     }
   }
 
+  // Заполняет вкладку «Параметры» (⚙) редактором ChartTheme (таблица + JSON)
+  var _paramsPaneBuilt = false;
+  function populateParamsPane() {
+    if (_paramsPaneBuilt) return;
+    _paramsPaneBuilt = true;
+    var host = $('#report-pane-params .params-editor-host')[0];
+    if (!host || typeof window.renderParamsEditor !== 'function') return;
+    window.renderParamsEditor(host, {
+      settingsSchema: [
+        { key: 'invest_chart_dpi', label: 'DPI инвест-графика', type: 'number', min: 0.5, max: 4, step: 0.2, def: '2' },
+        { key: 'weather_chart_dpi', label: 'DPI погоды', type: 'number', min: 0.5, max: 3, step: 0.2, def: '2' },
+        { key: 'chart_smoothing', label: 'Сглаживание графиков', type: 'checkbox', def: '1' }
+      ],
+      onSettingChange: function (key, val, type) {
+        var str = String(val);
+        setSetting(key, str);
+        var o = {}; o[key] = str;
+        saveSettingsToServer(o);
+        if (key === 'invest_chart_dpi') {
+          $(document).trigger('investDpiChange', { dpi: parseFloat(str) });
+        } else if (key === 'weather_chart_dpi') {
+          $(document).trigger('weatherDpiChange', { dpi: parseFloat(str) });
+        } else if (key === 'chart_smoothing') {
+          if (typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
+            window.InvestPlot.update();
+          }
+          if (typeof window.batteryLevel === 'function') window.batteryLevel();
+        }
+      }
+    });
+  }
+
   function open(tabToOpen) {
     var $el = $('#report-modal');
     if (!$el.length) {
@@ -628,6 +660,7 @@ var rows = botSortedEvents(ev).slice(0, 3000);
           '<button class="report-tab active" data-tab="invest">Инвестиции</button>' +
           '<button class="report-tab" data-tab="bot" title="Отчёты об ошибках бота (Telegram)">Ошибки бота</button>' +
           '<button class="report-tab" data-tab="settings">Настройки</button>' +
+          '<button class="report-tab report-params-btn" data-tab="params" title="Параметры графиков">⚙</button>' +
         '</div>' +
       '<div id="report-pane-invest">' +
         '<div class="report-controls">' +
@@ -700,6 +733,9 @@ var rows = botSortedEvents(ev).slice(0, 3000);
       '</div>' +
       '<div id="report-pane-settings" style="display:none">' +
         '<div class="settings-container"></div>' +
+      '</div>' +
+      '<div id="report-pane-params" style="display:none">' +
+        '<div class="params-editor-host" style="max-height:70vh;overflow:auto;padding:4px 2px"></div>' +
       '</div>'
       );
       $el.append($content);
@@ -757,8 +793,10 @@ var rows = botSortedEvents(ev).slice(0, 3000);
         $('#report-pane-invest').toggle(tab === 'invest');
         $('#report-pane-bot').toggle(tab === 'bot');
         $('#report-pane-settings').toggle(tab === 'settings');
+        $('#report-pane-params').toggle(tab === 'params');
         if (tab === 'bot') loadBot();
         if (tab === 'settings') populateSettingsPane();
+        if (tab === 'params') populateParamsPane();
         // Вкладка «Инвестиции»: подгружаем данные, если они ещё не были загружены
         // (модалка могла открыться сразу на «Настройки»).
         if (tab === 'invest' && !state.data) load();

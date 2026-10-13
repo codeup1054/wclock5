@@ -59,7 +59,10 @@ function chartDpiValue(target) {
 window.chartDpiValue = chartDpiValue;
 
 function chartFontScale(target) {
-    return Math.max(0.5, chartDpiValue(target) / 2);
+    // Влияние DPI-слайдера на шрифт ослаблено в 3 раза: отклонение масштаба
+    // от 1 делится на 3 (при dpi=2 масштаб = 1, без изменений).
+    const raw = chartDpiValue(target) / 2;
+    return Math.max(0.5, 1 + (raw - 1) / 3);
 }
 window.chartFontScale = chartFontScale;
 
@@ -71,6 +74,14 @@ function dpiFont(n, target) {
     return Math.round(n * scale * labelFactor * 10) / 10;
 }
 window.dpiFont = dpiFont;
+
+function dpiLine(n, target) {
+    // Толщина линий растёт вместе с DPI: при дефолтном dpi=2 → ровно ×2
+    // от базовой толщины, далее линейно с масштабом.
+    const scale = Math.max(0.25, chartDpiValue(target) / 2);
+    return n * 2 * scale;
+}
+window.dpiLine = dpiLine;
 
 function getSafeDPR(maxDPI) {
     return Math.min(window.devicePixelRatio || 1, maxDPI || 2.0);

@@ -27,7 +27,8 @@ var LAYOUT_VERSION = 3; // v1: x/y = центр от центра stage; v2: о�
     { id: 'chart',    col: 1, h: 0.52 },
     { id: 'weather',  col: 2, h: 0.34 },
     { id: 'clock',    col: 2, h: 0.24 },
-    { id: 'crm',      col: 2, h: 0.30 }
+    { id: 'crm',      col: 2, h: 0.30 },
+    { id: 'orderbook', col: 2, h: 0.26 }
   ];
   var GRID_COLS = [0.34, 0.38, 0.28];
 

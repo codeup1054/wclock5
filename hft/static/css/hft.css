@@ -628,3 +628,50 @@ select.panel-view-select {
 .a-news-an-bt th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .a-news-an-bt td { padding: 6px 8px; border-bottom: 1px solid var(--line); }
 .a-news-an-bt td:last-child { font-weight: 600; }
+
+/* ── Стакан (панель, hft_orderbook_panel.js) ───── */
+.hft-panel[data-panel="orderbook"] .hft-panel-body { padding: 10px 12px; }
+.ob-widget-host { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.ob-widget-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--muted);
+}
+.ob-widget-ticker { font-weight: 700; color: var(--txt); }
+.ob-widget-mid { color: var(--txt); font-weight: 600; }
+.ob-widget-spread { color: var(--warn); }
+.ob-widget-time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.ob-widget-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 1; min-height: 0; }
+.ob-widget-col { display: flex; flex-direction: column; min-height: 0; }
+.ob-widget-col-head {
+  font-size: 10px; font-weight: 700; letter-spacing: .8px;
+  padding: 2px 6px; border-radius: 5px; margin-bottom: 4px; text-align: center;
+}
+.ob-widget-col-head.bid { color: var(--pos); background: rgba(31,193,99,.12); }
+.ob-widget-col-head.ask { color: var(--neg); background: rgba(231,76,60,.12); }
+.ob-widget-rows { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 2px; }
+.ob-widget-row {
+  position: relative; display: flex; justify-content: space-between; align-items: center;
+  gap: 6px; padding: 2px 6px; border-radius: 4px; font-size: 11px; overflow: hidden;
+}
+.ob-widget-bar { position: absolute; inset: 0; opacity: .28; }
+.ob-widget-bar.bid { background: var(--pos); }
+.ob-widget-bar.ask { background: var(--neg); }
+.ob-widget-price { position: relative; color: var(--txt); font-variant-numeric: tabular-nums; }
+.ob-widget-qty { position: relative; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+
+/* ── настройки панелей: График / Стакан ────────── */
+.chart-flags-settings { display: flex; flex-direction: column; gap: 2px; }
+.chart-flag-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.switch-sm .slider { width: 28px; height: 15px; }
+.switch-sm .slider:before { width: 11px; height: 11px; }
+.switch-sm input:checked + .slider:before { transform: translateX(13px); }
+.ob-settings { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ob-settings-label { font-size: 12px; color: var(--muted); }
+.ob-settings input[type="range"] { max-width: 90px; }
+.ob-settings-val { font-size: 12px; color: var(--acc); min-width: 42px; font-variant-numeric: tabular-nums; }
+.ob-settings-refresh { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.ob-settings select {
+  background: var(--bg2); color: var(--txt); border: 1px solid var(--line);
+  border-radius: 6px; padding: 2px 6px; font-size: 12px;
+}

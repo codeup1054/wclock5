@@ -115,7 +115,7 @@
       var list = window.__hftPanelList();
       if (list && list.length) return list;
     }
-    var fallback = ['capital', 'turnover', 'feed', 'tickers', 'chart', 'weather', 'clock', 'crm'];
+    var fallback = ['capital', 'turnover', 'feed', 'tickers', 'chart', 'weather', 'clock', 'crm', 'orderbook'];
     return fallback.filter(function (p) {
       return window.__hftHasPanel ? window.__hftHasPanel(p) : true;
     });
@@ -125,7 +125,7 @@
   var LABELS = {
     capital: 'Инвест-баннер', turnover: 'Оборот и комиссия', tickers: 'Тикеры',
     feed: 'Лента', chart: 'График', weather: 'Погода', clock: 'Часы',
-    crm: 'CRM', report: 'Отчёт'
+    crm: 'CRM', report: 'Отчёт', orderbook: 'Стакан'
   };
   function labelOf(id) {
     if (window.__hftPanelLabel) { var l = window.__hftPanelLabel(id); if (l) return l; }
@@ -212,7 +212,10 @@
       return null; // селект периода уже есть в самом баннере (hft.js)
     }
     if (pid === 'chart') {
-      return null; // интервалы/период — в тулбаре графика
+      return buildChartFlagsSettings(); // подписи на свечах: время / изменение
+    }
+    if (pid === 'orderbook') {
+      return buildObSettings(); // глубина стакана + частота обновления
     }
     if (pid === 'weather') {
       return buildWeatherRangeSettings(); // диапазон температур на графике погоды
@@ -287,6 +290,119 @@
     div.appendChild(disp);
     div.appendChild(wrap);
     setTimeout(paint, 0);
+    return div;
+  }
+
+  // ── настройки панели «График»: подписи время/изменение ───────
+  // (порт showTime/showChange из wclock; событие hftChartFlagsChange
+  //  применяет настройки к живому графику в invest_chart.js)
+  function buildChartFlagsSettings() {
+    var div = document.createElement('div');
+    div.className = 'panel-settings chart-flags-settings';
+    var cfg = chartCfg();
+
+    function mkToggle(key, label, def) {
+      var wrap = document.createElement('label');
+      wrap.className = 'chart-flag-toggle';
+      var span = document.createElement('span');
+      span.textContent = label;
+      var sw = document.createElement('label');
+      sw.className = 'switch switch-sm';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = cfg[key] !== undefined ? !!cfg[key] : def;
+      var slider = document.createElement('span');
+      slider.className = 'slider';
+      sw.appendChild(cb);
+      sw.appendChild(slider);
+      cb.addEventListener('change', function () {
+        var detail = {};
+        detail[key] = cb.checked;
+        document.dispatchEvent(new CustomEvent('hftChartFlagsChange', { detail: detail }));
+      });
+      wrap.appendChild(span);
+      wrap.appendChild(sw);
+      div.appendChild(wrap);
+    }
+
+    mkToggle('showTime', 'Подпись времени', true);
+    mkToggle('showChange', 'Подпись изменения', true);
+    return div;
+  }
+
+  // ── настройки панели «Стакан»: глубина + частота обновления ──
+  // (cобытие hftObCfgChange применяет настройки к виджету стакана)
+  function getObCfg() {
+    var def = { depth: 10, refreshSec: 2 };
+    try {
+      var raw = localStorage.getItem('hft_ob_cfg');
+      if (raw) {
+        var o = JSON.parse(raw);
+        if (typeof o.depth === 'number' && o.depth >= 1 && o.depth <= 40) def.depth = o.depth;
+        if (typeof o.refreshSec === 'number' && o.refreshSec >= 1 && o.refreshSec <= 60) def.refreshSec = o.refreshSec;
+      }
+    } catch (e) { /* ignore */ }
+    return def;
+  }
+
+  function buildObSettings() {
+    var cfg = getObCfg();
+    var div = document.createElement('div');
+    div.className = 'panel-settings ob-settings';
+
+    var dLab = document.createElement('span');
+    dLab.className = 'ob-settings-label';
+    dLab.textContent = 'Глубина';
+    var dSlider = document.createElement('input');
+    dSlider.type = 'range';
+    dSlider.min = '3';
+    dSlider.max = '30';
+    dSlider.step = '1';
+    dSlider.value = String(cfg.depth);
+    var dVal = document.createElement('span');
+    dVal.className = 'ob-settings-val';
+    dVal.textContent = cfg.depth + ' ур.';
+
+    function commitDepth() {
+      var v = parseInt(dSlider.value, 10) || 10;
+      dVal.textContent = v + ' ур.';
+      localStorage.setItem('hft_ob_cfg', JSON.stringify({
+        depth: v, refreshSec: getObCfg().refreshSec
+      }));
+      document.dispatchEvent(new CustomEvent('hftObCfgChange', { detail: { depth: v } }));
+    }
+    dSlider.addEventListener('input', commitDepth);
+
+    var rLab = document.createElement('span');
+    rLab.className = 'ob-settings-label';
+    rLab.textContent = 'Обновление';
+    var rSel = document.createElement('select');
+    [1, 2, 3, 5, 10].forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = String(s);
+      o.textContent = s + ' с';
+      rSel.appendChild(o);
+    });
+    rSel.value = String(cfg.refreshSec);
+
+    function commitRefresh() {
+      var v = parseInt(rSel.value, 10) || 2;
+      localStorage.setItem('hft_ob_cfg', JSON.stringify({
+        depth: getObCfg().depth, refreshSec: v
+      }));
+      document.dispatchEvent(new CustomEvent('hftObCfgChange', { detail: { refreshSec: v } }));
+    }
+    rSel.addEventListener('change', commitRefresh);
+
+    var rWrap = document.createElement('span');
+    rWrap.className = 'ob-settings-refresh';
+    rWrap.appendChild(rLab);
+    rWrap.appendChild(rSel);
+
+    div.appendChild(dLab);
+    div.appendChild(dSlider);
+    div.appendChild(dVal);
+    div.appendChild(rWrap);
     return div;
   }
 

@@ -493,6 +493,7 @@
       '<div class="report-tabs">' +
         '<button class="report-tab active" data-tab="invest">Инвестиции</button>' +
         '<button class="report-tab" data-tab="bot" title="Отчёты об ошибках бота (Telegram)">Ошибки бота</button>' +
+        '<button class="report-tab report-params-btn" data-tab="params" title="Параметры графиков">⚙</button>' +
       '</div>' +
       '<div id="report-pane-invest">' +
         '<div class="report-controls">' +
@@ -562,7 +563,33 @@
           '<th>Дата</th><th>Время</th><th>Канал</th><th>Уровень</th><th>Категория</th>' +
           '<th data-bsort="account">Аккаунт</th><th>Текст</th>' +
         '</tr></thead><tbody id="bot-event-tbody"></tbody></table></div>' +
+      '</div>' +
+      '<div id="report-pane-params" style="display:none">' +
+        '<div class="params-editor-host" style="max-height:70vh;overflow:auto;padding:4px 2px"></div>' +
       '</div>';
+  }
+
+  var _paramsBuilt = false;
+  function populateParamsPane() {
+    if (_paramsBuilt) return;
+    _paramsBuilt = true;
+    var el = $('#report-pane-params .params-editor-host', host);
+    if (!el || typeof window.renderParamsEditor !== 'function') return;
+    window.renderParamsEditor(el, {
+      settingsSchema: [
+        { key: 'dpi', label: 'DPI графика', type: 'number', min: 0.5, max: 3, step: 0.2, def: '1' }
+      ],
+      onSettingChange: function (key, val) {
+        try {
+          var cfg = JSON.parse(window.localStorage.getItem('hft_chart_cfg') || '{}');
+          cfg[key] = val;
+          window.localStorage.setItem('hft_chart_cfg', JSON.stringify(cfg));
+        } catch (e) { /* noop */ }
+        if (key === 'dpi') {
+          document.dispatchEvent(new CustomEvent('hftDpiChange', { detail: { dpi: parseFloat(val) } }));
+        }
+      }
+    });
   }
 
   function bind() {
@@ -572,7 +599,9 @@
       this.classList.add('active');
       $('#report-pane-invest', host).style.display = tab === 'invest' ? '' : 'none';
       $('#report-pane-bot', host).style.display = tab === 'bot' ? '' : 'none';
+      $('#report-pane-params', host).style.display = tab === 'params' ? '' : 'none';
       if (tab === 'bot') loadBot();
+      if (tab === 'params') populateParamsPane();
     });
     $all('.report-int', host).forEach(function (b) {
       b.addEventListener('click', function () {
