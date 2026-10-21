@@ -604,7 +604,8 @@ def api_invest_ticker(ticker):
     interval = request.args.get('interval', 'hour')
     period = request.args.get('period', '-28 day')
     bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
-    figi = {"TGLD@": "TCS80A101X50", "GDH6": "FUTGOLD03260", "XAU/USD": "XAU_USD"}.get(ticker.upper())
+    figi = {"TGLD@": "TCS80A101X50", "GDH6": "FUTGOLD03260", "XAU/USD": "XAU_USD",
+            "USD/RUB": "USD_RUB", "BRENT": "BRENT"}.get(ticker.upper())
     if not figi:
         return jsonify({"error": "Ticker not found"}), 404
 

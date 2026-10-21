@@ -24,6 +24,14 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         assetColors: ['#3498db', '#e74c3c', '#1fc163', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
     };
 
+    // Цвет тикера из темы графика (color.<key>); fallback — def.
+    function themeColor(key, def) {
+        try {
+            if (window.ChartTheme && ChartTheme.get) return ChartTheme.get('color.' + key, def) || def;
+        } catch (e) { /* noop */ }
+        return def;
+    }
+
     function formatCurrency(value) {
         return value.toLocaleString('ru-RU', { 
             minimumFractionDigits: 0,
@@ -565,7 +573,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const rowCls = 'banner-row-asset ' + assetId;
 
         return `<tr id="banner-row-${assetId}" class="${rowCls}">
-            <td id="banner-td-${assetId}-marker" class="banner-td-empty"></td>
+            <td id="banner-td-${assetId}-marker" class="banner-td-ticker" style="color:${color};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">${label}</td>
             <td id="banner-td-${assetId}-value" class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
             <td id="banner-td-${assetId}-day-pct" class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
             <td id="banner-td-${assetId}-day-change" class="banner-td-change ${dayClass}" style="${absStyle}">${formatTickerAbs(dayAbs)}</td>
@@ -766,6 +774,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             portfolioRows.map(r => r.currentTotal.toFixed(2) + '|' + r.absChange.toFixed(2) + '|' + r.pctChange.toFixed(2) + '|' + r.pctChangeWeek.toFixed(2) + '|' + r.pctChangePeriod.toFixed(2)).join(';'),
             (turnoverData ? Object.keys(turnoverData).sort().map(k => k + ':' + (turnoverData[k].total || 0) + ':' + (turnoverData[k].commission || 0)).join(';') : ''),
             (tickersData ? Object.keys(tickersData).sort().map(k => { const t = tickersData[k]; return k + ':' + (t.current_price || 0) + ':' + (t.day_change_pct || 0); }).join(';') : ''),
+            [themeColor('tgld', ''), themeColor('xau', ''), themeColor('usd', ''), themeColor('brent', '')].join(','),
             rangeStartMs.toString()
         ].join('|');
         if (hashBits === _lastBannerHash) {
@@ -774,7 +783,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
         _lastBannerHash = hashBits;
         console.log('[InvestBanner] render inputs: present=' + presentSources.join(',') +
-            ' tickersRows=' + ['TGLD@', 'TMON@', 'XAU/USD'].map(function(k) { return (tickersData && tickersData[k]) ? 1 : 0; }).join('/') +
+            ' tickersRows=' + ['TGLD@', 'TMON@', 'XAU/USD', 'USD/RUB', 'Brent'].map(function(k) { return (tickersData && tickersData[k]) ? 1 : 0; }).join('/') +
             ' histKey=' + (historyData === refHistory ? 'refHistory' : 'window') +
             ' baseTs=' + (timestamps[timestamps.length - 1] || '?'));
 
@@ -883,8 +892,10 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         </tr>`;
         });
 
-        tblHtml += renderAssetRow('TGLD@', COLORS.tgold, 'TGLD');
-        tblHtml += renderAssetRow('XAU/USD', '#cc7722', 'XAU');
+        tblHtml += renderAssetRow('TGLD@', themeColor('tgld', COLORS.tgold), 'TGLD');
+        tblHtml += renderAssetRow('XAU/USD', themeColor('xau', '#cc7722'), 'XAU');
+        tblHtml += renderAssetRow('USD/RUB', themeColor('usd', '#3ba3ff'), 'USD');
+        tblHtml += renderAssetRow('Brent', themeColor('brent', '#556B2F'), 'Brent');
 
         tblHtml += `</tbody></table>`;
 
@@ -1062,6 +1073,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         if (data && (data.panel === 'invest_panel' || data.panel === 'invest_banner_capital' || data.panel === 'invest_banner_table')) {
             updateInvestBanner();
         }
+    });
+
+    // Смена темы графика — перекрасить тикерные строки таблицы.
+    $(document).on('chartThemeChange', function() {
+        try { updateInvestBanner(); } catch (e) { /* noop */ }
     });
 
     window.InvestBanner = {

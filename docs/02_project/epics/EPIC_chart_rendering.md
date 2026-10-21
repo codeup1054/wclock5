@@ -2,8 +2,8 @@
 title: Эпик — Отрисовка графиков: производительность и ловушки
 fnd: GEN
 typ: EPIC
-ver: 0.2
-updated: 2026-09-16
+ver: 0.3
+updated: 2026-10-21
 status: 🚧
 ---
 # Эпик — Отрисовка графиков: производительность и ловушки
@@ -46,6 +46,10 @@ status: 🚧
 | GRD-06 | Плагин apiErrorPoints | Замена вертикальных красных пунктиров на точки на верхней оси X; ховер-тултип (дата + % скачка); хук afterEvent + hit-test radius 7px; destroy чистит тултип | ✅ |
 | GRD-07 | Метки периода для XAU | PeriodLabelsPlugin: `s.fmt` для кастомного формата; XAU fmt `(v/1000).toFixed(3)`; метки в loadTickersToChart из first/last valid price | ✅ |
 | GRD-08 | Линия 100% полупрозрачная белая | `rgba(255,255,255,0.85)`, `borderDash [8,6]`; в обоих местах (создание и обновление) | ✅ |
+| GRD-09 | Настройка цветов тикеров в редакторе параметров | `ChartTheme` группа «Цвета тикеров» (`tgld/xau/usd/brent`); `colorKey` + `tickerColor(cfg)` в `invest_chart.js`; `themeColor(key,def)` + слушатель `chartThemeChange` в `invest_banner.js`; группа — последняя во втором столбце (справа от «Цвета линий») | ✅ |
+| GRD-10 | Метки периода USD/Brent | источники `y_usd` (`#3ba3ff`) и `y_oil` (`#556B2F`), `fmt: v.toFixed(2)` | ✅ |
+| GRD-11 | Метки скрытых серий не рисуются | `PeriodLabelsPlugin` skip при `!chart.isDatasetVisible`; матч источника и датасета по `datasetLabel` | ✅ |
+| GRD-12 | Цвет Brent — болотный | `#556B2F` в chart+banner (wclock+hft) | ✅ |
 
 ## Правила отрисовки (справочник для новых графиков)
 
@@ -79,6 +83,15 @@ status: 🚧
 8. **`₽` vs `%` отладка** — если «горизонтальными» становятся только
    `%`-линии, а `₽`-линии (абсолют, с явным min/max) в порядке → проблема
    в авто-шкале нормированной оси, а не в данных.
+9. **Метки периода следуют видимости серии** — метки начала/конца/прироста
+   (`PeriodLabelsPlugin`) рисуются только для видимых датасетов
+   (`chart.isDatasetVisible`); соответствие источника и датасета — по
+   `datasetLabel` (по умолчанию = `label`). Скрытая в легенде серия меток не даёт.
+10. **Цвета тикеров — из темы** — цвет серии/оси/метки берётся из `ChartTheme`
+    (`color.<colorKey>`, группа «Цвета тикеров»), fallback — дефолт в
+    `TICKER_REGISTRY`; хелперы `tickerColor(cfg)` (график) и
+    `themeColor(key, def)` (баннер). Смена темы → перестройка графика
+    (`chartThemeChange`) и перерисовка баннера.
 
 ## Числа до/после (проверено 31.08.2026)
 
@@ -98,21 +111,28 @@ status: 🚧
 - Инвест-модуль фреймворка — см. `PROC_graph_approaches.md`.
 - Плагины Chart.js: `chart_plugins.js` (apiErrorPoints, PeriodLabelsPlugin)
   — подключаются через `initChartPlugin` в `invest_chart.js:920–929`.
+- Цвета тикеров/осей: `static/js/chart_config.js` (`ChartTheme`, группа
+  «Цвета тикеров») + `invest_chart.js` (`colorKey`, `tickerColor`) +
+  `invest_banner.js` (`themeColor`); hft-копии `chart_config.js`/`invest_chart.js`.
+  Cache-bust: wclock — `surl()` (`?v=mtime`), hft — `?v=` в `templates/index.html`.
 
 ## Связи
 
 - Конвенции: `wclock5/docs/02_project/conventions.md` §3 «Графики»
 - Код: `wclock5/static/js/invest_chart_helpers.js`, `wclock5/app.py`,
   `wclock5/hft/static/js/invest_chart_helpers.js`, `wclock5/hft/app.py`
-- Беклог: `wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md` (CHRT-FIX)
+- Беклог: `wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md` (CHRT-FIX),
+  `wclock5/docs/02_project/backlogs/backlog_20261021.ldn.md` (GRD-09..12)
 - Фреймворк: `01.lab/02_project/PROC_graph_approaches.md`
 
 ## Лист изменений
 
-- **0.2** · 2026-09-16 — GRD-06 (apiErrorPoints: красные точки + ховер-тултип
-  вместо вертикальных пунктиров), GRD-07 (XAU метки периода + s.fmt в
-  PeriodLabelsPlugin), GRD-08 (линия 100% полупрозрачная белая
-  `rgba(255,255,255,0.85)` + `borderDash [8,6]`); добавлены ссылки на
-  chart_plugins.js.
+- **0.3** · 2026-10-21 — GRD-09 (настройка цветов тикеров в редакторе
+  параметров: `ChartTheme` + `tickerColor`/`themeColor`; группа «Цвета тикеров»
+  последней во 2-м столбце), GRD-10 (метки периода USD/Brent), GRD-11 (метки
+  скрытых серий не рисуются), GRD-12 (Brent `#556B2F`); правила 9–10; ссылки на
+  `chart_config.js` и беклог 21.10.
+- **0.2** · 2026-09-16 — GRD-06 (apiErrorPoints), GRD-07 (XAU метки периода +
+  `s.fmt`), GRD-08 (линия 100% полупрозрачная белая + `borderDash [8,6]`).
 - **0.1** · 2026-08-31 — создан: разбор инцидента (взрыв точек), правила
   бюджета точек/замка обновления, GRD-01..05, числа до/после.

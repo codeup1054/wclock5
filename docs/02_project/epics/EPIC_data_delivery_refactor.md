@@ -2,8 +2,8 @@
 title: Эпик — Рефакторинг доставки данных (демоны → БД → кэш → медиатор → фронт)
 fnd: DRI
 typ: EPIC
-ver: 0.2
-updated: 2026-09-29
+ver: 0.3
+updated: 2026-10-21
 status: 🚧
 ---
 # Эпик — Рефакторинг доставки данных
@@ -57,6 +57,9 @@ Telegram ┘                 └─ odintsovo_weather.db
 | P5 | Единый DataLayer `InvestData` (invest_chart_helpers.js): подписки+fallback+DTO | один тикер-кэш, −200–300 строк клиента | ⏳ далее |
 | P7 | Один формат времени (epoch) в payload/медиаторе | меньше конвертаций | ⏳ далее |
 | P8 | Кэш-политика: in-memory LRU для секций медиатора + бакеты; диск — тяжёлый GET | предсказуемый TTL | ⏳ далее |
+| P9 | Серия USD/RUB: сидер 5 мес (`seed_usd.py`) + `TICKER_REGISTRY` + figi-карта + live-фетч в демоне | валюта на графике/в таблице | ✅ 21.10 |
+| P10 | Серия Brent: сидер 5 мес (`seed_brent.py`) + `TICKER_REGISTRY` (ось `y_oil`) + figi-карта + live-фетч | нефть; фронт-месяц `BR-11.26` | ✅ 21.10 |
+| P11 | Retention `last_prices` 120→200 дней (`apply_ticker_retention`) | 5-месячные серии не обрезаются | ✅ 21.10 |
 
 ## Метрики успеха (измеримые)
 
@@ -80,6 +83,11 @@ Telegram ┘                 └─ odintsovo_weather.db
 - **Вне батчей** — прод-баг: `invest.history` падал в `_error` при `end_ts='live'` из localStorage
   live-режима чарта (`_int_or_none` в `_invest_history_payload`); кап+график показывали «тыс. ₽» —
   переведены на полные рубли.
+- **батч-4 (P9–P11, 21.10)** — расширение набора серий: **USD/RUB** (`BBG0013HGFT4`,
+  `USD_RUB`) и **Brent** (SPBFUT `BR-11.26`, `FBR112600000`, `BRENT`). Сидеры 5 мес
+  (`seed_usd.py`, `seed_brent.py`, HOUR-чанки 80д), записи в `TICKER_REGISTRY`,
+  figi-карта `/api/invest/ticker` в `app.py`, live-фетч в `tracked_tickers_daemon.py`
+  (💵/🛢️), retention 200. Прод: USD/RUB 952 строки (2026-05-25→10-21), Brent 2072 свечи.
 
 ## Артефакты
 
@@ -88,3 +96,18 @@ Telegram ┘                 └─ odintsovo_weather.db
   Итог батч-3: **49 OK (1 skip)**.
 - Метрики: `tests/metrics_baseline.json` (до), `tests/metrics_after.json` (после).
 - Отчёт: `docs/02_project/reports/refactor_data_delivery_20260929.md`.
+- Сидеры серий: `parsers/invest/seed_usd.py`, `parsers/invest/seed_brent.py`.
+
+## Связи
+
+- Беклог: `docs/02_project/backlogs/backlog_20260929.ldn.md` (батчи 1–3),
+  `docs/02_project/backlogs/backlog_20261021.ldn.md` (батч-4, P9–P11).
+- Конвенции: `wclock5/docs/02_project/conventions.md` §2 «Инвест-данные».
+
+## Лист изменений
+
+- **0.3** · 2026-10-21 — батч-4: расширение набора серий (P9 USD/RUB, P10 Brent,
+  P11 retention 200); добавлен раздел «Связи».
+- **0.2** · 2026-09-29 — батчи 1–3 (P1/P6, P2, P3) + внебатчевые фиксы (баннер
+  `end_ts='live'`, полные рубли капитала); метрики/тесты/отчёт.
+- **0.1** · 2026-09-29 — создан: карта данных, диагноз (P1–P8), план работ.

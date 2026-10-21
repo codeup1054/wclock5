@@ -16,7 +16,11 @@
       portfolio: '#2cba99',
       finam: '#5b6ee8',
       total: '#aaaaaa',
-      ref: '#ffffff'
+      ref: '#ffffff',
+      tgld: '#FFD700',
+      xau: '#cc7722',
+      usd: '#3ba3ff',
+      brent: '#556B2F'
     }
   };
 
@@ -41,6 +45,12 @@
       { path: 'color.finam', label: 'Finam', type: 'color' },
       { path: 'color.total', label: 'T+F / сумма', type: 'color' },
       { path: 'color.ref', label: 'Опорная 100%', type: 'color' }
+    ]},
+    { group: 'Цвета тикеров', fields: [
+      { path: 'color.tgld', label: 'TGLD (золото)', type: 'color' },
+      { path: 'color.xau', label: 'XAU/USD', type: 'color' },
+      { path: 'color.usd', label: 'USD/RUB', type: 'color' },
+      { path: 'color.brent', label: 'Brent (нефть)', type: 'color' }
     ]},
     { group: 'Штриховка', fields: [
       { path: 'hatch.spacing', label: 'Шаг (px)', step: 1, min: 4, max: 100 },
@@ -270,6 +280,7 @@
     // Одна группа = <div class="cp-group-title"> + <table>. Возвращает таблицу.
     function buildGroup(title, fill) {
       var w = document.createElement('div');
+      w.__groupTitle = title;
       w.appendChild(mk('div', 'cp-group-title', title));
       var t = document.createElement('table');
       t.className = 'cp-table';
@@ -309,6 +320,15 @@
               function (v) { onSettingChange(f.key, v, 'number'); });
           });
         }));
+      }
+
+      // «Цвета тикеров» — всегда последней группой (низ второго столбца,
+      // справа от «Цвета линий»).
+      for (var _ti = 0; _ti < groups.length - 1; _ti++) {
+        if (groups[_ti].__groupTitle === 'Цвета тикеров') {
+          groups.push(groups.splice(_ti, 1)[0]);
+          break;
+        }
       }
 
       var cols = mk('div', 'cp-cols');

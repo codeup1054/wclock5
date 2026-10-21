@@ -97,7 +97,7 @@ def get_db_stats():
     cursor = conn.cursor()
     
     stats = {}
-    for figi in TRACKED_FIGI + ["XAU_USD"]:
+    for figi in TRACKED_FIGI + ["XAU_USD", "USD_RUB", "BRENT"]:
         cursor.execute(
             "SELECT MIN(timestamp), MAX(timestamp), COUNT(*) FROM last_prices WHERE figi = ?",
             (figi,)
@@ -197,6 +197,49 @@ def fetch_xau_price():
         "price": round(yf_price, 2),
     }
 
+# --- Получение внешних котировок (USD/RUB, Brent) через T-Invest GetLastPrices ---
+USD_FIGI = "BBG0013HGFT4"     # USD000UTSTOM (MOEX, CETS)
+BRENT_FIGI = "FBR112600000"   # BR-11.26 Нефть Brent (MOEX, SPBFUT)
+
+def fetch_last_price_value(figi):
+    """Последняя цена по FIGI через MarketDataService/GetLastPrices (float или None)."""
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    conn = http.client.HTTPSConnection("invest-public-api.tbank.ru", timeout=15, context=context)
+    try:
+        payload = json.dumps({"figi": [figi]})
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {API_TOKEN}",
+        }
+        conn.request("POST", "/rest/tinkoff.public.invest.api.contract.v1.MarketDataService/GetLastPrices", payload, headers)
+        res = conn.getresponse()
+        if res.status != 200:
+            raise Exception(f"HTTP {res.status}: {res.read().decode()[:150]}")
+        data = json.loads(res.read().decode())
+        lp = data.get("lastPrices") or []
+        if not lp:
+            return None
+        price = price_to_float(lp[0].get("price"))
+        return price if price > 0 else None
+    finally:
+        conn.close()
+
+def fetch_usd_price():
+    """Текущий курс USD/RUB."""
+    price = fetch_last_price_value(USD_FIGI)
+    if price is None:
+        return None
+    return {"figi": "USD_RUB", "ticker": "USD/RUB", "class_code": "tinkoff", "price": round(price, 4)}
+
+def fetch_brent_price():
+    """Текущая цена нефти Brent (BR-11.26)."""
+    price = fetch_last_price_value(BRENT_FIGI)
+    if price is None:
+        return None
+    return {"figi": "BRENT", "ticker": "Brent", "class_code": "tinkoff", "price": round(price, 2)}
+
 # --- Получение последних цен ---
 def fetch_last_prices(figi_list):
     context = ssl.create_default_context()
@@ -237,7 +280,7 @@ def save_prices(last_prices):
         price = price_to_float(item.get("price"))
         repo.write_price(figi, ticker, class_code, price, db_path=DB_PATH)
         saved += 1
-    repo.apply_ticker_retention(days=120, db_path=DB_PATH)
+    repo.apply_ticker_retention(days=200, db_path=DB_PATH)
     return saved
 
 # --- Сохранение XAU в БД ---
@@ -246,7 +289,7 @@ def save_xau_price(item):
     if not item:
         return 0
     repo.write_price(item["figi"], item["ticker"], item["class_code"], round(item["price"], 2), db_path=DB_PATH)
-    repo.apply_ticker_retention(days=120, db_path=DB_PATH)
+    repo.apply_ticker_retention(days=200, db_path=DB_PATH)
     return 1
 
 # --- Основной цикл ---
@@ -278,6 +321,24 @@ def main():
             xau = fetch_xau_price()
             if xau:
                 saved += save_xau_price(xau)
+
+            # USD/RUB через T-Invest (GetLastPrices)
+            try:
+                usd = fetch_usd_price()
+                if usd:
+                    saved += save_xau_price(usd)
+                    print(f"  💵 USD/RUB: {usd['price']:.2f}", flush=True)
+            except Exception as e:
+                print(f"  ⚠️ USD/RUB: {e}", flush=True)
+
+            # Brent через T-Invest (GetLastPrices)
+            try:
+                brent = fetch_brent_price()
+                if brent:
+                    saved += save_xau_price(brent)
+                    print(f"  🛢️ Brent: {brent['price']:.2f}", flush=True)
+            except Exception as e:
+                print(f"  ⚠️ Brent: {e}", flush=True)
 
             print(f"[{now_str}] ✅ Сохранено {saved} записей", flush=True)
 

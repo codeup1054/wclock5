@@ -41,6 +41,7 @@
     var TICKER_REGISTRY = {
         'TGLD@': {
             label: 'TGLD',
+            colorKey: 'tgld',
             figi: 'TCS80A101X50',
             color: '#FFD700',
             yAxisID: 'y_tgold',
@@ -56,6 +57,7 @@
         },
         'XAU/USD': {
             label: 'XAU',
+            colorKey: 'xau',
             color: '#cc7722',
             yAxisID: 'y_xau',
             tickColor: '#cc7722',
@@ -67,8 +69,49 @@
             aggregation: 'last',
             axisPosition: 'left',
             maxTicksLimit: 6
+        },
+        'USD/RUB': {
+            label: 'USD',
+            colorKey: 'usd',
+            figi: 'BBG0013HGFT4',
+            color: '#3ba3ff',
+            yAxisID: 'y_usd',
+            tickColor: '#3ba3ff',
+            tickFormat: function (v) { return v.toFixed(2); },
+            borderWidth: dpiLine(ChartTheme.get('line.ticker')),
+            borderDash: [],
+            pointRadius: 0,
+            hidden: false,
+            aggregation: 'last',
+            axisPosition: 'left',
+            maxTicksLimit: 6
+        },
+        'Brent': {
+            label: 'Brent',
+            colorKey: 'brent',
+            figi: 'FBR112600000',
+            color: '#556B2F',
+            yAxisID: 'y_oil',
+            tickColor: '#556B2F',
+            tickFormat: function (v) { return v.toFixed(2); },
+            borderWidth: dpiLine(ChartTheme.get('line.ticker')),
+            borderDash: [],
+            pointRadius: 0,
+            hidden: false,
+            aggregation: 'last',
+            axisPosition: 'left',
+            maxTicksLimit: 6
         }
     };
+
+    // Динамический цвет тикера из темы (color.<colorKey>); fallback — cfg.color.
+    function tickerColor(cfg) {
+        if (cfg && cfg.colorKey && window.ChartTheme && ChartTheme.get) {
+            var c = ChartTheme.get('color.' + cfg.colorKey, null);
+            if (c) return c;
+        }
+        return (cfg && cfg.color) || '#cccccc';
+    }
 
     // ================================================================
     // LOCAL STORAGE HELPERS (per browser, like wclock cookies)
@@ -395,7 +438,7 @@
                         display: true,
                         callback: cfg.tickFormat,
                         font: { size: ChartTheme.get('font.ticker') },
-                        color: cfg.tickColor,
+                        color: tickerColor(cfg),
                         autoSkip: true,
                         padding: -1,
                         maxTicksLimit: cfg.maxTicksLimit || 6
@@ -404,7 +447,7 @@
                     title: {
                         display: false,
                         text: cfg.label.replace(/\/.*/, ''),
-                        color: cfg.tickColor,
+                        color: tickerColor(cfg),
                         font: { size: ChartTheme.get('font.axisTitle') },
                         padding: -10
                     }
@@ -426,7 +469,7 @@
             datasets.push({
                 label: cfg.label,
                 data: [],
-                borderColor: cfg.color,
+                borderColor: tickerColor(cfg),
                 borderWidth: dpiLine(cfg.borderWidth || ChartTheme.get('line.total')),
                 borderDash: cfg.borderDash || [],
                 tension: chartTension(0.2),
@@ -699,7 +742,7 @@
                             chart.data.datasets.push({
                                 label: cfg.label,
                                 data: filledData,
-                                borderColor: cfg.color,
+                                borderColor: tickerColor(cfg),
                                 borderWidth: dpiLine(cfg.borderWidth || ChartTheme.get('line.total')),
                                 borderDash: cfg.borderDash || [],
                                 tension: chartTension(0.2),
@@ -760,6 +803,21 @@
                 for (var i = 0; i < sources.length; i++) {
                     var s = sources[i];
                     if (!s.initialValue && !s.finalValue) continue;
+                    // Метки начала/конца/прироста только для видимых серий: если
+                    // серия (портфель/тикер) отключена в легенде — меток нет.
+                    var dl = (s.datasetLabel != null) ? s.datasetLabel : s.label;
+                    if (dl) {
+                        var dsIdx = -1;
+                        for (var d = 0; d < chart.data.datasets.length; d++) {
+                            if (chart.data.datasets[d].label === dl) { dsIdx = d; break; }
+                        }
+                        if (dsIdx >= 0) {
+                            var dsVisible = (typeof chart.isDatasetVisible === 'function')
+                                ? chart.isDatasetVisible(dsIdx)
+                                : (chart.data.datasets[dsIdx].hidden !== true);
+                            if (!dsVisible) continue;
+                        }
+                    }
                     var yScale = scales[s.yAxisID];
                     if (!yScale) continue;
 
@@ -1240,7 +1298,8 @@
                     delta: tinkoffDelta,
                     prevDelta: tinkoffPrevDelta,
                     yAxisID: 'y_portfolio',
-                    color: ChartTheme.get('color.portfolio')
+                    color: ChartTheme.get('color.portfolio'),
+                    datasetLabel: 'Tinkoff, \u20BD'
                 }
             ];
             if (finamMax > 0) {
@@ -1251,7 +1310,8 @@
                     delta: finamDelta,
                     prevDelta: finamPrevDelta,
                     yAxisID: finamAxis,
-                    color: ChartTheme.get('color.finam')
+                    color: ChartTheme.get('color.finam'),
+                    datasetLabel: 'Finam, \u20BD'
                 });
             }
 
@@ -1383,10 +1443,10 @@
                 investChart.data.labels = labels;
 
                 var newSources = [
-                    { label: 'Tinkoff', initialValue: tinkoffInit, finalValue: tinkoffFinal, delta: tinkoffDelta, prevDelta: tinkoffPrevDelta, yAxisID: 'y_portfolio', color: ChartTheme.get('color.portfolio') }
+                    { label: 'Tinkoff', initialValue: tinkoffInit, finalValue: tinkoffFinal, delta: tinkoffDelta, prevDelta: tinkoffPrevDelta, yAxisID: 'y_portfolio', color: ChartTheme.get('color.portfolio'), datasetLabel: 'Tinkoff, \u20BD' }
                 ];
                 if (finamMax > 0) {
-                    newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: ChartTheme.get('color.finam') });
+                    newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: ChartTheme.get('color.finam'), datasetLabel: 'Finam, \u20BD' });
                 }
                 investChart._periodSources = newSources;
 

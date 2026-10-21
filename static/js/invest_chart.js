@@ -32,6 +32,7 @@
     const TICKER_REGISTRY = {
         'TGLD@': {
             label: 'TGLD',
+            colorKey: 'tgld',
             figi: 'TCS80A101X50',
             color: '#FFD700',
             yAxisID: 'y_tgold',
@@ -47,6 +48,7 @@
         },
         'XAU/USD': {
             label: 'XAU',
+            colorKey: 'xau',
             color: '#cc7722',
             yAxisID: 'y_xau',
             tickColor: '#cc7722',
@@ -58,8 +60,49 @@
             aggregation: 'last',
             axisPosition: 'left',
             maxTicksLimit: 6,
+        },
+        'USD/RUB': {
+            label: 'USD',
+            colorKey: 'usd',
+            figi: 'BBG0013HGFT4',
+            color: '#3ba3ff',
+            yAxisID: 'y_usd',
+            tickColor: '#3ba3ff',
+            tickFormat: function(v) { return v.toFixed(2); },
+            borderWidth: dpiLine(ChartTheme.get('line.ticker')),
+            borderDash: [],
+            pointRadius: 0,
+            hidden: false,
+            aggregation: 'last',
+            axisPosition: 'left',
+            maxTicksLimit: 6,
+        },
+        'Brent': {
+            label: 'Brent',
+            colorKey: 'brent',
+            figi: 'FBR112600000',
+            color: '#556B2F',
+            yAxisID: 'y_oil',
+            tickColor: '#556B2F',
+            tickFormat: function(v) { return v.toFixed(2); },
+            borderWidth: dpiLine(ChartTheme.get('line.ticker')),
+            borderDash: [],
+            pointRadius: 0,
+            hidden: false,
+            aggregation: 'last',
+            axisPosition: 'left',
+            maxTicksLimit: 6,
         }
     };
+
+    // Динамический цвет тикера из темы (color.<colorKey>); fallback — cfg.color.
+    function tickerColor(cfg) {
+        if (cfg && cfg.colorKey && window.ChartTheme && ChartTheme.get) {
+            var c = ChartTheme.get('color.' + cfg.colorKey, null);
+            if (c) return c;
+        }
+        return (cfg && cfg.color) || '#cccccc';
+    }
 
     // ================================================================
     // UNIFIED AGGREGATION — single function for all tickers
@@ -358,7 +401,7 @@
                         display: true,
                         callback: cfg.tickFormat,
                         font: { size: dpiFont(ChartTheme.get('font.ticker')) },
-                        color: cfg.tickColor,
+                        color: tickerColor(cfg),
                         autoSkip: true,
                         padding: -1,
                         maxTicksLimit: cfg.maxTicksLimit || 6
@@ -367,7 +410,7 @@
                     title: {
                         display: false,
                         text: cfg.label.replace(/\/.*/, ''),
-                        color: cfg.tickColor,
+                        color: tickerColor(cfg),
                         font: { size: dpiFont(ChartTheme.get('font.axisTitle')) },
                         padding: -10
                     }
@@ -389,7 +432,7 @@
             datasets.push({
                 label: cfg.label,
                 data: [],
-                borderColor: cfg.color,
+                borderColor: tickerColor(cfg),
                 borderWidth: dpiLine(cfg.borderWidth || ChartTheme.get('line.total')),
                 borderDash: cfg.borderDash || [],
                 tension: chartTension(0.2),
@@ -669,7 +712,7 @@
                             chart.data.datasets.push({
                                 label: cfg.label,
                                 data: filledData,
-                                borderColor: cfg.color,
+                                borderColor: tickerColor(cfg),
                                 borderWidth: dpiLine(cfg.borderWidth || ChartTheme.get('line.total')),
                                 borderDash: cfg.borderDash || [],
                                 tension: chartTension(0.2),
@@ -707,7 +750,7 @@
                             finalValue: tgldFinal,
                             delta: tgldDelta,
                             yAxisID: 'y_tgold',
-                            color: '#FFD700',
+                            color: ChartTheme.get('color.tgld', '#FFD700'),
                             decimals: 2
                         };
                         var ps = (chart._periodSources || []).filter(function(x) { return x.label !== 'TGLD'; });
@@ -740,7 +783,7 @@
                             finalValue: xauFinal,
                             delta: xauDelta,
                             yAxisID: 'y_xau',
-                            color: '#cc7722',
+                            color: ChartTheme.get('color.xau', '#cc7722'),
                             fmt: function(v) { return (v / 1000).toFixed(3); }
                         };
                         var psx = (chart._periodSources || []).filter(function(x) { return x.label !== 'XAU'; });
@@ -750,6 +793,72 @@
                 }
             } catch (e) {
                 console.error('[InvestPlot] XAU period labels error:', e);
+            }
+
+            // Период-метки USD/RUB (слева, как у портфеля): стартовая цена без %,
+            // финальная с %-м изменением, из фактических цен тикера.
+            try {
+                var usdTicker = tickersData && tickersData['USD/RUB'];
+                if (usdTicker && usdTicker.prices && usdTicker.prices.length > 0) {
+                    var pusd = usdTicker.prices;
+                    var usdInit = null, usdFinal = null;
+                    for (var ui = 0; ui < pusd.length; ui++) {
+                        var uv = Number(pusd[ui].price);
+                        if (isNaN(uv) || uv <= 0) continue;
+                        if (usdInit === null) usdInit = uv;
+                        usdFinal = uv;
+                    }
+                    if (usdInit !== null && usdFinal !== null) {
+                        var usdDelta = usdInit > 0 ? ((usdFinal - usdInit) / usdInit) * 100 : 0;
+                        var usdSrc = {
+                            label: 'USD',
+                            initialValue: usdInit,
+                            finalValue: usdFinal,
+                            delta: usdDelta,
+                            yAxisID: 'y_usd',
+                            color: ChartTheme.get('color.usd', '#3ba3ff'),
+                            fmt: function(v) { return v.toFixed(2); }
+                        };
+                        var psd = (chart._periodSources || []).filter(function(x) { return x.label !== 'USD'; });
+                        psd.push(usdSrc);
+                        chart._periodSources = psd;
+                    }
+                }
+            } catch (e) {
+                console.error('[InvestPlot] USD period labels error:', e);
+            }
+
+            // Период-метки Brent (слева, как у портфеля): стартовая цена без %,
+            // финальная с %-м изменением, из фактических цен тикера.
+            try {
+                var brentTicker = tickersData && tickersData['Brent'];
+                if (brentTicker && brentTicker.prices && brentTicker.prices.length > 0) {
+                    var pbr = brentTicker.prices;
+                    var brInit = null, brFinal = null;
+                    for (var bi = 0; bi < pbr.length; bi++) {
+                        var bv = Number(pbr[bi].price);
+                        if (isNaN(bv) || bv <= 0) continue;
+                        if (brInit === null) brInit = bv;
+                        brFinal = bv;
+                    }
+                    if (brInit !== null && brFinal !== null) {
+                        var brDelta = brInit > 0 ? ((brFinal - brInit) / brInit) * 100 : 0;
+                        var brSrc = {
+                            label: 'Brent',
+                            initialValue: brInit,
+                            finalValue: brFinal,
+                            delta: brDelta,
+                            yAxisID: 'y_oil',
+                            color: ChartTheme.get('color.brent', '#556B2F'),
+                            fmt: function(v) { return v.toFixed(2); }
+                        };
+                        var psb = (chart._periodSources || []).filter(function(x) { return x.label !== 'Brent'; });
+                        psb.push(brSrc);
+                        chart._periodSources = psb;
+                    }
+                }
+            } catch (e) {
+                console.error('[InvestPlot] Brent period labels error:', e);
             }
 
 try {
@@ -826,6 +935,22 @@ try {
         for (var i = 0; i < sources.length; i++) {
             var s = sources[i];
             if (!s.initialValue && !s.finalValue) continue;
+            // Метки начала/конца/прироста показываем только для видимых серий:
+            // если соответствующая серия (портфель/тикер) отключена в легенде —
+            // меток быть не должно.
+            var dl = (s.datasetLabel != null) ? s.datasetLabel : s.label;
+            if (dl) {
+                var dsIdx = -1;
+                for (var d = 0; d < chart.data.datasets.length; d++) {
+                    if (chart.data.datasets[d].label === dl) { dsIdx = d; break; }
+                }
+                if (dsIdx >= 0) {
+                    var dsVisible = (typeof chart.isDatasetVisible === 'function')
+                        ? chart.isDatasetVisible(dsIdx)
+                        : (chart.data.datasets[dsIdx].hidden !== true);
+                    if (!dsVisible) continue;
+                }
+            }
             var yScale = scales[s.yAxisID];
             if (!yScale) continue;
 
@@ -1395,7 +1520,8 @@ try {
                     delta: tinkoffDelta,
                     prevDelta: tinkoffPrevDelta,
                     yAxisID: 'y_portfolio',
-                    color: ChartTheme.get('color.portfolio')
+                    color: ChartTheme.get('color.portfolio'),
+                    datasetLabel: 'Tinkoff, \u20BD'
                 }
             ];
             if (finamMax > 0) {
@@ -1406,7 +1532,8 @@ try {
                     delta: finamDelta,
                     prevDelta: finamPrevDelta,
                     yAxisID: finamAxis,
-                    color: ChartTheme.get('color.finam')
+                    color: ChartTheme.get('color.finam'),
+                    datasetLabel: 'Finam, \u20BD'
                 });
             }
 
@@ -1544,10 +1671,10 @@ try {
 
                 // Update period label sources
                 var newSources = [
-                    { label: 'Tinkoff', initialValue: tinkoffInit, finalValue: tinkoffFinal, delta: tinkoffDelta, prevDelta: tinkoffPrevDelta, yAxisID: 'y_portfolio', color: ChartTheme.get('color.portfolio') }
+                    { label: 'Tinkoff', initialValue: tinkoffInit, finalValue: tinkoffFinal, delta: tinkoffDelta, prevDelta: tinkoffPrevDelta, yAxisID: 'y_portfolio', color: ChartTheme.get('color.portfolio'), datasetLabel: 'Tinkoff, \u20BD' }
                 ];
                 if (finamMax > 0) {
-                    newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: ChartTheme.get('color.finam') });
+                    newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: ChartTheme.get('color.finam'), datasetLabel: 'Finam, \u20BD' });
                 }
                 investChart._periodSources = newSources;
 
