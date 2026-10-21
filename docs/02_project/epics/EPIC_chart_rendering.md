@@ -46,7 +46,7 @@ status: 🚧
 | GRD-06 | Плагин apiErrorPoints | Замена вертикальных красных пунктиров на точки на верхней оси X; ховер-тултип (дата + % скачка); хук afterEvent + hit-test radius 7px; destroy чистит тултип | ✅ |
 | GRD-07 | Метки периода для XAU | PeriodLabelsPlugin: `s.fmt` для кастомного формата; XAU fmt `(v/1000).toFixed(3)`; метки в loadTickersToChart из first/last valid price | ✅ |
 | GRD-08 | Линия 100% полупрозрачная белая | `rgba(255,255,255,0.85)`, `borderDash [8,6]`; в обоих местах (создание и обновление) | ✅ |
-| GRD-09 | Настройка цветов тикеров в редакторе параметров | `ChartTheme` группа «Цвета тикеров» (`tgld/xau/usd/brent`); `colorKey` + `tickerColor(cfg)` в `invest_chart.js`; `themeColor(key,def)` + слушатель `chartThemeChange` в `invest_banner.js`; группа — последняя во втором столбце (справа от «Цвета линий») | ✅ |
+| GRD-09 | Настройка цветов тикеров в редакторе параметров | `ChartTheme` группа «Цвета тикеров» (`tgld/xau/usd/brent`); `colorKey` + `tickerColor(cfg)` в `invest_chart.js`; `themeColor(key,def)` + слушатель `chartThemeChange` в `invest_banner.js`; порядок групп задан явно (`groupOrder`): 1-й столбец — `Шрифты`, `Толщины линий`, `Настройки графика`; 2-й — `Штриховка`, `Цвета тикеров`, `Цвета линий` | ✅ |
 | GRD-10 | Метки периода USD/Brent | источники `y_usd` (`#3ba3ff`) и `y_oil` (`#556B2F`), `fmt: v.toFixed(2)` | ✅ |
 | GRD-11 | Метки скрытых серий не рисуются | `PeriodLabelsPlugin` skip при `!chart.isDatasetVisible`; матч источника и датасета по `datasetLabel` | ✅ |
 | GRD-12 | Цвет Brent — болотный | `#556B2F` в chart+banner (wclock+hft) | ✅ |

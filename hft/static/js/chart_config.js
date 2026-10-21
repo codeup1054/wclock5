@@ -322,14 +322,20 @@
         }));
       }
 
-      // «Цвета тикеров» — всегда последней группой (низ второго столбца,
-      // справа от «Цвета линий»).
-      for (var _ti = 0; _ti < groups.length - 1; _ti++) {
-        if (groups[_ti].__groupTitle === 'Цвета тикеров') {
-          groups.push(groups.splice(_ti, 1)[0]);
-          break;
-        }
-      }
+      // Явный порядок групп: «Настройки графика» — в первый столбец,
+      // «Цвета линий» — в конец второго столбца.
+      var groupOrder = ['Шрифты', 'Толщины линий', 'Настройки графика',
+        'Штриховка', 'Цвета тикеров', 'Цвета линий'];
+      var _byTitle = {};
+      groups.forEach(function (g) { _byTitle[g.__groupTitle] = g; });
+      var _ordered = [];
+      groupOrder.forEach(function (t) {
+        if (_byTitle[t]) { _ordered.push(_byTitle[t]); delete _byTitle[t]; }
+      });
+      groups.forEach(function (g) {
+        if (_byTitle[g.__groupTitle]) { _ordered.push(g); delete _byTitle[g.__groupTitle]; }
+      });
+      groups = _ordered;
 
       var cols = mk('div', 'cp-cols');
       var col1 = mk('div', 'cp-col');
