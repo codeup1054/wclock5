@@ -2,8 +2,8 @@
 title: Эпик — Надёжность и ресурсы на Beget (диск, БД, контейнеры, алерты)
 fnd: OPS
 typ: EPIC
-ver: 0.2
-updated: 2026-10-13
+ver: 0.3
+updated: 2026-10-22
 status: 🚧
 ---
 # Эпик — Надёжность и ресурсы на Beget
@@ -115,6 +115,7 @@ Docker build cache и неиспользуемые образы копились
 | OPS-13 | `invest_repo.py:384` — `int('live')` | ValueError на `end_ts=live` от фронта | ⬜ |
 | OPS-14 | План по RAM (1.9G / 31 контейнер) | лимиты, консолидация демонов, апгрейд VPS | ⬜ |
 | OPS-15 | Детектор провалов данных `invest_buckets` | `sh/data_scan.py` (scan+fix, интерполяция + бэкап `_DELETE_AFTER_TEST`); инцидент 12/10/2026 (finam/min, 20 мин клоуз 3.54M→8.4M) | ✅ |
+| OPS-16 | 502 `wclock5-app` из-за OOM-kill | `mem_limit` 512m → 1g (серверный `docker-compose.override.yml`); убран unbounded fallback в `/api/invest/ticker/<t>/morning_gap` (грузил всю историю `last_prices`, 663k строк) | ✅ |
 
 ## Иллюстрация прод-состояния (цифры = правда)
 
@@ -167,6 +168,9 @@ docker-compose.yml (битый бинд, 3 сервиса):
 
 ## Лист изменений
 
+- **0.3** · 2026-10-22 — OPS-16: 502 `wclock5-app` (OOM-kill, exit 137,
+  `mem_limit 512m` → 1g) и убран unbounded fallback в `morning_gap`
+  (полная история `last_prices`). OPS-05..14 остаются открытыми.
 - **0.2** · 2026-10-13 — OPS-15 добавочно: детектор провалов данных
   `invest_buckets` (`sh/data_scan.py` scan+fix с интерполяцией и временными
   бэкапами `*_DELETE_AFTER_TEST`); закрыт по инциденту 12/10/2026 (finam/min,

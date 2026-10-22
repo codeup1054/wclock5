@@ -584,6 +584,34 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         </tr>`;
     }
 
+    // Строка «Spread» (утренний гэп TGLD@): те же колонки, что у ассет-строк.
+    // «Стоимость» = средний гэп за период (%); день/неделя/период = гэп % и
+    // абс. (open − prev_close) за горизонт. Данные — _tgld_gap из payload тикеров.
+    function renderMorningGapRow() {
+        const g = (tickersData && tickersData._tgld_gap) ||
+                  (lastTickersData && lastTickersData._tgld_gap);
+        const h = g && g.horizons;
+        if (!h) return '';
+        const val = h.period;
+        const day = h.day, week = h.week, period = h.period;
+        const col = (val && val.gap_pct >= 0) ? themeColor('jumpUp', '#1fc163')
+                                              : themeColor('jumpDown', '#e74c3c');
+        const cls = function(o) { return !o ? '' : (o.gap_pct >= 0 ? 'change-positive' : 'change-negative'); };
+        const pct = function(o) { return o ? formatPercent(o.gap_pct) : '—'; };
+        const abs = function(o) { return o ? formatTickerAbs(o.gap_abs) : '—'; };
+        const absStyle = 'opacity:0.2';
+        return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
+            <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Spread</td>
+            <td id="banner-td-tgldgap-value" class="banner-td-num" style="color:${col}">${val ? formatPercent(val.gap_pct) : '—'}</td>
+            <td id="banner-td-tgldgap-day-pct" class="banner-td-pct ${cls(day)}">${pct(day)}</td>
+            <td id="banner-td-tgldgap-day-change" class="banner-td-change ${cls(day)}" style="${absStyle}">${abs(day)}</td>
+            <td id="banner-td-tgldgap-week-pct" class="banner-td-pct ${cls(week)}">${pct(week)}</td>
+            <td id="banner-td-tgldgap-week-change" class="banner-td-change ${cls(week)}" style="${absStyle}">${abs(week)}</td>
+            <td id="banner-td-tgldgap-period-pct" class="banner-td-pct ${cls(period)}">${pct(period)}</td>
+            <td id="banner-td-tgldgap-period-change" class="banner-td-change ${cls(period)}" style="${absStyle}">${abs(period)}</td>
+        </tr>`;
+    }
+
     // Метка в углу панели: время ПОСЛЕДНИХ ДАННЫХ (последний снапшот), МСК.
     // Метка живёт СВОЕЙ жизнью и не зависит от результата рендера: тикер
     // читает последний payload секции invest.history прямо из медиатора, а
@@ -896,6 +924,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         tblHtml += renderAssetRow('XAU/USD', themeColor('xau', '#cc7722'), 'XAU');
         tblHtml += renderAssetRow('USD/RUB', themeColor('usd', '#3ba3ff'), 'USD');
         tblHtml += renderAssetRow('Brent', themeColor('brent', '#556B2F'), 'Brent');
+        tblHtml += renderMorningGapRow();
 
         tblHtml += `</tbody></table>`;
 

@@ -596,6 +596,120 @@ def api_invest_capital():
 # === API для тикеров (TGLD@) ===
 TRACKED_TICKERS_DB_PATH = os.path.join(os.path.dirname(__file__), "parsers", "invest", "tracked_tickers.db")
 
+# === Утренний гэп TGLD@ (close прошлой сессии → открытие утренней сессии) ===
+MORNING_GAP_FIGI = "TCS80A101X50"      # TGLD@
+MORNING_GAP_MARKER = "TGLD@"
+# 2026-09-24: TGLD@ на MOEX начал открываться в 09:00 MSK (до этого — в 10:00).
+MORNING_OPEN_SWITCH = datetime(2026, 9, 24).date()
+
+
+def _morning_open_minutes(d):
+    """Минуты от полуночи MSK, когда в этот день открывается утренняя сессия."""
+    return 9 * 60 if d >= MORNING_OPEN_SWITCH else 10 * 60
+
+
+def _morning_gap_days(pairs):
+    """pairs: iterable[(ts_epoch, price)] → дневные гэпы (только будни).
+    Гэп = первое изменившееся значение цены после открытия утренней сессии
+    относительно последней цены перед открытием (ночной застой)."""
+    from datetime import timezone as _tz, timedelta as _td
+    MSK = _tz(_td(hours=3))
+    by_day = {}
+    for ts, price in pairs:
+        if ts is None or price is None:
+            continue
+        d = datetime.fromtimestamp(int(ts), MSK).date()
+        by_day.setdefault(d, []).append((int(ts), price))
+    days = []
+    for d in sorted(by_day):
+        if d.weekday() >= 5:
+            continue
+        open_min = _morning_open_minutes(d)
+        p0 = None
+        p1 = None
+        open_ts = None
+        for ts, price in by_day[d]:
+            m = datetime.fromtimestamp(ts, MSK)
+            mins = m.hour * 60 + m.minute
+            if mins < open_min:
+                p0 = price
+            elif p1 is None and p0 is not None and price != p0:
+                p1 = price
+                open_ts = ts
+        if not p0 or p1 is None:
+            continue
+        days.append({
+            "date": d.isoformat(),
+            "ts": open_ts,
+            "gap_pct": round((p1 / p0 - 1) * 100, 3),
+            "gap_abs": round(p1 - p0, 4),
+            "open": p1,
+            "prev_close": p0,
+            "open_time": "09:00" if open_min == 9 * 60 else "10:00",
+        })
+    return days
+
+
+def _morning_gap_horizons(days):
+    """Агрегаты утреннего гэпа по горизонтам: день (последний торг. день),
+    неделя (7 календарных дней), период (все дни payload). Значение — средний
+    гэп %; gap_abs — средний абс. (open − prev_close)."""
+    if not days:
+        return {"day": None, "week": None, "period": None}
+
+    def agg(subset):
+        if not subset:
+            return None
+        n = len(subset)
+        return {
+            "n": n,
+            "gap_pct": round(sum(d["gap_pct"] for d in subset) / n, 3),
+            "gap_abs": round(sum(d["gap_abs"] for d in subset) / n, 4),
+        }
+
+    last = datetime.fromisoformat(days[-1]["date"]).date()
+    week_from = last - timedelta(days=6)
+    week = [d for d in days if datetime.fromisoformat(d["date"]).date() >= week_from]
+    return {"day": agg(days[-1:]), "week": agg(week), "period": agg(days)}
+
+
+def _morning_gap_summary(days):
+    if not days:
+        return None
+    g = sorted(x["gap_pct"] for x in days)
+    pos = sum(1 for v in g if v > 0)
+    n = len(g)
+    return {
+        "n": n,
+        "mean": round(sum(g) / n, 3),
+        "median": round(g[n // 2] if n % 2 else (g[n // 2 - 1] + g[n // 2]) / 2, 3),
+        "pos_pct": round(100 * pos / n, 1),
+        "abs_mean": round(sum(abs(v) for v in g) / n, 3),
+        "min": round(g[0], 3),
+        "max": round(g[-1], 3),
+    }
+
+
+def _morning_gap_from_rows(rows, figi=MORNING_GAP_FIGI):
+    """Посчитать утренний гэп из строк read_prices (timestamp ISO, price)."""
+    pairs = []
+    for r in rows:
+        try:
+            row_figi = r["figi"]
+        except (IndexError, KeyError):
+            row_figi = figi  # read_prices(figi=...) не возвращает колонку figi
+        if row_figi != figi:
+            continue
+        try:
+            ts = int(datetime.fromisoformat(r["timestamp"].replace('Z', '+00:00')).timestamp())
+        except Exception:
+            continue
+        pairs.append((ts, r["price"]))
+    days = _morning_gap_days(pairs)
+    return {"ticker": MORNING_GAP_MARKER, "figi": figi, "days": days,
+            "horizons": _morning_gap_horizons(days),
+            "summary": _morning_gap_summary(days)}
+
 @app.route("/api/invest/ticker/<ticker>")
 def api_invest_ticker(ticker):
     if not os.path.exists(TRACKED_TICKERS_DB_PATH):
@@ -648,6 +762,31 @@ def api_invest_ticker(ticker):
 
     data = cached_invest(f"ticker_{ticker}", TRACKED_TICKERS_DB_PATH,
                          {"interval": interval, "period": period}, generate)
+    if isinstance(data, dict) and data.get("_error"):
+        return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
+    return jsonify(data)
+
+
+@app.route("/api/invest/ticker/<ticker>/morning_gap")
+def api_invest_ticker_morning_gap(ticker):
+    """Утренний гэп TGLD@ (среднее за период без выходных) + дневной ряд."""
+    if ticker.upper() != MORNING_GAP_MARKER.upper():
+        return jsonify({"error": "Ticker not supported"}), 404
+    if not os.path.exists(TRACKED_TICKERS_DB_PATH):
+        return jsonify({"error": "Ticker DB not found"}), 404
+    period = request.args.get('period', '-28 day')
+    start_ts = _int_or_none(request.args.get('start_ts'))
+    end_ts = _int_or_none(request.args.get('end_ts'))
+
+    def generate():
+        rows = invest_repo.read_prices(period, figi=MORNING_GAP_FIGI,
+                                       db_path=TRACKED_TICKERS_DB_PATH,
+                                       start_epoch=start_ts, end_epoch=end_ts)
+        return _morning_gap_from_rows(rows)
+
+    data = cached_invest("tgld_morning_gap", TRACKED_TICKERS_DB_PATH,
+                         {"period": period, "start_ts": start_ts, "end_ts": end_ts},
+                         generate, ttl=300)
     if isinstance(data, dict) and data.get("_error"):
         return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
     return jsonify(data)
@@ -899,6 +1038,13 @@ def _invest_tickers_payload(interval="hour", period="-28 day", start_ts=None, en
                 "baseline": bl,
                 "prices": prices
             }
+
+        # Утренний гэп TGLD@ (метрика для баннера) — не должен ронять секцию тикеров.
+        try:
+            result["_tgld_gap"] = _morning_gap_from_rows(rows)
+        except Exception as e:
+            print(f"[INVEST] morning_gap error: {e}", flush=True)
+
         return result
 
     return cached_invest("tickers", TRACKED_TICKERS_DB_PATH,

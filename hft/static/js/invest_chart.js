@@ -783,6 +783,106 @@
         };
     }
 
+    // ================================================================
+    // Утренний гэп TGLD@ — столбики в нижней полосе графика + линия среднего
+    // Данные: window.MorningGapData = {days:[{ts,gap_pct}], summary:{mean,...}}
+    // ================================================================
+    function _tsToMs(t) {
+        if (t == null) return null;
+        if (t instanceof Date) return t.getTime();
+        if (typeof t === 'number') return t < 1e12 ? t * 1000 : t;
+        var p = Date.parse(t);
+        return isNaN(p) ? null : p;
+    }
+
+    function loadMorningGap(chart) {
+        var period = state.period || '-35 day';
+        var apiPeriod = period === '-1 day' ? '-1.5 day' : period;
+        fetch('/api/hft/ticker/TGLD@/morning_gap?period=' + encodeURIComponent(apiPeriod),
+              { credentials: 'same-origin', cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                window.MorningGapData = (d && d.days) ? d : null;
+                if (chart) chart.update('none');
+            })
+            .catch(function (e) { console.warn('[MorningGap] load error:', e); });
+    }
+
+    window.MorningGapPlugin = function () {
+        return {
+            id: 'morningGap',
+            afterDatasetsDraw(chart) {
+                var d = window.MorningGapData;
+                if (!d || !d.days || !d.days.length) return;
+                var xScale = chart.scales && chart.scales.x;
+                var area = chart.chartArea;
+                if (!xScale || !area) return;
+                var tsArr = chart._midnightTimestamps || chart.data.timestamps;
+                if (!tsArr || !tsArr.length) return;
+
+                var ctx = chart.ctx;
+                var maxAbs = 0.1;
+                for (var i = 0; i < d.days.length; i++) maxAbs = Math.max(maxAbs, Math.abs(d.days[i].gap_pct));
+                var mean = (d.summary && d.summary.mean) || 0;
+                maxAbs = Math.max(maxAbs, Math.abs(mean));
+
+                var bandH = Math.max(28, Math.round(area.height * 0.16));
+                var yMid = area.bottom - bandH / 2;
+                var yScale = (bandH / 2) / maxAbs;
+                var up = ChartTheme.get('color.jumpUp', '#1fc163');
+                var dn = ChartTheme.get('color.jumpDown', '#e74c3c');
+                var avgC = ChartTheme.get('color.jumpAvg', '#ffffff');
+                var step = xScale.width / Math.max(1, tsArr.length);
+                var bw = Math.max(2, Math.min(6, step));
+
+                ctx.save();
+                ctx.fillStyle = 'rgba(255,255,255,0.045)';
+                ctx.fillRect(area.left, area.bottom - bandH, area.width, bandH);
+
+                for (i = 0; i < d.days.length; i++) {
+                    var day = d.days[i];
+                    var target = _tsToMs(day.ts);
+                    if (target == null) continue;
+                    var idx = -1, best = Infinity;
+                    for (var k = 0; k < tsArr.length; k++) {
+                        var ms = _tsToMs(tsArr[k]);
+                        if (ms == null) continue;
+                        var diff = Math.abs(ms - target);
+                        if (diff < best) { best = diff; idx = k; }
+                    }
+                    if (idx < 0) continue;
+                    var x = xScale.getPixelForValue(idx);
+                    if (x < area.left - bw || x > area.right + bw) continue;
+                    var g = day.gap_pct;
+                    var h = Math.abs(g) * yScale;
+                    ctx.fillStyle = g >= 0 ? up : dn;
+                    ctx.globalAlpha = 0.85;
+                    ctx.fillRect(x - bw / 2, g >= 0 ? (yMid - h) : yMid, bw, h);
+                }
+
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(area.left, yMid);
+                ctx.lineTo(area.right, yMid);
+                ctx.stroke();
+
+                if (d.summary && d.summary.n) {
+                    var yAvg = yMid - mean * yScale;
+                    ctx.strokeStyle = avgC;
+                    ctx.setLineDash([4, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(area.left, yAvg);
+                    ctx.lineTo(area.right, yAvg);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+                ctx.restore();
+            }
+        };
+    };
+
     window.PeriodLabelsPlugin = function (initialSources) {
 
         return {
@@ -956,6 +1056,15 @@
                     if (periodLabelsPlugin) plugins.push(periodLabelsPlugin);
                 } catch (e) {
                     console.error('[InvestPlot] PeriodLabelsPlugin error:', e);
+                }
+            }
+
+            // Утренний гэп TGLD@ — столбики + линия среднего (нижняя полоса)
+            if (window.MorningGapPlugin) {
+                try {
+                    plugins.push(window.MorningGapPlugin());
+                } catch (e) {
+                    console.error('[InvestPlot] MorningGapPlugin error:', e);
                 }
             }
 
@@ -1512,6 +1621,9 @@
                     window.loadTickersToChart(investChart, aggregatedTimestamps);
                 }
             }
+
+            // Утренний гэп TGLD@: подтянуть данные для плагина столбиков.
+            loadMorningGap(investChart);
 
             isUpdating = false;
             clearTimeout(updateTimeoutId);

@@ -20,7 +20,10 @@
       tgld: '#FFD700',
       xau: '#cc7722',
       usd: '#3ba3ff',
-      brent: '#556B2F'
+      brent: '#556B2F',
+      jumpUp: '#1fc163',
+      jumpDown: '#e74c3c',
+      jumpAvg: '#ffffff'
     }
   };
 
@@ -51,6 +54,11 @@
       { path: 'color.xau', label: 'XAU/USD', type: 'color' },
       { path: 'color.usd', label: 'USD/RUB', type: 'color' },
       { path: 'color.brent', label: 'Brent (нефть)', type: 'color' }
+    ]},
+    { group: 'Spread TGLD', fields: [
+      { path: 'color.jumpUp', label: 'Гэп вверх', type: 'color' },
+      { path: 'color.jumpDown', label: 'Гэп вниз', type: 'color' },
+      { path: 'color.jumpAvg', label: 'Средняя линия', type: 'color' }
     ]},
     { group: 'Штриховка', fields: [
       { path: 'hatch.spacing', label: 'Шаг (px)', step: 1, min: 4, max: 100 },
@@ -324,8 +332,8 @@
 
       // Явный порядок групп: «Настройки графика» — в первый столбец,
       // «Цвета линий» — в конец второго столбца.
-      var groupOrder = ['Шрифты', 'Толщины линий', 'Настройки графика',
-        'Штриховка', 'Цвета тикеров', 'Цвета линий'];
+      var groupOrder = ['Шрифты', 'Толщины линий', 'Настройки графика', 'Штриховка',
+        'Цвета тикеров', 'Spread TGLD', 'Цвета линий'];
       var _byTitle = {};
       groups.forEach(function (g) { _byTitle[g.__groupTitle] = g; });
       var _ordered = [];

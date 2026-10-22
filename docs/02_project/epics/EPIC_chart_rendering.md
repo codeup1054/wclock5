@@ -2,9 +2,9 @@
 title: Эпик — Отрисовка графиков: производительность и ловушки
 fnd: GEN
 typ: EPIC
-ver: 0.3
-updated: 2026-10-21
-status: 🚧
+ver: 0.4
+updated: 2026-10-22
+status: ✅
 ---
 # Эпик — Отрисовка графиков: производительность и ловушки
 
@@ -50,6 +50,7 @@ status: 🚧
 | GRD-10 | Метки периода USD/Brent | источники `y_usd` (`#3ba3ff`) и `y_oil` (`#556B2F`), `fmt: v.toFixed(2)` | ✅ |
 | GRD-11 | Метки скрытых серий не рисуются | `PeriodLabelsPlugin` skip при `!chart.isDatasetVisible`; матч источника и датасета по `datasetLabel` | ✅ |
 | GRD-12 | Цвет Brent — болотный | `#556B2F` в chart+banner (wclock+hft) | ✅ |
+| GRD-13 | Полоса «Spread» TGLD@ на графике | `MorningGapPlugin` — столбики утреннего гэпа в нижней полосе (`bandH = max(28, area.height*0.16)`), знак → `color.jumpUp/jumpDown`, пунктир среднего `color.jumpAvg`; данные `/api/invest/ticker/TGLD@/morning_gap` (wclock) / `/api/hft/ticker/TGLD@/morning_gap` (hft) | ✅ |
 
 ## Правила отрисовки (справочник для новых графиков)
 
@@ -92,6 +93,13 @@ status: 🚧
     `TICKER_REGISTRY`; хелперы `tickerColor(cfg)` (график) и
     `themeColor(key, def)` (баннер). Смена темы → перестройка графика
     (`chartThemeChange`) и перерисовка баннера.
+11. **Доп. полоса под графиком** — метрику, не привязанную к основной оси
+    (например утренний гэп), рисуем отдельным плагином в собственной полосе
+    внизу `chartArea` (`afterDatasetsDraw`, `bandH = max(28, height*0.16)`),
+    нормируя по максимуму модуля; знак → `color.jumpUp`/`color.jumpDown`,
+    среднее — пунктиром `color.jumpAvg`. Лучшая точка по X ищется по
+    ближайшему `_midnightTimestamps`/`data.timestamps`, столбики за
+    пределами `chartArea` отбрасываются.
 
 ## Числа до/после (проверено 31.08.2026)
 
@@ -122,11 +130,15 @@ status: 🚧
 - Код: `wclock5/static/js/invest_chart_helpers.js`, `wclock5/app.py`,
   `wclock5/hft/static/js/invest_chart_helpers.js`, `wclock5/hft/app.py`
 - Беклог: `wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md` (CHRT-FIX),
-  `wclock5/docs/02_project/backlogs/backlog_20261021.ldn.md` (GRD-09..12)
+  `wclock5/docs/02_project/backlogs/backlog_20261021.ldn.md` (GRD-09..12),
+  `wclock5/docs/02_project/backlogs/backlog_20261022.ldn.md` (GRD-13)
 - Фреймворк: `01.lab/02_project/PROC_graph_approaches.md`
 
 ## Лист изменений
 
+- **0.4** · 2026-10-22 — GRD-13 (полоса «Spread» TGLD@ на графике:
+  `MorningGapPlugin` + `loadMorningGap`, цвета `jumpUp/jumpDown/jumpAvg`),
+  правило 11; эпик закрыт (все GRD ✅).
 - **0.3** · 2026-10-21 — GRD-09 (настройка цветов тикеров в редакторе
   параметров: `ChartTheme` + `tickerColor`/`themeColor`; группа «Цвета тикеров»
   последней во 2-м столбце), GRD-10 (метки периода USD/Brent), GRD-11 (метки
