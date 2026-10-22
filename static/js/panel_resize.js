@@ -256,31 +256,6 @@ function normalizePanelPosition(panel) {
         panel.style.height = `${Math.round(height)}px`;
     }
 
-    // Adjust text sizes inside press_humidity_temp_panel to be proportional
-    function adjustTextSizesForPressPanel(panel) {
-        const p = panel || document.getElementById('press_humidity_temp_panel');
-        if (!p) return;
-        const ids = ['fact_pressure_mm','forecast_1_pressure_mm','fact_humidity','forecast_1_humidity','fact_temperature','fact_feels_like','forecast_1_temperature','forecast_1_feels_like'];
-        const height = p.clientHeight || 100;
-        const scale = Math.max(0.6, Math.min(1.2, height / 150));
-        const base = 80;
-        ids.forEach(id => {
-            const el = p.querySelector('#' + id);
-            if (el){
-                el.style.fontSize = Math.round(base * scale) + 'px';
-                el.style.lineHeight = Math.round(base * scale * 0.9) + 'px';
-            }
-            
-        });
-        const tempGroup = p.querySelector('#temp');
-        if (tempGroup) {
-            const inner = tempGroup.querySelectorAll('#fact_temperature, #fact_feels_like, #forecast_1_temperature, #forecast_1_feels_like');
-            inner.forEach(node => {
-                if (node) node.style.fontSize = Math.round(base * scale * 1.1) + 'px';
-            });
-        }
-    }
-
     // Toggle fullscreen for a panel
     function toggleFullscreen(panel) {
         panel.classList.toggle('panel-fullscreen');
@@ -639,15 +614,11 @@ function normalizePanelPosition(panel) {
 
     // Content scaling for panels during resize
     const PANEL_CONTENT_SELECTORS = {
-        'wind_cond_precip_panel': '#wind_cond_precip',
-        'press_humidity_temp_panel': '#press_humidity_temp',
         'clock_panel': '#clock',
         'moon_panel': '#moon_phase'
     };
     
     const PANEL_BASE_SIZES = {
-        'wind_cond_precip_panel': { width: 457, height: 179 },
-        'press_humidity_temp_panel': { width: 469, height: 172 },
         'clock_panel': { width: 445, height: 167 },
         'moon_panel': { width: 200, height: 200 }
     };
@@ -779,7 +750,6 @@ function normalizePanelPosition(panel) {
             if (typeof $ !== 'undefined') {
                 $(document).trigger('weatherChartResize');
             }
-            adjustTextSizesForPressPanel();
             adjustClockFontSize();
         });
     }

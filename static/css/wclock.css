@@ -438,13 +438,23 @@ img[id*=condition] {
  *  Иконки и значения рисуются по id из index.js — узел переиспользуется
  *  под ту же цель, только раскладываем его по ячейкам сетки.
  *  Направление ветра — стрелка-компас, вращается по wind_direction. */
+/* Скейлинг по размеру панели (container query), а не по вьюпорту:
+   размеры иконок/шрифта берутся от меньшей стороны панели. */
+#wind_cond_precip_panel {
+    container-type: size;
+    --wc-icon: min(22cqi, 44cqh);
+    --wc-font: min(16cqi, 36cqh);
+}
+
 #wind_cond_precip {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(2, 1fr);
     align-items: center;
     justify-items: center;
-    gap: 0.3vh;
+    gap: 1cqh 0.5cqw;
+    width: 100%;
+    height: 100%;
 }
 
 /* Сбрасываем античные absolute-позиционирования панели */
@@ -458,6 +468,7 @@ img[id*=condition] {
     padding: 0;
     width: auto;
     height: auto;
+    line-height: 1;
     left: auto;
     right: auto;
     top: auto;
@@ -467,8 +478,8 @@ img[id*=condition] {
 
 /* Иконки погоды — квадрат, вписанный в колонку */
 #wind_cond_precip img[id*=condition] {
-    width: 13vh;
-    height: 13vh;
+    width: var(--wc-icon);
+    height: var(--wc-icon);
 }
 
 /* Стрелка-компас в ячейке направления: вращается по wind_direction
@@ -476,9 +487,9 @@ img[id*=condition] {
 #wind_cond_precip div[id*='_wind_dir_a'] {
     display: block !important;
     position: static !important;
-    width: 13vh;
-    height: 13vh;
-    background-size: 13vh auto;
+    width: var(--wc-icon);
+    height: var(--wc-icon);
+    background-size: var(--wc-icon) auto;
     margin: 0;
 }
 #wind_cond_precip #fact_wind_dir_a        { grid-area: 1 / 3; }
@@ -486,14 +497,89 @@ img[id*=condition] {
 
 /* Размещение по ячейкам: 1-я строка — факт, 2-я — прогноз */
 #wind_cond_precip img[id=fact_condition]        { grid-area: 1 / 1; }
-#wind_cond_precip #fact_wind_speed              { grid-area: 1 / 2; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
-#wind_cond_precip #fact_wind_dir                { grid-area: 1 / 3; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
-#wind_cond_precip #fact_prec_prob               { grid-area: 1 / 4; font-size: 10vh; text-align: center; }
+#wind_cond_precip #fact_wind_speed              { grid-area: 1 / 2; font-size: var(--wc-font); text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #fact_wind_dir                { grid-area: 1 / 3; font-size: var(--wc-font); text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #fact_prec_prob               { grid-area: 1 / 4; font-size: var(--wc-font); text-align: center; }
 
 #wind_cond_precip img[id=forecast_1_condition]  { grid-area: 2 / 1; }
-#wind_cond_precip #forecast_1_wind_speed        { grid-area: 2 / 2; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
-#wind_cond_precip #forecast_1_wind_dir          { grid-area: 2 / 3; font-size: 10vh; text-align: center; color: var(--light-gray); width: 100%; }
-#wind_cond_precip #forecast_1_prec_prob         { grid-area: 2 / 4; font-size: 10vh; text-align: center; }
+#wind_cond_precip #forecast_1_wind_speed        { grid-area: 2 / 2; font-size: var(--wc-font); text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #forecast_1_wind_dir          { grid-area: 2 / 3; font-size: var(--wc-font); text-align: center; color: var(--light-gray); width: 100%; }
+#wind_cond_precip #forecast_1_prec_prob         { grid-area: 2 / 4; font-size: var(--wc-font); text-align: center; }
+
+/* ─── Pressure/Humidity/Temperature — плоская сетка 2 × 4 (container query) ──
+ *  1-я строка — факт, 2-я — прогноз; колонки: давление / влажность /
+ *  температура / feels_like (последняя — 0.5fr). #temp — обёртка только для
+ *  группировки (display: contents). Скейлинг по размеру панели, без JS. */
+#press_humidity_temp_panel {
+    container-type: size;
+    --ph-font: min(22cqi, 46cqh);
+    --ph-font-sm: calc(var(--ph-font) * 0.7);
+}
+
+#press_humidity_temp {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 0.5fr;
+    grid-template-rows: 1fr 1fr;
+    align-items: center;
+    justify-items: center;
+    gap: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Сбрасываем классическое absolute-позиционирование и line-height */
+#press_humidity_temp > div {
+    position: static !important;
+    margin: 0;
+    padding: 0;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    width: auto;
+    height: auto;
+    line-height: 1;
+    text-align: center;
+    font-size: var(--ph-font);
+}
+
+#press_humidity_temp #fact_pressure_mm,
+#press_humidity_temp #forecast_1_pressure_mm { color: var(--accent-teal); }
+
+#press_humidity_temp #fact_humidity,
+#press_humidity_temp #forecast_1_humidity { color: var(--accent-blue); }
+
+/* Плоская сетка 4 колонки: давление / влажность / температура / feels_like
+   (feels_like — колонка 0.5fr). #temp — обёртка без бокса (display: contents),
+   её 4 узла становятся ячейками внешней сетки. */
+#press_humidity_temp #temp { display: contents; }
+
+#press_humidity_temp #temp > div {
+    position: static !important;
+    margin: 0;
+    padding: 0;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    width: auto;
+    height: auto !important;
+    line-height: 1;
+    text-align: center;
+    color: var(--accent-orange);
+    font-size: var(--ph-font) !important;
+}
+
+/* Размещение по ячейкам: ряд 1 — факт, ряд 2 — прогноз */
+#press_humidity_temp #fact_pressure_mm       { grid-area: 1 / 1; }
+#press_humidity_temp #fact_humidity          { grid-area: 1 / 2; }
+#press_humidity_temp #fact_temperature       { grid-area: 1 / 3; }
+#press_humidity_temp #temp #fact_feels_like       { grid-area: 1 / 4; font-size: var(--ph-font-sm) !important; }
+
+#press_humidity_temp #forecast_1_pressure_mm { grid-area: 2 / 1; }
+#press_humidity_temp #forecast_1_humidity    { grid-area: 2 / 2; }
+#press_humidity_temp #forecast_1_temperature { grid-area: 2 / 3; }
+#press_humidity_temp #temp #forecast_1_feels_like { grid-area: 2 / 4; font-size: var(--ph-font-sm) !important; }
 
 /* Солнечная панель — чистый CSS-скейлинг через container query units (без transform:scale) */
 #sun_panel {

@@ -310,12 +310,14 @@ bash sh/deploy_js.sh [file]
 | `#invest_banner_capital` | `.banner-capital-line`, `.banner-turnover-block` | `13cqi` / `4.0cqi` (настр.) | ✅ |
 | `#invest_banner_table` | `[class*="banner-td-"]` | `2.7cqi` (настр.) | ✅ |
 | `#invest_banner_total` | `.banner-total-only` | `12.5cqi` | ✅ |
+| `#wind_cond_precip_panel` | иконки `img[id*=condition]`, стрелки `div[id*='_wind_dir_a']`, скорости/направления/осадки | иконки `min(22cqi,44cqh)`, шрифт `min(16cqi,36cqh)` (`container-type: size`) | ✅ |
+| `#press_humidity_temp_panel` | давление/влажность/темп/feels_like (плоская сетка 2×4, `#temp` → `display: contents`) | колонки `1fr 1fr 1fr 0.5fr`, шрифт `min(22cqi,46cqh)`, `feels_like` ×0.7 (`container-type: size`) | ✅ |
 
 **Баннерные панели — контейнеры** (`container-type: inline-size` на
 `#invest_banner_capital/_table/_total`): строки капитала/оборота, бары активов
 и таблица масштабируются по ширине панели. Фон/структура — px (`.asset-bar`).
 
-**Остальные** (clock_panel, moon_panel, wind_cond_precip_panel, press_humidity_temp_panel)
+**Остальные** (clock_panel, moon_panel)
 пока в `PANEL_CONTENT_SELECTORS` / `PANEL_BASE_SIZES` — поэтапно перевести.
 
 **Правила:**
