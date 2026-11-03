@@ -1193,24 +1193,24 @@ try {
         if (!BADGE_FONT || BADGE_FONT < 6) BADGE_FONT = 16;
         MIN_GAP = BADGE_FONT + 6;
 
-        // Цвет показателя → фон бейджа с прозрачностью 40%.
+        // Цвет показателя → фон бейджа с прозрачностью 60%.
         function badgeFill(color) {
             var c = String(color || '#2cba99').trim();
             var m6 = c.match(/^#([0-9a-f]{6})$/i);
             if (m6) {
                 var n = parseInt(m6[1], 16);
-                return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',0.4)';
+                return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',0.6)';
             }
             var m3 = c.match(/^#([0-9a-f]{3})$/i);
             if (m3) {
                 var s = m3[1];
                 return 'rgba(' + parseInt(s[0] + s[0], 16) + ',' + parseInt(s[1] + s[1], 16) + ',' +
-                       parseInt(s[2] + s[2], 16) + ',0.4)';
+                       parseInt(s[2] + s[2], 16) + ',0.6)';
             }
             var mRgb = c.match(/^rgba?\(([^)]+)\)/i);
             if (mRgb) {
                 var parts = mRgb[1].split(',').slice(0, 3).join(',');
-                return 'rgba(' + parts + ',0.4)';
+                return 'rgba(' + parts + ',0.6)';
             }
             return c;
         }
@@ -1252,12 +1252,13 @@ try {
 
         for (var k = 0; k < labels.length; k++) {
             var lb = labels[k];
-            // Бейдж: фон — цвет показателя с прозрачностью 40%, текст чёрный.
+            // Бейдж: фон — цвет показателя с прозрачностью 60%, текст чёрный; паддинги 0/2.
             var fontSize = BADGE_FONT;
             ctx.font = "bold " + fontSize + "px sans-serif";
             var tw = ctx.measureText(lb.text).width;
-            var padX = Math.round(fontSize * 0.45);
-            var padY = Math.round(fontSize * 0.28);
+            // Паддинги бейджа фиксированные: 0 сверху/снизу, 2 слева/справа
+            var padX = 2;
+            var padY = 0;
             var bh = fontSize + padY * 2;
             var bw = tw + padX * 2;
             var bx = lb.align === 'right' ? lb.x - tw - padX : lb.x - padX;
