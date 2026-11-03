@@ -628,7 +628,6 @@ var rows = botSortedEvents(ev).slice(0, 3000);
       settingsSchema: [
         { key: 'invest_chart_dpi', label: 'DPI инвест-графика', type: 'number', min: 0.5, max: 4, step: 0.2, def: '2' },
         { key: 'weather_chart_dpi', label: 'DPI погоды', type: 'number', min: 0.5, max: 3, step: 0.2, def: '2' },
-        { key: 'period_label_font', label: 'Шрифт меток периода, px', type: 'number', min: 8, max: 28, step: 1, def: '16' },
         { key: 'chart_smoothing', label: 'Сглаживание графиков', type: 'checkbox', def: '1' }
       ],
       onSettingChange: function (key, val, type) {
@@ -640,9 +639,6 @@ var rows = botSortedEvents(ev).slice(0, 3000);
           $(document).trigger('investDpiChange', { dpi: parseFloat(str) });
         } else if (key === 'weather_chart_dpi') {
           $(document).trigger('weatherDpiChange', { dpi: parseFloat(str) });
-        } else if (key === 'period_label_font') {
-          // Пересобрать график, чтобы бейджи перерисовались новым шрифтом
-          $(document).trigger('panelViewChange', { panel: 'invest_panel', view: 'period' });
         } else if (key === 'chart_smoothing') {
           if (typeof window.InvestPlot !== 'undefined' && typeof window.InvestPlot.update === 'function') {
             window.InvestPlot.update();

@@ -1188,9 +1188,9 @@ try {
 
         var MIN_GAP = 14;
         var LABEL_OFFSET = 6;   // тот же отступ, что у подписей оси Y
-        // Шрифт бейджей — настраивается в «Настройки → ⚙ Параметры».
-        var BADGE_FONT = parseInt(getSetting('period_label_font', '16'), 10);
-        if (!BADGE_FONT || BADGE_FONT < 8) BADGE_FONT = 16;
+        // Шрифт бейджей — токен темы «Метки периода» (⚙ Параметры).
+        var BADGE_FONT = parseInt(ChartTheme.get('font.badge', 16), 10);
+        if (!BADGE_FONT || BADGE_FONT < 6) BADGE_FONT = 16;
         MIN_GAP = BADGE_FONT + 6;
 
         // Цвет показателя → фон бейджа с прозрачностью 70%.

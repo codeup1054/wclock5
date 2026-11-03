@@ -9,7 +9,7 @@
   var THEME_KEY = 'chart_theme';
 
   var DEFAULTS = {
-    font: { axis: 21, axisTitle: 42, share: 18.9, ticker: 27.3, portfolio: 21 },
+    font: { axis: 21, axisTitle: 42, share: 18.9, ticker: 27.3, portfolio: 21, badge: 16 },
     line: { ticker: 0.75, portfolio: 0.7, pct: 1.5, total: 2, layer: 0.5, ref: 0.5 },
     hatch: { spacing: 18, lineWidth: 1, alpha: 0.45 },
     color: {
@@ -58,6 +58,9 @@
       { path: 'color.brent', label: 'Brent (нефть)', type: 'color' },
       { path: 'color.tdiv', label: 'С5 TDIV', type: 'color' },
       { path: 'color.trnd', label: 'С3 TRND', type: 'color' }
+    ]},
+    { group: 'Метки периода', fields: [
+      { path: 'font.badge', label: 'Шрифт бейджей, px', step: 1, min: 8, max: 30 }
     ]},
     { group: 'Spread TGLD', fields: [
       { path: 'color.jumpUp', label: 'Гэп вверх', type: 'color' },
@@ -337,7 +340,7 @@
       // Явный порядок групп: «Настройки графика» — в первый столбец,
       // «Цвета линий» — в конец второго столбца.
       var groupOrder = ['Шрифты', 'Толщины линий', 'Настройки графика', 'Штриховка',
-        'Цвета тикеров', 'Spread TGLD', 'Цвета линий'];
+        'Цвета тикеров', 'Метки периода', 'Spread TGLD', 'Цвета линий'];
       var _byTitle = {};
       groups.forEach(function (g) { _byTitle[g.__groupTitle] = g; });
       var _ordered = [];
