@@ -864,7 +864,7 @@ div#browser_reload.panel-dragging {
 /* === Капитал: таблица «метка | значение/полосы» === */
 .invest-banner-host .banner-capital-grid {
     display: grid;
-    grid-template-columns: max-content 230px;   /* метка по контенту, данные 230px */
+    grid-template-columns: 90px 230px;          /* метки 90px, данные 230px */
     column-gap: 10px;
     row-gap: 2px;
     justify-content: space-between;              /* метки у левого края, данные у правого */
