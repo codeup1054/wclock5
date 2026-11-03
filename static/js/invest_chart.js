@@ -1188,6 +1188,32 @@ try {
 
         var MIN_GAP = 14;
         var LABEL_OFFSET = 6;   // тот же отступ, что у подписей оси Y
+        // Шрифт бейджей — настраивается в «Настройки → ⚙ Параметры».
+        var BADGE_FONT = parseInt(getSetting('period_label_font', '16'), 10);
+        if (!BADGE_FONT || BADGE_FONT < 8) BADGE_FONT = 16;
+        MIN_GAP = BADGE_FONT + 6;
+
+        // Цвет показателя → фон бейджа с прозрачностью 70%.
+        function badgeFill(color) {
+            var c = String(color || '#2cba99').trim();
+            var m6 = c.match(/^#([0-9a-f]{6})$/i);
+            if (m6) {
+                var n = parseInt(m6[1], 16);
+                return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',0.7)';
+            }
+            var m3 = c.match(/^#([0-9a-f]{3})$/i);
+            if (m3) {
+                var s = m3[1];
+                return 'rgba(' + parseInt(s[0] + s[0], 16) + ',' + parseInt(s[1] + s[1], 16) + ',' +
+                       parseInt(s[2] + s[2], 16) + ',0.7)';
+            }
+            var mRgb = c.match(/^rgba?\(([^)]+)\)/i);
+            if (mRgb) {
+                var parts = mRgb[1].split(',').slice(0, 3).join(',');
+                return 'rgba(' + parts + ',0.7)';
+            }
+            return c;
+        }
 
         // Каждая метка — в колонке своей оси: тикерные оси слева, портфельные
         // справа. Поэтому x и выравнивание берём у конкретной оси, а не общим
@@ -1226,18 +1252,35 @@ try {
 
         for (var k = 0; k < labels.length; k++) {
             var lb = labels[k];
-            var fontSize = 16;
+            // Бейдж: фон — цвет показателя с прозрачностью 70%, текст чёрный.
+            var fontSize = BADGE_FONT;
             ctx.font = "bold " + fontSize + "px sans-serif";
-            ctx.textAlign = lb.align;
             var tw = ctx.measureText(lb.text).width;
-            var pad = 4;
-            var bx = lb.align === 'right' ? lb.x - tw - pad : lb.x - pad;
-            var by = lb.y - 16;
-            var bh = 21;
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(bx, by, tw + pad * 2, bh);
-            ctx.fillStyle = lb.color;
-            ctx.fillText(lb.text, lb.x, lb.y);
+            var padX = Math.round(fontSize * 0.45);
+            var padY = Math.round(fontSize * 0.28);
+            var bh = fontSize + padY * 2;
+            var bw = tw + padX * 2;
+            var bx = lb.align === 'right' ? lb.x - tw - padX : lb.x - padX;
+
+            // Не даём бейджу уехать за холст — иначе правый край панели
+            // обрезает текст (например «102 276 +0.44%» у С3 TRND).
+            var maxX = chart.width - bw - 3;
+            if (bx > maxX) bx = maxX;
+            if (bx < 3) bx = 3;
+
+            var by = lb.y - fontSize + 2 - padY;
+
+            ctx.fillStyle = badgeFill(lb.color);
+            if (typeof ctx.roundRect === 'function') {
+                ctx.beginPath();
+                ctx.roundRect(bx, by, bw, bh, Math.round(fontSize * 0.3));
+                ctx.fill();
+            } else {
+                ctx.fillRect(bx, by, bw, bh);
+            }
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'left';
+            ctx.fillText(lb.text, bx + padX, lb.y);
         }
 
         ctx.restore();
