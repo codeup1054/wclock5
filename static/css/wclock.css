@@ -1709,6 +1709,8 @@ body.edit-mode .panel-fullscreen-btn {
     border: 2px solid #ffaa0038;
     border-radius: 12px;
     padding: 16px 20px;
+    /* Ширина окна «Отчёты и настройки»: по контенту, но таб «Настройки» — 800px */
+    width: auto;
     min-width: 360px;
     max-width: 96%;
     max-height: 88vh;
@@ -1716,6 +1718,10 @@ body.edit-mode .panel-fullscreen-btn {
     display: flex;
     flex-direction: column;
     /* box-shadow: 0 0 30px rgba(0, 0, 0, 0.6); */
+}
+
+.report-modal-content.tab-settings {
+    width: 800px;
 }
 
 #report-pane-settings {

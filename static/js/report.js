@@ -790,6 +790,9 @@ var rows = botSortedEvents(ev).slice(0, 3000);
         var tab = $(this).attr('data-tab');
         $el.find('.report-tab').removeClass('active');
         $(this).addClass('active');
+        // Ширина окна: только таб «Настройки» растягивается до 800px,
+        // остальные — по содержимому (две колонки таба требуют места).
+        $el.find('.report-modal-content').toggleClass('tab-settings', tab === 'settings');
         $('#report-pane-invest').toggle(tab === 'invest');
         $('#report-pane-bot').toggle(tab === 'bot');
         $('#report-pane-settings').toggle(tab === 'settings');
