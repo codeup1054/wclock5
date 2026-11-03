@@ -883,7 +883,9 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host .banner-assets-row .banner-assets {
-    flex: 1;
+    /* Полосы занимают 60% ширины (сокращено на 40%) */
+    flex: 0 1 60%;
+    max-width: 60%;
     margin-top: 0;
 }
 
