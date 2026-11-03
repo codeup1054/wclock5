@@ -2171,6 +2171,23 @@ body.edit-mode .panel-fullscreen-btn {
     border-radius: 3px;
 }
 
+/* Галочка «экстремумы» рядом с названием счёта */
+.panel-row .coll-extrema {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+    font-size: 0.72rem;
+    color: #93a7b8;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.panel-row .coll-extrema input {
+    accent-color: #2cba99;
+    cursor: pointer;
+}
+
 /* Toggle Switch */
 .switch {
     position: relative;

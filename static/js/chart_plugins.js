@@ -85,6 +85,12 @@ const getYScale = (chart, datasetIndex=0) => {
     return s.y || s.y_portfolio || Object.values(s)[0];
 };
 
+/* Ось для конкретной метки экстремума: у каждого счёта своя y-ось */
+const getExtremaYScale = (chart, ext) => {
+    if (ext && ext.axis && chart.scales && chart.scales[ext.axis]) return chart.scales[ext.axis];
+    return getYScale(chart);
+};
+
 /* -------------------------------------------------- */
 /* EXTREMA LABELS                                     */
 /* -------------------------------------------------- */
@@ -103,9 +109,8 @@ afterDatasetsDraw(chart) {
     const { ctx, scales } = chart;
 
     const xScale = scales.x;
-    const yScale = getYScale(chart);
 
-    if (!xScale || !yScale) return;
+    if (!xScale) return;
 
     ctx.save();
 
@@ -115,6 +120,9 @@ afterDatasetsDraw(chart) {
     ctx.translate(0, 0);
     
     for (let ext of data) {
+
+        const yScale = getExtremaYScale(chart, ext);
+        if (!yScale) continue;
 
         const x = xScale.getPixelForValue(ext.index);
         const y = yScale.getPixelForValue(ext.value);

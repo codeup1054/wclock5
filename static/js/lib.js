@@ -497,17 +497,6 @@ function populateSettingsContent($content) {
                     $(document).trigger('panelViewChange', { panel: panelId, view: 'mode' });
                 });
                 $settings.append($changeLabel);
-
-                // Экстремумы
-                var $extremaLabel = $('<label class="extrema-toggle"><input type="checkbox" id="extrema-toggle"> Экстремумы</label>');
-                var extremaEnabled = getSetting('invest_panel_extrema', '0') !== '0';
-                $extremaLabel.find('input').prop('checked', extremaEnabled);
-                $extremaLabel.find('input').on('change', function() {
-                    setSetting('invest_panel_extrema', this.checked ? '1' : '0');
-                    saveSettingsToServer({ invest_panel_extrema: this.checked ? '1' : '0' });
-                    $(document).trigger('panelViewChange', { panel: panelId, view: 'extrema' });
-                });
-                $settings.append($extremaLabel);
             } else if (panelId === 'battery_chart_panel') {
                 var $batPeriodLabel = $('<label class="extrema-toggle" style="margin-top:8px">Период: </label>');
                 var $batPeriodSelect = $('<select class="panel-view-select" style="margin-left:4px"></select>');
@@ -644,6 +633,19 @@ function populateSettingsContent($content) {
             }
         });
         $main.append($color, $('<span>' + label + '</span>'));
+
+        // Экстремумы — своя галочка на каждый счёт (ключ invest_extrema_<id>).
+        const extremaKey = 'invest_extrema_' + sourceId;
+        const legacyExtrema = getSetting('invest_panel_extrema', '0') !== '0' ? '1' : '0';
+        const $exLabel = $('<label class="coll-extrema" title="Показывать экстремумы на графике"></label>');
+        const $exCb = $('<input type="checkbox">').prop('checked', getSetting(extremaKey, legacyExtrema) === '1');
+        $exCb.on('change', function () {
+            setSetting(extremaKey, this.checked ? '1' : '0');
+            saveSettingsToServer({ [extremaKey]: this.checked ? '1' : '0' });
+            $(document).trigger('panelViewChange', { panel: 'invest_panel', view: 'extrema' });
+        });
+        $exLabel.append($exCb, '<span>экстремумы</span>');
+        $main.append($exLabel);
 
         const $sw = $('<label class="switch"></label>');
         const $cb = $('<input type="checkbox">').prop('checked', getSetting(key, '1') !== '0');

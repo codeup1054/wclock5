@@ -1263,8 +1263,10 @@ try {
 
             var plugins = [];
 
-            if (window.ExtremaPlugin && getSetting('invest_panel_extrema', '0') !== '0') {
+            if (window.ExtremaPlugin) {
                 try {
+                    // Плагин сам ничего не рисует без данных: экстремумы считаются
+                    // по каждому счёту отдельно (invest_extrema_<id>).
                     var extremaPlugin = window.initChartPlugin(
                         window.ExtremaPlugin(null), { enabled: true }
                     );
@@ -1624,12 +1626,6 @@ try {
                 dailyBars = [];
             }
 
-            // Extrema
-            var extrema = [];
-            if (getSetting('invest_panel_extrema', '0') !== '0' && window.findDailyExtrema) {
-                extrema = window.findDailyExtrema(aggregatedPortfolio, aggregatedTimestamps);
-            }
-
             // Build datasets: портфели по реестру InvestSources (Tinkoff, Finam,
             // С5 TDIV, С3 TRND, …). Tinkoff/Finam считаем явно (свои оси и стек
             // долей), остальные — общим циклом.
@@ -1684,9 +1680,28 @@ try {
                 };
             });
 
+            // Extrema — по каждому счёту отдельно: у источника своя галочка
+            // (invest_extrema_<id>) и своя ось, иначе метки прыгают на чужой шкале.
+            var extrema = [];
+            if (window.findDailyExtrema) {
+                var legacyExtrema = getSetting('invest_panel_extrema', '0') !== '0' ? '1' : '0';
+                var pushExtrema = function(series, axisId, id) {
+                    if (getSetting('invest_extrema_' + id, legacyExtrema) !== '1') return;
+                    if (!series || !series.length) return;
+                    var items = window.findDailyExtrema(series, aggregatedTimestamps) || [];
+                    items = items.filter(function(e) {
+                        return e && e.value != null && isFinite(e.value) && e.value > 0;
+                    });
+                    items.forEach(function(e) { e.axis = axisId; e.source = id; });
+                    extrema = extrema.concat(items);
+                };
+                pushExtrema(tinkoffSeries, 'y_portfolio', 'tinkoff');
+                pushExtrema(finamSeries, 'y_finam', 'finam');
+                extras.forEach(function(ex) { pushExtrema(ex.series, ex.meta.axis, ex.meta.id); });
+            }
+
             // Aggregate TGLD/TMON/LQDT shares to match aggregated timestamps
-            var tinkoffTgldAgg = aggregateTgldShares(timestamps, tinkoffTgldShares, aggregatedTimestamps);
-            var tinkoffTmonAgg = aggregateTgldShares(timestamps, tinkoffTmonShares, aggregatedTimestamps);
+            var tinkoffTgldAgg = aggregateTgldShares(timestamps, tinkoffTgldShares, aggregatedTimestamps);            var tinkoffTmonAgg = aggregateTgldShares(timestamps, tinkoffTmonShares, aggregatedTimestamps);
             var tinkoffLqdtAgg = aggregateTgldShares(timestamps, tinkoffLqdtShares, aggregatedTimestamps);
             var finamTgldAgg = aggregateTgldShares(timestamps, finamTgldShares, aggregatedTimestamps);
             var finamTmonAgg = aggregateTgldShares(timestamps, finamTmonShares, aggregatedTimestamps);
