@@ -998,6 +998,32 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 }
             } catch (e) { /* noop */ }
         }
+
+        // Строки капитала: пустое пространство между названием и значением
+        // сокращаем в 3 раза, но значения остаются прижатыми к правому краю.
+        if ($capHost.length) {
+            try {
+                var capEl = $capHost[0].querySelector('#invest-banner-capital');
+                if (capEl) {
+                    var cLines = capEl.querySelectorAll('.banner-capital-line');
+                    for (var ci2 = 0; ci2 < cLines.length; ci2++) {
+                        var ln = cLines[ci2];
+                        var lbl = ln.querySelector('.banner-capital-label');
+                        var val = ln.querySelector('.banner-capital-value');
+                        if (!lbl || !val) continue;
+                        lbl.style.marginRight = '0';
+                        var used = 0;
+                        for (var ch2 = 0; ch2 < ln.children.length; ch2++) used += ln.children[ch2].offsetWidth;
+                        var free = Math.max(0, ln.clientWidth - used);
+                        var gap = Math.max(6, Math.round(free / 3));
+                        ln.style.justifyContent = 'flex-end';
+                        ln.style.marginLeft = 'auto';
+                        ln.style.gap = gap + 'px';
+                        ln.style.width = Math.round(used + gap) + 'px';
+                    }
+                }
+            } catch (e) { /* noop */ }
+        }
         setBannerFreshness(dynData || historyData);
         const t1 = performance.now();
         console.log('[InvestBanner] renderBanner build', (tBuild - t0).toFixed(2) + 'ms', '| dom-set', (t1 - tBuild).toFixed(2) + 'ms', '| total', (t1 - t0).toFixed(2) + 'ms');

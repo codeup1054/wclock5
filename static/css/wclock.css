@@ -754,6 +754,12 @@ div#browser_reload.panel-dragging {
     gap: 10px;
 }
 
+/* Метка и значение не сжимаются — иначе flex режет текст при узкой строке */
+.invest-banner-host .banner-capital-label,
+.invest-banner-host .banner-capital-value {
+    flex: 0 0 auto;
+}
+
 /* Подпись источника в строке капитала (Finam / Тинвест / С5 TDIV) */
 .invest-banner-host .banner-capital-label {
     margin-right: auto;
