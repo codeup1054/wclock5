@@ -229,8 +229,19 @@
 <li>
 <a href="#2-invest-dannye">2. Инвест-данные</a>
 </li>
-<li>
+<li class="toc-parent" data-parent="3-grafiki-chart-js">
+<div class="toc-row">
+<span class="toc-toggle" data-target="3-grafiki-chart-js" title="Развернуть">+</span>
 <a href="#3-grafiki-chart-js">3. Графики (Chart.js)</a>
+</div>
+<ul class="toc-ac" id="toc-ac-3-grafiki-chart-js">
+<li>
+<a href="#3-1-metki-perioda-nachalo-konets-beydzhi">3.1 Метки периода (начало/конец) — бейджи</a>
+</li>
+<li>
+<a href="#3-2-storony-osey-i-ekstremumy">3.2 Стороны осей и экстремумы</a>
+</li>
+</ul>
 </li>
 <li>
 <a href="#4-paneli-razmeschenie-i-pokaz">4. Панели (размещение и показ)</a>
@@ -405,6 +416,63 @@ Compose-сервисы: <code>wclock</code> (app), <code>invest-parser</code>, <
   не внутри обработчиков ресайза (иначе накапливаются).</li>
 <li>Слушатели событий графиков: jQuery-namespaced<br />
   (<code>$(document).on('panelTempRangeChange', …)</code>).</li>
+</ul>
+<h3 id="3-1-metki-perioda-nachalo-konets-beydzhi">3.1 Метки периода (начало/конец) — бейджи</h3>
+<p>Метки старта/финиша каждой серии — <strong>бейджи вне поля графика</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Правило</th>
+<th>Реализация</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Сторона</td>
+<td>начало — <strong>слева</strong> (<code>chartArea.left − 6</code>, текст по правому краю), конец — <strong>справа</strong> (<code>chartArea.right + 6</code>, по левому краю)</td>
+</tr>
+<tr>
+<td>Вертикаль</td>
+<td>на оси <strong>своего</strong> показателя: <code>scales[s.yAxisID].getPixelForValue(...)</code></td>
+</tr>
+<tr>
+<td>Фон</td>
+<td>цвет показателя <code>rgba(...,0.6)</code> (hex → rgba, 3/6-значный и готовый <code>rgb()</code>)</td>
+</tr>
+<tr>
+<td>Текст</td>
+<td>чёрный <code>#000</code>, жирный, размер — токен темы <code>font.badge</code></td>
+</tr>
+<tr>
+<td>Паддинги</td>
+<td><code>padY 0</code>, <code>padX 2</code> (высота = размер шрифта)</td>
+</tr>
+<tr>
+<td>Границы</td>
+<td>бейдж зажимается в холст: <code>bx ∈ [3, width − bw − 3]</code> — иначе правый край панели режет текст</td>
+</tr>
+<tr>
+<td>Разведение</td>
+<td><code>MIN_GAP = font.badge + 6</code>, отдельно по колонкам (левая/правая), чтобы метки не толкали друг друга</td>
+</tr>
+<tr>
+<td>Фильтр</td>
+<td>только видимые серии (<code>chart.isDatasetVisible</code>) и валидные значения (<code>&gt; 0</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>Шрифт настраивается в редакторе темы: группа <strong>«Метки периода»</strong> (<code>font.badge</code>,<br />
+8…30 px), правка перерисовывает график через <code>chartThemeChange</code>.</p>
+<h3 id="3-2-storony-osey-i-ekstremumy">3.2 Стороны осей и экстремумы</h3>
+<ul>
+<li>Портфельные оси (<code>y_portfolio</code>, <code>y_finam</code>, <code>y_tdiv</code>, <code>y_trnd</code>) — <strong>справа</strong>,<br />
+  тикерные (<code>y_tgold</code>, <code>y_xau</code>, <code>y_usd</code>, <code>y_oil</code>) — <strong>слева</strong>: подписи и метки<br />
+  не смешиваются, каждая группа в своей колонке.</li>
+<li>Диапазон ₽-оси — от первого ненулевого значения (<code>min = max(0, lo − pad)</code>),<br />
+  у каждого источника своя ось: масштабы могут отличаться на порядки.</li>
+<li>Экстремумы — <strong>на каждый счёт</strong> (<code>invest_extrema_&lt;id&gt;</code>); метка несёт <code>axis</code><br />
+  и рисуется на оси своего показателя (<code>getExtremaYScale</code>), null-значения<br />
+  отфильтрованы.</li>
 </ul>
 <h2 id="4-paneli-razmeschenie-i-pokaz">4. Панели (размещение и показ)</h2>
 <ul>

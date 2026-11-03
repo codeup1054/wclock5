@@ -1178,12 +1178,12 @@ try {
             // показателя (тикеры слева, портфели справа).
             var initialY = yScale.getPixelForValue(s.posInitial != null ? s.posInitial : initialVal);
             if (!isFinite(initialY)) initialY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
-            labels.push({ y: initialY, axisId: s.yAxisID, text: fmt(initialVal), color: color, source: i });
+            labels.push({ y: initialY, axisId: s.yAxisID, kind: 'start', text: fmt(initialVal), color: color, source: i });
 
             var finalY = yScale.getPixelForValue(s.posFinal != null ? s.posFinal : finalVal);
             if (!isFinite(finalY)) finalY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
             var deltaStr = delta >= 0 ? ' +' + delta.toFixed(2) + '%' : ' ' + delta.toFixed(2) + '%';
-            labels.push({ y: finalY, axisId: s.yAxisID, text: fmt(finalVal) + deltaStr, color: color, delta: delta, source: i });
+            labels.push({ y: finalY, axisId: s.yAxisID, kind: 'end', text: fmt(finalVal) + deltaStr, color: color, delta: delta, source: i });
         }
 
         var MIN_GAP = 14;
@@ -1222,12 +1222,12 @@ try {
             var lb0 = labels[li];
             var ys = scales[lb0.axisId];
             if (!ys) continue;
-            var isRightAxis = (ys.position === 'right');
-            // Метки — ВНЕ поля графика, тем же отступом, что и подписи осей Y:
-            // тикеры слева (текст прижат к оси справа), портфели справа.
-            lb0.x = isRightAxis ? (chartArea.right + LABEL_OFFSET)
-                                : (chartArea.left - LABEL_OFFSET);
-            lb0.align = isRightAxis ? 'left' : 'right';
+            // Начало — в левой колонке вне графика, конец — в правой.
+            // Отступ тот же, что у подписей оси Y.
+            var isEnd = (lb0.kind === 'end');
+            lb0.x = isEnd ? (chartArea.right + LABEL_OFFSET)
+                          : (chartArea.left - LABEL_OFFSET);
+            lb0.align = isEnd ? 'left' : 'right';
         }
 
         // Разводим по вертикали только метки одной колонки, чтобы левые и

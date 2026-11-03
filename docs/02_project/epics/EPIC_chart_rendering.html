@@ -177,7 +177,7 @@
     </div>
     <h1 id="page-title">Эпик — Отрисовка графиков: производительность и ловушки</h1>
     <p class="sub">Проектная документация — конвенции, эпики, беклоги</p>
-    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">✅</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.5</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-11-03</span></span></div>
+    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">✅</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.6</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-11-03</span></span></div>
   </div>
   
 
@@ -367,6 +367,30 @@
 <td><code>_fetch_xau_from_yahoo_api()</code> — тот же источник через <code>query1.finance.yahoo.com/v8/finance/chart/GC=F</code>, фолбэк после yfinance; образ без пакета больше не теряет XAU</td>
 <td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
 </tr>
+<tr>
+<td>GRD-23</td>
+<td>Метки периода — бейджи вне поля</td>
+<td><code>PeriodLabelsPlugin</code>: фон <code>rgba(цвет,0.6)</code>, чёрный текст, паддинги <code>0/2</code>, шрифт <code>font.badge</code>, зажим в границы холста; начало — <strong>слева</strong>, конец — <strong>справа</strong> (раньше все в одной колонке слева)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-24</td>
+<td>Стороны осей</td>
+<td>Портфельные оси (<code>y_portfolio</code>, <code>y_finam</code>, <code>y_tdiv</code>, <code>y_trnd</code>) — справа, тикерные — слева; метки и тики не смешиваются</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-25</td>
+<td>Экстремумы по каждому счёту</td>
+<td><code>invest_extrema_&lt;id&gt;</code>, метка несёт <code>axis</code>, <code>getExtremaYScale</code> рисует на оси своего показателя, null-значения отфильтрованы</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-26</td>
+<td>Настройка шрифта бейджей</td>
+<td>Токен темы <code>font.badge</code> (8…30 px), группа «Метки периода» в редакторе темы (под «Цвета тикеров»), перерисовка через <code>chartThemeChange</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
 </tbody>
 </table>
 <h2 id="pravila-otrisovki-spravochnik-dlya-novykh-grafikov">Правила отрисовки (справочник для новых графиков)</h2>
@@ -484,6 +508,10 @@
 </ul>
 <h2 id="list-izmeneniy">Лист изменений</h2>
 <ul>
+<li><strong>0.6</strong> · 2026-11-03 — GRD-23..26: метки периода как бейджи (фон 60%,<br />
+  чёрный текст, паддинги 0/2, шрифт <code>font.badge</code>, зажим в холст; начало слева,<br />
+  конец справа); портфельные оси справа, тикерные слева; экстремумы на каждый<br />
+  счёт со своей осью; настройка шрифта бейджей в редакторе темы.</li>
 <li><strong>0.5</strong> · 2026-11-03 — GRD-14..22: свечи USD/RUB через <code>GetCandles</code> в обе БД</li>
 <li>бэкфилл 8 недель; раздельные ₽-оси от первого ненулевого значения; сетка X<br />
   как объединение портфеля и тикеров (+<code>_midnightTimestamps</code>); <code>spanGaps:false</code><br />
