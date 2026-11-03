@@ -752,8 +752,6 @@ div#browser_reload.panel-dragging {
     align-items: center;
     justify-content: flex-end;
     gap: 10px;
-    /* Значения сдвинуты влево: строка занимает 60% ширины панели */
-    width: 60%;
 }
 
 /* Подпись источника в строке капитала (Finam / Тинвест / С5 TDIV) */
@@ -885,10 +883,7 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host .banner-assets-row .banner-assets {
-    /* Полосы активов — 60% ширины: правый край баров совпадает с правым краем
-       чисел капитала (строки капитала тоже занимают 60%) */
-    flex: 0 1 60%;
-    max-width: 60%;
+    flex: 1;
     margin-top: 0;
 }
 
@@ -898,13 +893,11 @@ div#browser_reload.panel-dragging {
     align-items: center;
 }
 
-/* Колонка меток счетов фиксированной ширины — полосы начинаются с одного X */
+/* Колонка меток счетов: ширина подгоняется по самой длинной метке
+   (см. invest_banner.js), текст не обрезается */
 .invest-banner-host .asset-row-label {
-    flex: 0 0 44px;
-    width: 44px;
+    flex: 0 0 auto;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .invest-banner-host .asset-bar-container {

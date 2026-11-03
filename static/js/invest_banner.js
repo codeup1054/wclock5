@@ -980,6 +980,24 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const tBuild = performance.now();
         if ($capHost.length) $capHost.html(capHtml);
         if ($tblHost.length) $tblHost.html(tblHtml);
+
+        // Метки счетов — по ширине самой длинной: текст не обрезается,
+        // а полосы стартуют с одного X.
+        if ($capHost.length) {
+            try {
+                var labelEls = $capHost[0].querySelectorAll('.asset-row-label');
+                var maxLabelW = 0;
+                for (var li2 = 0; li2 < labelEls.length; li2++) {
+                    labelEls[li2].style.width = 'auto';
+                    maxLabelW = Math.max(maxLabelW, labelEls[li2].getBoundingClientRect().width);
+                }
+                if (maxLabelW > 0) {
+                    for (var lj2 = 0; lj2 < labelEls.length; lj2++) {
+                        labelEls[lj2].style.width = Math.ceil(maxLabelW) + 'px';
+                    }
+                }
+            } catch (e) { /* noop */ }
+        }
         setBannerFreshness(dynData || historyData);
         const t1 = performance.now();
         console.log('[InvestBanner] renderBanner build', (tBuild - t0).toFixed(2) + 'ms', '| dom-set', (t1 - tBuild).toFixed(2) + 'ms', '| total', (t1 - t0).toFixed(2) + 'ms');
