@@ -1174,36 +1174,55 @@ try {
                 return Math.round(v).toLocaleString('ru-RU').replace(/\u00a0/g, ' ');
             }
 
-            // Левый край числовых меток левых осей (например XAU). Маркеры капитала
-            // стартуем с того же края, чтобы они были максимально слева.
-            var leftAxisEdge = 0;
-            var xauScale = scales['y_xau'] || scales['y_tgld'];
-            if (xauScale && xauScale.left != null) {
-                leftAxisEdge = xauScale.left;
-            } else {
-                leftAxisEdge = chartArea.left;
-            }
-            var LABEL_RIGHT_X = leftAxisEdge;
+            // Позицию по X и выравнивание определим позже — по оси самого
+            // показателя (тикеры слева, портфели справа).
             var initialY = yScale.getPixelForValue(s.posInitial != null ? s.posInitial : initialVal);
             if (!isFinite(initialY)) initialY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
-            labels.push({ x: LABEL_RIGHT_X, y: initialY, text: fmt(initialVal), align: 'left', color: color, source: i });
+            labels.push({ y: initialY, axisId: s.yAxisID, text: fmt(initialVal), color: color, source: i });
 
             var finalY = yScale.getPixelForValue(s.posFinal != null ? s.posFinal : finalVal);
             if (!isFinite(finalY)) finalY = chartArea.top + (chartArea.bottom - chartArea.top) / 2;
             var deltaStr = delta >= 0 ? ' +' + delta.toFixed(2) + '%' : ' ' + delta.toFixed(2) + '%';
-            labels.push({ x: LABEL_RIGHT_X, y: finalY, text: fmt(finalVal) + deltaStr, align: 'left', color: color, delta: delta, source: i });
+            labels.push({ y: finalY, axisId: s.yAxisID, text: fmt(finalVal) + deltaStr, color: color, delta: delta, source: i });
         }
 
         var MIN_GAP = 14;
-        labels.sort(function(a, b) { return a.y - b.y; });
-        for (var j = 1; j < labels.length; j++) {
-            var diff = labels[j].y - labels[j - 1].y;
-            if (Math.abs(diff) < MIN_GAP) {
-                var shift = (MIN_GAP - Math.abs(diff)) / 2;
-                labels[j - 1].y -= shift;
-                labels[j].y += shift;
-            }
+        var LABEL_OFFSET = 6;   // тот же отступ, что у подписей оси Y
+
+        // Каждая метка — в колонке своей оси: тикерные оси слева, портфельные
+        // справа. Поэтому x и выравнивание берём у конкретной оси, а не общим
+        // левым краем для всех (раньше все метки сбивались в одну колонку).
+        for (var li = 0; li < labels.length; li++) {
+            var lb0 = labels[li];
+            var ys = scales[lb0.axisId];
+            if (!ys) continue;
+            var isRightAxis = (ys.position === 'right');
+            // Метки — ВНЕ поля графика, тем же отступом, что и подписи осей Y:
+            // тикеры слева (текст прижат к оси справа), портфели справа.
+            lb0.x = isRightAxis ? (chartArea.right + LABEL_OFFSET)
+                                : (chartArea.left - LABEL_OFFSET);
+            lb0.align = isRightAxis ? 'left' : 'right';
         }
+
+        // Разводим по вертикали только метки одной колонки, чтобы левые и
+        // правые не толкали друг друга.
+        var byColumn = {};
+        for (var ci = 0; ci < labels.length; ci++) {
+            var key = labels[ci].align;
+            (byColumn[key] = byColumn[key] || []).push(labels[ci]);
+        }
+        Object.keys(byColumn).forEach(function (colKey) {
+            var arr = byColumn[colKey];
+            arr.sort(function (a, b) { return a.y - b.y; });
+            for (var j = 1; j < arr.length; j++) {
+                var diff = arr[j].y - arr[j - 1].y;
+                if (Math.abs(diff) < MIN_GAP) {
+                    var shift = (MIN_GAP - Math.abs(diff)) / 2;
+                    arr[j - 1].y -= shift;
+                    arr[j].y += shift;
+                }
+            }
+        });
 
         for (var k = 0; k < labels.length; k++) {
             var lb = labels[k];
@@ -1760,7 +1779,9 @@ try {
                     ? window.InvestSources.color(ex.meta.id, '#888')
                     : (ex.meta.color || '#888');
                 scales[ex.meta.axis] = {
-                    position: 'left',
+                    // Портфели живут на правой стороне (тикеры — слева),
+                    // чтобы метки периода не смешивались в одну колонку.
+                    position: 'right',
                     stacked: false,
                     min: Math.max(0, ex.min - pad),
                     max: Math.max(ex.max + pad, ex.min + 100),
@@ -1782,9 +1803,10 @@ try {
                 };
             });
 
-            // Change y_portfolio to left position for labels to appear on left Y-axis
+            // Портфельные оси — справа (тикерные остаются слева):
+            // так метки периода портфелей и тикеров идут в разных колонках.
             if (scales.y_portfolio) {
-                scales.y_portfolio.position = 'left';
+                scales.y_portfolio.position = 'right';
             }
 
             // Скрытая авто-ось для нормированных рядов (%). Даём явный симметричный
@@ -1842,6 +1864,23 @@ try {
                     datasetLabel: 'Finam, \u20BD'
                 });
             }
+
+            // Дополнительные счета (С5 TDIV, С3 TRND, …) — метки периода справа,
+            // на своей оси, как и в ветке обновления.
+            extras.forEach(function(ex) {
+                if (ex.max <= 0) return;
+                periodSources.push({
+                    label: ex.meta.label,
+                    initialValue: ex.init,
+                    finalValue: ex.final,
+                    delta: ex.delta,
+                    prevDelta: ex.prevDelta,
+                    yAxisID: ex.meta.axis,
+                    color: window.InvestSources ? window.InvestSources.color(ex.meta.id, ex.meta.color)
+                                                : (ex.meta.color || '#888'),
+                    datasetLabel: ex.meta.label + ', \u20BD'
+                });
+            });
 
             var datasets = [
                 {
