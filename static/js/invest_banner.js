@@ -865,7 +865,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
         capHtml += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
         if (showInlineTotal) {
-            capHtml += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
+            // Итог оформлен как обычная строка: «Портфель» слева, сумма справа —
+            // тот же шрифт и та же сетка, что у счетов.
+            capHtml += `<div class="banner-capital-line banner-total-capital" id="banner-capital-total">` +
+                `<span class="banner-capital-label" style="color:#a7aeae;">Портфель</span>` +
+                `<span class="banner-capital-value" style="color:#d6d6d6;">${formatCurrency(totalCapital)}</span>` +
+                `</div>`;
         }
         portfolioRows.forEach(function(row) {
             capHtml += `<div class="banner-capital-line"><span class="banner-capital-label" style="color:${row.color};">${row.label}</span><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;

@@ -746,7 +746,7 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .banner-capital-line {
     color: var(--text-color);
-    font-size: 12cqi;
+    font-size: 10cqi;
     line-height: 0.85;
     display: flex;
     align-items: center;
@@ -862,19 +862,10 @@ div#browser_reload.panel-dragging {
     margin-top: 0;
 }
 
+/* Строка итога: визуально обычная строка капитала (тот же шрифт и сетка,
+   что у счетов) — собственных размеров не задаём, только приглушённый цвет. */
 .invest-banner-host .banner-total-capital {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 7cqi;
-    font-weight: 400;
-    color: #a7aeae;
-    white-space: nowrap;
-    min-width: 20cqi;
-    /* Первая строка панели «Капитал» — над строками портфелей */
-    width: 100%;
-    margin: 0 0 2px;
-    text-align: right;
+    opacity: 0.95;
     line-height: 1;
 }
 
