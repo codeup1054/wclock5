@@ -746,7 +746,7 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .banner-capital-line {
     color: var(--text-color);
-    font-size: 10cqi;
+    font-size: 8cqi;
     line-height: 0.85;
     display: flex;
     align-items: center;
