@@ -81,7 +81,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     // Читаемая метка счёта для первой колонки таблицы: крупнейший
     // не-денежный инструмент без суффиксов площадки (TGLD@@RUSX → TGLD).
+    // Если в реестре задан shortLabel — он приоритетнее (напр. «C3 TRND»).
     function topInstrument(positions, source) {
+        if (typeof window.InvestSources !== 'undefined' && window.InvestSources.get) {
+            const meta = window.InvestSources.get(source);
+            if (meta && meta.shortLabel) return meta.shortLabel;
+        }
         if (!Array.isArray(positions)) return '';
         const list = positions
             .filter(p => p && p.source === source)
