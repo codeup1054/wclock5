@@ -867,7 +867,7 @@ div#browser_reload.panel-dragging {
     grid-template-columns: max-content 230px;   /* метка по контенту, данные 230px */
     column-gap: 10px;
     row-gap: 2px;
-    justify-content: end;                        /* блок прижат вправо */
+    justify-content: space-between;              /* метки у левого края, данные у правого */
     align-items: center;
 }
 
@@ -980,7 +980,7 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .asset-bar-label {
     color: #fff;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: bold;
     white-space: nowrap;
     text-shadow: 0 0 2px rgba(0,0,0,0.7);

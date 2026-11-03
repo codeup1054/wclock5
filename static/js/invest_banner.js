@@ -866,12 +866,6 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // Слева — метки вида F:TGLD (одинаковые для строк значений и строк баров),
         // справа — колонка 300px: сверху значения, ниже полосы активов.
         capHtml += `<div class="banner-capital" id="invest-banner-capital">`;
-        if (showInlineTotal) {
-            capHtml += `<div class="banner-capital-line banner-total-capital" id="banner-capital-total">` +
-                `<span class="banner-capital-label" style="color:#a7aeae;">Портфель</span>` +
-                `<span class="banner-capital-value" style="color:#d6d6d6;">${formatCurrency(totalCapital)}</span>` +
-                `</div>`;
-        }
 
         if (portfolioRows.length > 0) {
             // Отдельная панель «Итого»: только значение, без подписей.
@@ -880,6 +874,14 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             }
 
             capHtml += `<div class="banner-capital-grid">`;
+
+            // Итог — первой строкой той же таблицы: метка в общей колонке имён
+            if (showInlineTotal) {
+                capHtml += `<div class="bcg-row banner-total-capital" id="banner-capital-total">` +
+                    `<span class="bcg-label" style="color:#a7aeae;">Портфель</span>` +
+                    `<span class="bcg-value" style="color:#d6d6d6;">${formatCurrency(totalCapital)}</span>` +
+                    `</div>`;
+            }
 
             // 1..N — значения капитала
             portfolioRows.forEach(function(row) {
