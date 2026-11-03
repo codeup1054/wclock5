@@ -857,8 +857,16 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         let capHtml = '';
         let tblHtml = '';
 
+        // Итог по всем портфелям — первой строкой панели «Капитал»
+        // (показываем только когда отдельная панель «Итого» скрыта).
+        const totalCapital = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
+        const showInlineTotal = !isTotalPanelVisible() && portfolioRows.length > 1;
+
         // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
         capHtml += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
+        if (showInlineTotal) {
+            capHtml += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
+        }
         portfolioRows.forEach(function(row) {
             capHtml += `<div class="banner-capital-line"><span class="banner-capital-label" style="color:${row.color};">${row.label}</span><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
         });
@@ -866,17 +874,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
         // === ASSETS BARS: капитал слева + бары справа ===
         if (portfolioRows.length > 0) {
-            const totalCapital = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
             // Отдельная панель «Итого»: только значение, без подписей.
             if ($totalHost.length) {
                 $totalHost.html(`<div class="banner-total-only">${formatCurrency(totalCapital)}</div>`);
             }
             capHtml += `<div class="banner-assets-row">`;
-            // Инлайн «Итого» в панели Капитала показываем только когда отдельная
-            // панель «Итого» скрыта и активны 2+ источника (иначе — дублирование/избыточность).
-            if (!isTotalPanelVisible() && portfolioRows.length > 1) {
-                capHtml += `<div class="banner-total-capital">${formatCurrency(totalCapital)}</div>`;
-            }
             capHtml += `<div class="banner-assets" id="invest-assets-bars">`;
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;

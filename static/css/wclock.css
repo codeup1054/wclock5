@@ -871,6 +871,9 @@ div#browser_reload.panel-dragging {
     color: #a7aeae;
     white-space: nowrap;
     min-width: 20cqi;
+    /* Первая строка панели «Капитал» — над строками портфелей */
+    width: 100%;
+    margin: 0 0 2px;
     text-align: right;
     line-height: 1;
 }
