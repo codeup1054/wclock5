@@ -52,11 +52,12 @@
             color: '#cc7722',
             yAxisID: 'y_xau',
             tickColor: '#cc7722',
-            tickFormat: function(v) { return (v / 1000).toFixed(3); },
+            // XAU хранится в USD/oz (≈3900), без деления
+            tickFormat: function(v) { return v.toFixed(0); },
             borderWidth: dpiLine(ChartTheme.get('line.ticker')),
             borderDash: [1, 1],
             pointRadius: 0,
-            hidden: true,
+            hidden: false,
             aggregation: 'last',
             axisPosition: 'left',
             maxTicksLimit: 6,
@@ -196,16 +197,31 @@
     }
 
     function buildScales(portfolioMin, portfolioMax, showTime, finamMin, finamMax) {
-        // Синхронизация ₽-осей: общий диапазон по максимуму обоих портфелей,
-        // чтобы абсолютные значения Tinkoff и Finam можно было сравнивать
-        // напрямую (max(max_T, max_F), min(min_T, min_F) + запас).
+        // Диапазон ₽-оси — от первого ненулевого значения, без прижатия к нулю:
+        // портфель на 8.5 млн при оси от 0 выглядит почти плоской линией.
+        function axisRange(lo, hi) {
+            if (lo === null || lo === undefined || !isFinite(lo) || !isFinite(hi) || hi <= 0) {
+                return null;
+            }
+            var span = hi - lo;
+            var pad = span > 0 ? span * 0.1 : Math.max(hi * 0.1, 1000);
+            return {
+                min: Math.max(0, lo - pad),
+                max: Math.max(hi + pad, lo + 100)
+            };
+        }
+
+        // У каждого источника своя ось: масштабы расходятся на порядки
+        // (Finam ~8.5 млн ₽ против Tinkoff ~57 тыс. ₽), общий диапазон делал
+        // меньший портфель неразличимым.
         var haveFinam = finamMax > 0 && finamMin != null && isFinite(finamMin);
-        var commonMin = haveFinam ? Math.min(portfolioMin, finamMin) : portfolioMin;
-        var commonMax = haveFinam ? Math.max(portfolioMax, finamMax) : portfolioMax;
-        var commonRange = commonMax - commonMin;
-        var commonPadding = commonRange > 0 ? commonRange * 0.1 : Math.max(commonMax * 0.1, 1000);
-        var axisMin = Math.max(0, commonMin - commonPadding);
-        var axisMax = Math.max(commonMax + commonPadding, commonMin + 100);
+        var tAxis = axisRange(portfolioMin, portfolioMax);
+        var fAxis = haveFinam ? axisRange(finamMin, finamMax) : null;
+        if (!tAxis && fAxis) tAxis = { min: fAxis.min, max: fAxis.max };
+        if (!tAxis) tAxis = { min: 0, max: 100 };
+
+        var axisMin = tAxis.min;
+        var axisMax = tAxis.max;
 
         var xTickColor = function(ctx) {
             if (showTime) return '#ffd900';
@@ -318,13 +334,14 @@
         };
 
         // Отдельная правая ось для капитала Finam (розовые метки), если есть данные.
-        // Диапазон тот же (синхронизирован), что и у Tinkoff — для сравнения абсолютов.
+        // Диапазон — собственный: при 8.5 млн против 57 тыс. общая ось от 0
+        // превращает обе линии в горизонтальные.
         if (finamMax > 0) {
             scales.y_finam = {
                 position: 'right',
                 stacked: false,
-                min: axisMin,
-                max: axisMax,
+                min: fAxis ? fAxis.min : axisMin,
+                max: fAxis ? fAxis.max : axisMax,
                 display: true,
                 ticks: {
                     beginAtZero: false,
@@ -662,6 +679,85 @@
     var _tickerCache = { key: null, data: null, at: 0 };
     var TICKER_CACHE_TTL_MS = 30000;
 
+    var INVEST_INTERVAL_MS = {
+        minute: 60000, fivemin: 300000, twentymin: 1200000,
+        hour: 3600000, sixhour: 21600000, day: 86400000
+    };
+
+    // Сетка X как объединение таймстемпов портфеля и тикеров. Нужна, когда
+    // история портфеля редкая (пустая БД, только что запущенные демоны): иначе
+    // ряды схлопываются в пару точек и график выглядит пустым.
+    function buildGridFromTickers(chart, tickersData, interval, currentTimestamps) {
+        var step = INVEST_INTERVAL_MS[interval] || 3600000;
+        var seen = {};
+
+        // Таймстемпы ТЕКУЩЕГО рендера, а не chart.data.timestamps: при
+        // инкрементальном обновлении в чарте ещё лежит сетка прошлого цикла,
+        // и сопоставление «значение → бакет» уезжает в начало оси.
+        var oldTs = (currentTimestamps || []).map(function(ts) {
+            return (ts instanceof Date) ? ts.getTime() : new Date(ts).getTime();
+        });
+
+        oldTs.forEach(function(ms) {
+            if (isFinite(ms)) seen[Math.floor(ms / step) * step] = true;
+        });
+
+        Object.keys(TICKER_REGISTRY).forEach(function(key) {
+            var t = tickersData && tickersData[key];
+            var prices = (t && t.prices) || [];
+            for (var i = 0; i < prices.length; i++) {
+                var ms = new Date(prices[i].timestamp).getTime();
+                if (!isFinite(ms)) continue;
+                seen[Math.floor(ms / step) * step] = true;
+            }
+        });
+
+        var gridMs = Object.keys(seen).map(Number).sort(function(a, b) { return a - b; });
+        if (gridMs.length < 2) return null;
+
+        var labels = gridMs.map(function(ms) {
+            var d = new Date(ms);
+            return String(d.getHours()).padStart(2, '0') + ':' +
+                   String(d.getMinutes()).padStart(2, '0');
+        });
+
+        var indexByBucket = {};
+        gridMs.forEach(function(ms, i) { indexByBucket[ms] = i; });
+
+        // Существующие ряды переносим на новую сетку по бакету (значения не
+        // теряются), остальное — null: разрыв, а не ложный ноль.
+        chart.data.datasets.forEach(function(ds) {
+            var prev = Array.isArray(ds.data) ? ds.data : [];
+            var arr = new Array(gridMs.length).fill(null);
+            for (var i = 0; i < prev.length; i++) {
+                if (prev[i] === null || prev[i] === undefined) continue;
+                var oldMs = oldTs[i];
+                if (!isFinite(oldMs)) continue;
+                var bucket = Math.floor(oldMs / step) * step;
+                var idx = indexByBucket[bucket];
+                if (idx !== undefined) arr[idx] = prev[i];
+            }
+            ds.data = arr;
+        });
+
+        chart.data.labels = labels;
+        chart.data.timestamps = gridMs.map(function(ms) { return new Date(ms); });
+        // Плагины (гэп, подписи суток, тултип) читают _midnightTimestamps:
+        // после перестройки сетки он должен указывать на тот же массив.
+        chart._midnightTimestamps = chart.data.timestamps;
+        chart.update('none');
+        return chart.data.timestamps;
+    }
+
+    function countTickerPoints(tickersData) {
+        var n = 0;
+        Object.keys(TICKER_REGISTRY).forEach(function(key) {
+            var t = tickersData && tickersData[key];
+            n = Math.max(n, ((t && t.prices) || []).length);
+        });
+        return n;
+    }
+
     window.loadTickersToChart = function(chart, portfolioTimestamps) {
         if (!chart || !chart.canvas || !chart.canvas.isConnected) return;
 
@@ -685,6 +781,15 @@
 
             var legendState = getLegendState();
 
+            // История портфеля редкая (демоны только запущены / БД пустая),
+            // а тикеров много → тянем ось X по ним.
+            var gridTimestamps = portfolioTimestamps;
+            var gridLen = (gridTimestamps && gridTimestamps.length) || 0;
+            if (gridLen < 2 || (gridLen < 20 && countTickerPoints(tickersData) >= 20)) {
+                var builtGrid = buildGridFromTickers(chart, tickersData, interval, portfolioTimestamps);
+                if (builtGrid) gridTimestamps = builtGrid;
+            }
+
                 Object.keys(TICKER_REGISTRY).forEach(function(key) {
                     var cfg = TICKER_REGISTRY[key];
                     var tickerData = tickersData && tickersData[key];
@@ -695,7 +800,7 @@
                             return { x: new Date(p.timestamp), y: p.price };
                         }).sort(function(a, b) { return a.x - b.x; });
 
-                        var filledData = aggregateTickerPrices(prices, portfolioTimestamps, cfg.aggregation);
+                        var filledData = aggregateTickerPrices(prices, gridTimestamps, cfg.aggregation);
 
                         var existingIdx = -1;
                         for (var i = 0; i < chart.data.datasets.length; i++) {
@@ -960,7 +1065,7 @@ try {
                 var mean = (d.summary && d.summary.mean) || 0;
                 maxAbs = Math.max(maxAbs, Math.abs(mean));
 
-                var bandH = Math.max(28, Math.round(area.height * 0.16));
+                var bandH = Math.max(56, Math.round(area.height * 0.32));
                 var yMid = area.bottom - bandH / 2;
                 var yScale = (bandH / 2) / maxAbs;
                 var up = ChartTheme.get('color.jumpUp', '#1fc163');
@@ -1259,12 +1364,17 @@ try {
                             callbacks: {
                                 title: function(items) {
                                     if (!items || !items.length) return '';
-                                    var tsArr = items[0].chart._midnightTimestamps || items[0].chart.data.timestamps;
+                                    var chart = items[0].chart;
+                                    // Сетка текущего рендера — приоритет: _midnightTimestamps
+                                    // может отставать после объединения с тикерами.
+                                    var tsArr = chart.data.timestamps || chart._midnightTimestamps;
                                     var ts = (tsArr && tsArr[items[0].dataIndex] != null) ? tsArr[items[0].dataIndex] : null;
                                     var d = ts instanceof Date ? ts : (ts != null ? new Date(ts) : null);
                                     if (d && !isNaN(d.getTime())) {
-                                        return String(d.getMonth() + 1).padStart(2, '0') + '-' +
-                                               String(d.getDate()).padStart(2, '0') + ' ' +
+                                        // Дата + время: на длинных периодах одного HH:MM мало.
+                                        return String(d.getDate()).padStart(2, '0') + '.' +
+                                               String(d.getMonth() + 1).padStart(2, '0') + '.' +
+                                               d.getFullYear() + ' ' +
                                                String(d.getHours()).padStart(2, '0') + ':' +
                                                String(d.getMinutes()).padStart(2, '0');
                                     }
@@ -1520,8 +1630,9 @@ try {
                 extrema = window.findDailyExtrema(aggregatedPortfolio, aggregatedTimestamps);
             }
 
-            // Build datasets: отдельные линии портфелей Tinkoff и Finam
-            // Сырые ряды по источникам, затем та же агрегация, что и у суммарного ряда
+            // Build datasets: портфели по реестру InvestSources (Tinkoff, Finam,
+            // С5 TDIV, С3 TRND, …). Tinkoff/Finam считаем явно (свои оси и стек
+            // долей), остальные — общим циклом.
             var tinkoffRawObj = buildPortfolioSeriesBySource(rawData, timestamps, 'tinkoff');
             var finamRawObj = buildPortfolioSeriesBySource(rawData, timestamps, 'finam');
             var tinkoffRaw = tinkoffRawObj.values;
@@ -1536,6 +1647,42 @@ try {
             var finamAgg = aggregateData(timestamps, finamRaw, currentInterval, 'time');
             var tinkoffSeries = tinkoffAgg.values;
             var finamSeries = finamAgg.values;
+
+            // Previous period delta: from server _prev block (prev_cutoff..cutoff per source)
+            var _prev = rawData['_prev'] || null;
+
+            // Дополнительные счета из реестра (всё, кроме Tinkoff/Finam).
+            var EXTRA_META = (window.InvestSources ? window.InvestSources.list() : [])
+                .filter(function(s) { return s.id !== 'tinkoff' && s.id !== 'finam'; });
+            var extras = EXTRA_META.map(function(meta) {
+                var rawObj = buildPortfolioSeriesBySource(rawData, timestamps, meta.id);
+                var agg = aggregateData(timestamps, rawObj.values, currentInterval, 'time');
+                var series = agg.values;
+                var valid = series.filter(function(v) { return v != null && v > 0; });
+                var initVal = 0, finalVal = 0;
+                for (var i = 0; i < series.length; i++) {
+                    if (series[i] != null && series[i] > 0) { initVal = series[i]; break; }
+                }
+                for (var j = series.length - 1; j >= 0; j--) {
+                    if (series[j] != null && series[j] > 0) { finalVal = series[j]; break; }
+                }
+                var pDelta = null;
+                if (_prev && _prev[meta.id] && initVal > 0) {
+                    var pe = _prev[meta.id].end;
+                    if (pe > 0) pDelta = ((initVal - pe) / pe) * 100;
+                }
+                return {
+                    meta: meta,
+                    series: series,
+                    pct: toPctSeries(series),
+                    init: initVal,
+                    final: finalVal,
+                    delta: initVal > 0 ? ((finalVal - initVal) / initVal) * 100 : 0,
+                    prevDelta: pDelta,
+                    min: valid.length > 0 ? Math.min.apply(null, valid) : 0,
+                    max: valid.length > 0 ? Math.max.apply(null, valid) : 0
+                };
+            });
 
             // Aggregate TGLD/TMON/LQDT shares to match aggregated timestamps
             var tinkoffTgldAgg = aggregateTgldShares(timestamps, tinkoffTgldShares, aggregatedTimestamps);
@@ -1563,8 +1710,6 @@ try {
             tinkoffDelta = tinkoffInit > 0 ? ((tinkoffFinal - tinkoffInit) / tinkoffInit) * 100 : 0;
             finamDelta = finamInit > 0 ? ((finamFinal - finamInit) / finamInit) * 100 : 0;
 
-            // Previous period delta: from server _prev block (prev_cutoff..cutoff per source)
-            var _prev = rawData['_prev'] || null;
             var tinkoffPrevDelta = null, finamPrevDelta = null;
             if (_prev && _prev.tinkoff && tinkoffInit > 0) {
                 var prevEnd = _prev.tinkoff.end;
@@ -1590,6 +1735,38 @@ try {
             // Build scales from registry
             var scales = buildScales(portfolioMin, portfolioMax, showTime, finamMin, finamMax);
 
+            // Оси дополнительных счетов — по тем же правилам: диапазон от первого
+            // ненулевого значения, без прижатия к нулю.
+            extras.forEach(function(ex) {
+                if (ex.max <= 0 || !ex.meta.axis) return;
+                var span = ex.max - ex.min;
+                var pad = span > 0 ? span * 0.1 : Math.max(ex.max * 0.1, 1000);
+                var axisColor = window.InvestSources
+                    ? window.InvestSources.color(ex.meta.id, '#888')
+                    : (ex.meta.color || '#888');
+                scales[ex.meta.axis] = {
+                    position: 'left',
+                    stacked: false,
+                    min: Math.max(0, ex.min - pad),
+                    max: Math.max(ex.max + pad, ex.min + 100),
+                    display: true,
+                    ticks: {
+                        beginAtZero: false,
+                        display: true,
+                        callback: function(value) {
+                            return '' + Math.round(value).toLocaleString('ru-RU');
+                        },
+                        font: { size: dpiFont(ChartTheme.get('font.ticker')) },
+                        color: axisColor,
+                        autoSkip: true,
+                        padding: -1,
+                        maxTicksLimit: 6
+                    },
+                    grid: { display: false },
+                    title: { display: false }
+                };
+            });
+
             // Change y_portfolio to left position for labels to appear on left Y-axis
             if (scales.y_portfolio) {
                 scales.y_portfolio.position = 'left';
@@ -1598,7 +1775,9 @@ try {
             // Скрытая авто-ось для нормированных рядов (%). Даём явный симметричный
             // диапазон с запасом, иначе при малом разбросе % Chart.js схлопывает ось
             // и линии Tinkoff,%/Finam,% выглядят горизонтальными.
-            var pctValues = tinkoffPct.concat(finamPct).filter(function(v) { return v != null && isFinite(v); });
+            var pctValues = tinkoffPct.concat(finamPct);
+            extras.forEach(function(ex) { pctValues = pctValues.concat(ex.pct); });
+            pctValues = pctValues.filter(function(v) { return v != null && isFinite(v); });
             var pctMaxAbs = 0;
             for (var pi = 0; pi < pctValues.length; pi++) {
                 var av = Math.abs(pctValues[pi]);
@@ -1745,6 +1924,42 @@ try {
                 }
             ];
 
+            // Дополнительные счета (С5 TDIV, С3 TRND, …): по паре рядов на источник.
+            extras.forEach(function(ex) {
+                if (ex.max <= 0) return;
+                var color = window.InvestSources
+                    ? window.InvestSources.color(ex.meta.id, '#888')
+                    : (ex.meta.color || '#888');
+                datasets.push({
+                    label: ex.meta.label + ', \u20BD',
+                    data: ex.series,
+                    borderColor: color,
+                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                    borderWidth: dpiLine(ChartTheme.get('line.portfolio')),
+                    tension: chartTension(0.2),
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: false,
+                    yAxisID: ex.meta.axis,
+                    hidden: false
+                });
+                datasets.push({
+                    label: ex.meta.label + ', %',
+                    data: ex.pct,
+                    borderColor: color,
+                    borderDash: [6, 4],
+                    borderWidth: dpiLine(ChartTheme.get('line.pct')),
+                    tension: chartTension(0.2),
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    spanGaps: true,
+                    hidden: true,
+                    yAxisID: 'y_pct'
+                });
+            });
+
             // Stacked share overlay datasets (TGLD/TMON/LQDT × 2 sources)
             datasets.push.apply(datasets, buildTgldDatasets(
                 { tgld: tinkoffTgldAgg, tmon: tinkoffTmonAgg, lqdt: tinkoffLqdtAgg },
@@ -1771,6 +1986,21 @@ try {
                 yAxisID: 'y_ref'
             });
 
+            // Портфельные ряды не соединяем через провалы: если период начинается
+            // раньше сбора данных, линии быть не должно (а не прямая через пустоту).
+            var NO_SPAN = ['Tinkoff, \u20BD', 'Finam, \u20BD', 'T+F, \u20BD', 'T+F, %'];
+            if (typeof window.InvestSources !== 'undefined') {
+                window.InvestSources.list().forEach(function (s) {
+                    if (s.id === 'tinkoff' || s.id === 'finam') return;
+                    NO_SPAN.push(s.label + ', \u20BD');
+                });
+            }
+            NO_SPAN.forEach(function(lb) {
+                for (var di = 0; di < datasets.length; di++) {
+                    if (datasets[di].label === lb) datasets[di].spanGaps = false;
+                }
+            });
+
             // Chart update or create
             if (investChart && investChart._currentInterval === currentInterval) {
                 investChart._dailyBars = dailyBars;
@@ -1780,6 +2010,9 @@ try {
                 investChart._labelMode = labelMode;
                 investChart._apiErrors = rawData._api_errors;
                 investChart.data.labels = labels;
+                // Сетка текущего рендера: иначе после объединения с тикерами
+                // остаются таймстемпы прошлого цикла и портфель рисуется не там.
+                investChart.data.timestamps = aggregatedTimestamps;
 
                 // Update period label sources
                 var newSources = [
@@ -1788,59 +2021,20 @@ try {
                 if (finamMax > 0) {
                     newSources.push({ label: 'Finam', initialValue: finamInit, finalValue: finamFinal, delta: finamDelta, prevDelta: finamPrevDelta, yAxisID: finamAxis, color: ChartTheme.get('color.finam'), datasetLabel: 'Finam, \u20BD' });
                 }
+                if (typeof window.InvestSources !== 'undefined') {
+                    window.InvestSources.list().forEach(function(meta) {
+                        if (meta.id === 'tinkoff' || meta.id === 'finam') return;
+                        var ex = extras.filter(function(e) { return e.meta.id === meta.id; })[0];
+                        if (!ex || ex.max <= 0) return;
+                        newSources.push({ label: meta.label, initialValue: ex.init, finalValue: ex.final, delta: ex.delta, prevDelta: ex.prevDelta, yAxisID: meta.axis, color: window.InvestSources.color(meta.id, meta.color), datasetLabel: meta.label + ', \u20BD' });
+                    });
+                }
                 investChart._periodSources = newSources;
 
-                // Update portfolio in place, remove old ticker + tgld datasets
-                if (investChart.data.datasets[0]) investChart.data.datasets[0].data = tinkoffSeries;
-                if (investChart.data.datasets[1]) investChart.data.datasets[1].data = finamSeries;
-                if (investChart.data.datasets[2]) investChart.data.datasets[2].data = tinkoffPct;
-                if (investChart.data.datasets[3]) investChart.data.datasets[3].data = finamPct;
-
-                // Update T+F datasets (indices 4,5)
-                var tplusfRb = (function() {
-                    var len = Math.max(tinkoffSeries.length, finamSeries.length);
-                    var r = [];
-                    for (var i = 0; i < len; i++) r.push((tinkoffSeries[i] || 0) + (finamSeries[i] || 0));
-                    return r;
-                })();
-                var tplusfPct = toPctSeries(tplusfRb);
-                if (investChart.data.datasets[4]) investChart.data.datasets[4].data = tplusfRb;
-                if (investChart.data.datasets[5]) investChart.data.datasets[5].data = tplusfPct;
-
-                // Remove all datasets after the main 6 (T+F + ticker placeholders + tgld + 100%)
-                while (investChart.data.datasets.length > 6) {
-                    investChart.data.datasets.pop();
-                }
-
-                // Re-add stacked share overlay datasets
-                var shareDatasets = buildTgldDatasets(
-                    { tgld: tinkoffTgldAgg, tmon: tinkoffTmonAgg, lqdt: tinkoffLqdtAgg },
-                    { tgld: finamTgldAgg, tmon: finamTmonAgg, lqdt: finamLqdtAgg },
-                    finamMax > 0
-                );
-                for (var s = 0; s < shareDatasets.length; s++) {
-                    investChart.data.datasets.push(shareDatasets[s]);
-                }
-
-                // Add fresh ticker placeholder datasets
-                for (var p = 0; p < placeholders.length; p++) {
-                    investChart.data.datasets.push(placeholders[p]);
-                }
-
-                // 100% reference line — always last
-                investChart.data.datasets.push({
-                    label: '100%',
-                    data: labels.map(function() { return 100; }),
-                    borderColor: hexToRgba(ChartTheme.get('color.ref'), 0.85),
-                    borderDash: [8, 6],
-                    borderWidth: dpiLine(0.5),
-                    fill: false,
-                    pointRadius: 0,
-                    pointHoverRadius: 0,
-                    spanGaps: true,
-                    hidden: false,
-                    yAxisID: 'y_ref'
-                });
+                // Состав источников переменный (Tinkoff / Finam / С5 TDIV) —
+                // заменяем датасеты и оси целиком, чтобы не зависеть от индексов.
+                investChart.data.datasets = datasets;
+                investChart.options.scales = scales;
 
                 // Load ticker data into chart
                 window.loadTickersToChart(investChart, aggregatedTimestamps);
@@ -1944,18 +2138,45 @@ try {
             var cellGapY = 12;
             var collapseBtnSize = 20;
 
-            var colGroups = [[], [], []];
+            // Колонки легенды = источники (сколько токенов/портфелей — столько
+            // и столбцов) + последняя колонка «прочее» (тикеры, 100%, T+F).
+            var SRC_DEFS = (window.InvestSources ? window.InvestSources.list() : [
+                { id: 'tinkoff', label: 'Tinkoff' },
+                { id: 'finam', label: 'Finam' }
+            ]);
+            var colGroups = [];
+            var colMeta = [];
+            SRC_DEFS.forEach(function(s) {
+                var group = [];
+                var test = function(lb) {
+                    if (s.id === 'tinkoff') return lb.indexOf('\u0422:') === 0 || lb.indexOf('Tinkoff') === 0;
+                    if (s.id === 'finam') return lb.indexOf('\u0424:') === 0 || lb.indexOf('Finam') === 0;
+                    return lb.indexOf(s.label + ',') === 0;
+                };
+                colGroups.push(group);
+                colMeta.push(test);
+            });
+            var otherGroup = [];
+            colGroups.push(otherGroup);
+
             for (var i = 0; i < datasets.length; i++) {
                 var ds = datasets[i];
                 if (!ds.label) continue;
                 var lb = ds.label;
-                if (lb.indexOf('\u0424:') === 0 || lb.indexOf('Finam') === 0) colGroups[0].push({ index: i, label: lb });
-                else if (lb.indexOf('\u0422:') === 0 || lb.indexOf('Tinkoff') === 0) colGroups[1].push({ index: i, label: lb });
-                else colGroups[2].push({ index: i, label: lb });
+                var placed = false;
+                for (var c = 0; c < colMeta.length; c++) {
+                    if (colMeta[c](lb)) { colGroups[c].push({ index: i, label: lb }); placed = true; break; }
+                }
+                if (!placed) otherGroup.push({ index: i, label: lb });
             }
+
+            // Пустые колонки (нет данных по счёту) не занимают место.
+            var visibleGroups = colGroups.filter(function(g) { return g.length > 0; });
+            colGroups = visibleGroups;
+
             var items = [];
             var itemCol = [];
-            for (var g = 0; g < 3; g++) {
+            for (var g = 0; g < colGroups.length; g++) {
                 for (var k = 0; k < colGroups[g].length; k++) {
                     items.push(colGroups[g][k]);
                     itemCol.push(g);
@@ -1985,12 +2206,13 @@ try {
 
             chart._legendCollapseBtn = null;
 
-            var cols = 3;
+            var cols = colGroups.length;
             var rows, colW, totalW, totalH;
 
             function layout(fontPx) {
                 ctx.font = 'bold ' + fontPx + 'px sans-serif';
-                rows = Math.max(colGroups[0].length, colGroups[1].length, colGroups[2].length);
+                rows = 0;
+                for (var rc = 0; rc < cols; rc++) rows = Math.max(rows, colGroups[rc].length);
                 colW = [];
                 for (var c = 0; c < cols; c++) {
                     var maxW = 0;
@@ -2145,39 +2367,61 @@ try {
         }
     }
 
-    // Пересчитывает ₽-оси (y_portfolio / y_finam) по видимым в легенде сериям,
-    // чтобы скрытая «Tinkoff, ₽» (или «Finam, ₽») не влияла на диапазон.
+    // Пересчитывает ₽-оси (y_portfolio / y_finam) по видимым в легенде сериям.
+    // Каждая ось считается по своим данным и НЕ прижимается к нулю: диапазон
+    // начинается от первого ненулевого значения (например, ~8.5 млн у Finam).
     function recomputePortfolioAxis(chart) {
         if (!chart || !chart.data || !chart.data.datasets) return;
-        var RB_LABELS = {
+
+        function axisRange(values) {
+            if (!values.length) return null;
+            var lo = Math.min.apply(null, values);
+            var hi = Math.max.apply(null, values);
+            var span = hi - lo;
+            var pad = span > 0 ? span * 0.1 : Math.max(hi * 0.1, 1000);
+            return {
+                min: Math.max(0, lo - pad),
+                max: Math.max(hi + pad, lo + 100)
+            };
+        }
+
+        var byAxis = { y_portfolio: [], y_finam: [] };
+        // Диапазон считаем по линиям самих портфелей. «T+F, ₽» (сумма) в шкалу
+        // не входит: иначе включённая сумма снова растянет ось от нуля.
+        var LABEL_AXIS = {
             'Tinkoff, \u20BD': 'y_portfolio',
             'Finam, \u20BD': 'y_finam'
         };
-        var hasFinamAxis = false;
-        var values = [];
+        if (typeof window.InvestSources !== 'undefined') {
+            window.InvestSources.list().forEach(function (s) {
+                if (s.id === 'tinkoff' || s.id === 'finam') return;
+                if (!s.axis) return;
+                LABEL_AXIS[s.label + ', \u20BD'] = s.axis;
+                byAxis[s.axis] = [];
+            });
+        }
         for (var i = 0; i < chart.data.datasets.length; i++) {
             var ds = chart.data.datasets[i];
-            if (!ds || !ds.label || !ds.data) continue;
-            if (!RB_LABELS.hasOwnProperty(ds.label)) continue;
-            if (ds.hidden === true) continue;
-            if (RB_LABELS[ds.label] === 'y_finam') hasFinamAxis = true;
+            if (!ds || !ds.data || ds.hidden === true) continue;
+            var axisId = LABEL_AXIS[ds.label];
+            if (!axisId) continue;
             for (var d = 0; d < ds.data.length; d++) {
                 var v = Number(ds.data[d]);
-                if (v != null && !isNaN(v) && v > 0) values.push(v);
+                if (v != null && !isNaN(v) && v > 0) byAxis[axisId].push(v);
             }
         }
-        if (values.length === 0) return;
-        var lo = Math.min.apply(null, values);
-        var hi = Math.max.apply(null, values);
-        var range = hi - lo;
-        var pad = range > 0 ? range * 0.1 : Math.max(hi * 0.1, 1000);
-        var axisMin = Math.max(0, lo - pad);
-        var axisMax = Math.max(hi + pad, lo + 100);
+
+        var ranges = {};
+        Object.keys(byAxis).forEach(function (id) { ranges[id] = axisRange(byAxis[id]); });
 
         if (chart.options && chart.options.scales) {
             var s = chart.options.scales;
-            if (s.y_portfolio) { s.y_portfolio.min = axisMin; s.y_portfolio.max = axisMax; }
-            if (s.y_finam) { s.y_finam.min = axisMin; s.y_finam.max = axisMax; }
+            Object.keys(ranges).forEach(function (id) {
+                var r = ranges[id];
+                if (!r || !s[id]) return;
+                s[id].min = r.min;
+                s[id].max = r.max;
+            });
         }
     }
 

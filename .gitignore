@@ -158,3 +158,7 @@ tools/
 hft/certs/
 parsers/invest/local_data.sql
 tmon_preview.html
+
+# SQLite служебные файлы
+*.db-wal
+*.db-shm

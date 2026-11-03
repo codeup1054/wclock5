@@ -15,7 +15,7 @@ import requests
 from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from invest_db import init_invest_db
-from invest_repo import Snapshot, Position, write_snapshot, apply_retention, current_interval, init_trades_tables, upsert_trades, guess_exchange
+from invest_repo import Snapshot, Position, write_snapshot, apply_retention, current_interval, init_trades_tables, upsert_trades, guess_exchange, maybe_fold_raw
 
 # UTF-8 для вывода в консоль (Windows cp1251 не кодирует эмодзи)
 if hasattr(sys.stdout, "reconfigure"):
@@ -452,9 +452,12 @@ def main():
                 elif verbose:
                     print(f"[{now_str}] ✅ Успешно сохранено {len(positions)} позиций. Общая стоимость: {total:,.2f} RUB", flush=True)
 
-                # Агрегация старых данных выполняется только в tinkoff-демоне,
-                # чтобы избежать гонки двух write-транзакций за одну SQLite-БД.
-                # (В этой БД retention делает tinkoff_invest_daemon.py)
+                # Сворачиваем сырые секунды в минутные/часовые бакеты (как в tinkoff-демоне),
+                # чтобы read_history отдавал детали по минутам и не строил ступеньки.
+                try:
+                    maybe_fold_raw()
+                except Exception as e:
+                    print(f"⚠️ finam maybe_fold_raw: {e}", flush=True)
 
                 # Сделки/оборот: не чаще раза в 2 мин (time-based, чтобы при
                 # 1с-цикле пика не дёргать API брокера каждые ~12 итераций)

@@ -79,6 +79,20 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return totals;
     }
 
+    // Читаемая метка счёта для первой колонки таблицы: крупнейший
+    // не-денежный инструмент без суффиксов площадки (TGLD@@RUSX → TGLD).
+    function topInstrument(positions, source) {
+        if (!Array.isArray(positions)) return '';
+        const list = positions
+            .filter(p => p && p.source === source)
+            .filter(p => !/руб|rub|cash|валюта/i.test(String(p.name || '') + ' ' + String(p.ticker || '')))
+            .filter(p => (Number(p.value) || 0) > 0)
+            .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+        if (!list.length) return '';
+        const raw = String(list[0].name || list[0].ticker || '');
+        return raw.split('@')[0].split(/\s+/)[0].slice(0, 8);
+    }
+
     function getAssetsDataBySource(positions, source) {
         if (!Array.isArray(positions)) return [];
 
@@ -584,7 +598,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         </tr>`;
     }
 
-    // Строка «Spread» (утренний гэп TGLD@): те же колонки, что у ассет-строк.
+    // Строка «Gap» (утренний гэп TGLD@): те же колонки, что у ассет-строк.
     // «Стоимость» = средний гэп за период (%); день/неделя/период = гэп % и
     // абс. (open − prev_close) за горизонт. Данные — _tgld_gap из payload тикеров.
     function renderMorningGapRow() {
@@ -601,7 +615,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const abs = function(o) { return o ? formatTickerAbs(o.gap_abs) : '—'; };
         const absStyle = 'opacity:0.2';
         return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
-            <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Spread</td>
+            <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
             <td id="banner-td-tgldgap-value" class="banner-td-num" style="color:${col}">${val ? formatPercent(val.gap_pct) : '—'}</td>
             <td id="banner-td-tgldgap-day-pct" class="banner-td-pct ${cls(day)}">${pct(day)}</td>
             <td id="banner-td-tgldgap-day-change" class="banner-td-change ${cls(day)}" style="${absStyle}">${abs(day)}</td>
@@ -740,15 +754,31 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
 
         const totals = portfolioTotalsBySource(latestPositions);
-        const COLLECTION_KEY = { finam: 'invest_collection_finam_enabled', tinkoff: 'invest_collection_tinkoff_enabled' };
         const collectionEnabled = function(src) {
-            const key = COLLECTION_KEY[src];
-            // Если настройки нет — считаем сбор включённым.
-            return !key || getSetting(key, '1') !== '0';
+            // Настройка сбора живёт в общей таблице: invest_collection_<id>_enabled.
+            return getSetting('invest_collection_' + src + '_enabled', '1') !== '0';
         };
+        // Метаданные источников — из общего реестра (static/js/invest_sources.js).
+        // Новый портфель = одна запись в реестре (+ ось на графике).
+        const SRC_LIST = (window.InvestSources && typeof window.InvestSources.list === 'function')
+            ? window.InvestSources.list()
+            : [{ id: 'tinkoff', label: 'Tinkoff', marker: 'T' }, { id: 'finam', label: 'Finam', marker: 'F' }];
+        const SOURCE_META = {};
+        SRC_LIST.forEach(function (s) {
+            SOURCE_META[s.id] = {
+                label: s.label,
+                marker: s.marker || s.label.charAt(0),
+                color: (window.InvestSources && window.InvestSources.color)
+                    ? window.InvestSources.color(s.id, s.color)
+                    : (s.color || '#888'),
+                cssClass: 'banner-row-portfolio-' + s.id
+            };
+        });
+        // Порядок строк в баннере: как в реестре.
+        const SOURCE_ORDER = SRC_LIST.map(function (s) { return s.id; });
         // Источник показываем, если у него есть данные в последней точке + сумма >= 0,
         // И сбор данных через API для него не отключён в настройках.
-        const presentSources = ['finam', 'tinkoff'].filter(s => Object.prototype.hasOwnProperty.call(totals, s) && collectionEnabled(s));
+        const presentSources = SOURCE_ORDER.filter(s => Object.prototype.hasOwnProperty.call(totals, s) && collectionEnabled(s));
 
         const period = getSetting('invest_panel_period', '-35 day');
 
@@ -774,12 +804,16 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             const pctChangeWeek = baselineWeekTotal !== 0 ? (absChangeWeek / baselineWeekTotal * 100) : 0;
             const absChangePeriod = currentTotal - baselinePeriodTotal;
             const pctChangePeriod = baselinePeriodTotal !== 0 ? (absChangePeriod / baselinePeriodTotal * 100) : 0;
+            const meta = SOURCE_META[src] || { label: src, marker: '?', color: '#888', cssClass: '' };
             return {
                 source: src,
-                label: src === 'finam' ? 'Finam' : 'Тинвест',
-                marker: src === 'finam' ? 'F' : 'T',
-                color: src === 'finam' ? COLORS.finamBlue : COLORS.tinvest,
-                cssClass: src === 'finam' ? 'banner-row-portfolio-finam' : 'banner-row-portfolio-tinvest',
+                label: meta.label,
+                marker: meta.marker,
+                // Читаемая метка первой колонки: «F:TGLD», «D:TDIV» —
+                // маркер счёта + его крупнейший не-денежный инструмент.
+                instrument: topInstrument(latestPositions, src),
+                color: meta.color,
+                cssClass: meta.cssClass,
                 currentTotal: currentTotal,
                 assets: getAssetsDataBySource(latestPositions, src),
                 dayChangeClass: absChange >= 0 ? 'change-positive' : 'change-negative',
@@ -821,7 +855,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
         capHtml += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
         portfolioRows.forEach(function(row) {
-            capHtml += `<div class="banner-capital-line"><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
+            capHtml += `<div class="banner-capital-line"><span class="banner-capital-label" style="color:${row.color};">${row.label}</span><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
         });
         capHtml += `</div>`;
 
@@ -842,7 +876,9 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;
                 capHtml += `<div class="asset-row">`;
-                capHtml += `<span class="asset-row-label" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;min-width:18px;">${row.marker}</span>`;
+                // Метка счёта в полосе активов — как в таблице: «F:TGLD», «T:CNRU».
+                const assetLabel = row.instrument ? (row.marker + ':' + row.instrument) : row.marker;
+                capHtml += `<span class="asset-row-label" title="${row.label}" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;">${assetLabel}</span>`;
                 capHtml += `<div class="asset-bar-container">`;
                 row.assets.forEach(function(asset) {
                     // Класс по типу актива — цвет/прозрачность задаётся в wclock.css,
@@ -895,7 +931,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
 
             tblHtml += `<tr id="banner-row-total" class="banner-row-portfolio-total">
-            <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;">T+F</td>
+            <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;white-space:nowrap;">T+F</td>
+            <td id="banner-td-total-value" class="banner-td-num" style="color:#dcdcdc;font-weight:bold;white-space:nowrap;" title="Суммарный капитал по портфелям">${Math.round(tfCurrent).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-total-day-change" class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
             <td id="banner-td-total-day-pct" class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
             <td id="banner-td-total-week-change" class="banner-td-change ${tfWeekCls}">${formatChange(tfAbsW)}</td>
@@ -906,10 +943,10 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
 
         portfolioRows.forEach(function(row) {
-            const rowId = row.source === 'finam' ? 'finam' : 'tinkoff';
+            const rowId = row.source;
             const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
-            tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};">
-            <td id="banner-td-${rowId}-marker" class="banner-td-num" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;">${row.marker}</td>
+            tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};" title="${row.label}">
+            <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + ':' + row.instrument) : row.marker}</td>
             <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-${rowId}-day-pct" class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
             <td id="banner-td-${rowId}-day-change" class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>

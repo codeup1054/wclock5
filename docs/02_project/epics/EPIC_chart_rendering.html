@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Эпик — Отрисовка графиков: производительность и ловушки</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='2' y='2' width='44' height='44' rx='10' fill='%23f37435'/%3E%3Ccircle cx='24' cy='24' r='12' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Ccircle cx='24' cy='24' r='4' fill='%23fff'/%3E%3C/svg%3E">
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
@@ -153,6 +154,11 @@
   .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
             letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
   @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+  table.sortable-table th { cursor: pointer; user-select: none; }
+  table.sortable-table th:hover { background: #2a313e; }
+  table.sortable-table th::after { content: " ⇅"; opacity: .4; font-size: .9em; }
+  table.sortable-table th.asc::after { content: " ▲"; opacity: 1; color: #f37435; }
+  table.sortable-table th.desc::after { content: " ▼"; opacity: 1; color: #f37435; }
 </style>
 </head>
 <body>
@@ -170,8 +176,8 @@
       <span class="brand">WClock5</span>
     </div>
     <h1 id="page-title">Эпик — Отрисовка графиков: производительность и ловушки</h1>
-    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
-    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">🚧</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.2</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-09-16</span></span></div>
+    <p class="sub">Проектная документация — конвенции, эпики, беклоги</p>
+    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">✅</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.5</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-11-03</span></span></div>
   </div>
   
 
@@ -277,6 +283,90 @@
 <td><code>rgba(255,255,255,0.85)</code>, <code>borderDash [8,6]</code>; в обоих местах (создание и обновление)</td>
 <td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
 </tr>
+<tr>
+<td>GRD-09</td>
+<td>Настройка цветов тикеров в редакторе параметров</td>
+<td><code>ChartTheme</code> группа «Цвета тикеров» (<code>tgld/xau/usd/brent</code>); <code>colorKey</code> + <code>tickerColor(cfg)</code> в <code>invest_chart.js</code>; <code>themeColor(key,def)</code> + слушатель <code>chartThemeChange</code> в <code>invest_banner.js</code>; порядок групп задан явно (<code>groupOrder</code>): 1-й столбец — <code>Шрифты</code>, <code>Толщины линий</code>, <code>Настройки графика</code>; 2-й — <code>Штриховка</code>, <code>Цвета тикеров</code>, <code>Цвета линий</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-10</td>
+<td>Метки периода USD/Brent</td>
+<td>источники <code>y_usd</code> (<code>#3ba3ff</code>) и <code>y_oil</code> (<code>#556B2F</code>), <code>fmt: v.toFixed(2)</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-11</td>
+<td>Метки скрытых серий не рисуются</td>
+<td><code>PeriodLabelsPlugin</code> skip при <code>!chart.isDatasetVisible</code>; матч источника и датасета по <code>datasetLabel</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-12</td>
+<td>Цвет Brent — болотный</td>
+<td><code>#556B2F</code> в chart+banner (wclock+hft)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-13</td>
+<td>Полоса «Spread» TGLD@ на графике</td>
+<td><code>MorningGapPlugin</code> — столбики утреннего гэпа в нижней полосе (<code>bandH = max(28, area.height*0.16)</code>), знак → <code>color.jumpUp/jumpDown</code>, пунктир среднего <code>color.jumpAvg</code>; данные <code>/api/invest/ticker/TGLD@/morning_gap</code> (wclock) / <code>/api/hft/ticker/TGLD@/morning_gap</code> (hft)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>GRD-14</td>
+<td>Свечи USD/RUB вместо одной точки</td>
+<td><code>parsers/invest/fx_candles.py</code>: <code>MarketDataService/GetCandles</code> (figi <code>BBG0013HGFT4</code>, USD000UTSTOM), запись <strong>в обе БД</strong> — <code>fx_rates</code> (портфельная) и <code>last_prices</code> (её читает график); автообновление из <code>tracked_tickers_daemon</code> (<code>update_once(minutes=120)</code>); бэкфилл 8 недель смешанными интервалами (1min 0–2 дня, 5min 2–14, hour 14–56)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-15</td>
+<td>Масштаб ₽-осей от первого ненулевого значения</td>
+<td><code>buildScales</code>/<code>recomputePortfolioAxis</code>: <strong>раздельные</strong> диапазоны <code>y_portfolio</code> и <code>y_finam</code> (Finam ~8.5 млн против Tinkoff ~57 тыс.), <code>min = max(0, lo − pad)</code> без прижатия к нулю; <code>T+F</code> в расчёт шкалы не входит</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-16</td>
+<td>Сетка X = объединение портфеля и тикеров</td>
+<td><code>buildGridFromTickers(chart, tickersData, interval, currentTimestamps)</code>: если бакетов истории &lt; 20, а у тикеров ≥ 20 — ось строится по объединению; значения переносятся по бакету, <code>chart._midnightTimestamps</code> синхронизируется</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-17</td>
+<td>Портфельные линии не тянутся через пустоту</td>
+<td><code>spanGaps: false</code> для <code>Tinkoff ₽/Finam ₽/T+F ₽/%</code> — при периоде раньше начала сбора линии нет, а не прямая через пустой участок</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-18</td>
+<td>Тултип: дата + время</td>
+<td><code>title</code> → <code>DD.MM.YYYY HH:MM</code>; таймстемп берётся из <code>chart.data.timestamps</code> (а не <code>_midnightTimestamps</code>, который отставал после перестройки сетки)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-19</td>
+<td>Период в неделях</td>
+<td><code>invest_repo._PERIOD_RE</code> + <code>_UNIT_SECONDS['week'] = 604800</code>: <code>-8 week</code> больше не откатывается к 35 дням</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-20</td>
+<td>Тикер со слэшем в URL</td>
+<td><code>@app.route("/api/invest/ticker/&lt;base&gt;/&lt;quote&gt;")</code> + склейка в <code>api_invest_ticker</code>: <code>/api/invest/ticker/USD/RUB</code> не матчился строковым конвертером Flask (<code>%2F</code> декодируется до роутинга)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-21</td>
+<td>Кэш ответов не роняет 404</td>
+<td><code>invest_cache_key</code> нормализует <code>/</code> в endpoint (иначе файл <code>ticker_USD/RUB_…</code> уходил в несуществующий подкаталог), запись кэша обёрнута в <code>try</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>GRD-22</td>
+<td>Живое XAU без yfinance</td>
+<td><code>_fetch_xau_from_yahoo_api()</code> — тот же источник через <code>query1.finance.yahoo.com/v8/finance/chart/GC=F</code>, фолбэк после yfinance; образ без пакета больше не теряет XAU</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
 </tbody>
 </table>
 <h2 id="pravila-otrisovki-spravochnik-dlya-novykh-grafikov">Правила отрисовки (справочник для новых графиков)</h2>
@@ -311,6 +401,22 @@
 <li><strong><code>₽</code> vs <code>%</code> отладка</strong> — если «горизонтальными» становятся только<br />
 <code>%</code>-линии, а <code>₽</code>-линии (абсолют, с явным min/max) в порядке → проблема<br />
    в авто-шкале нормированной оси, а не в данных.</li>
+<li><strong>Метки периода следуют видимости серии</strong> — метки начала/конца/прироста<br />
+   (<code>PeriodLabelsPlugin</code>) рисуются только для видимых датасетов<br />
+   (<code>chart.isDatasetVisible</code>); соответствие источника и датасета — по<br />
+<code>datasetLabel</code> (по умолчанию = <code>label</code>). Скрытая в легенде серия меток не даёт.</li>
+<li><strong>Цвета тикеров — из темы</strong> — цвет серии/оси/метки берётся из <code>ChartTheme</code><br />
+    (<code>color.&lt;colorKey&gt;</code>, группа «Цвета тикеров»), fallback — дефолт в<br />
+<code>TICKER_REGISTRY</code>; хелперы <code>tickerColor(cfg)</code> (график) и<br />
+<code>themeColor(key, def)</code> (баннер). Смена темы → перестройка графика<br />
+    (<code>chartThemeChange</code>) и перерисовка баннера.</li>
+<li><strong>Доп. полоса под графиком</strong> — метрику, не привязанную к основной оси<br />
+    (например утренний гэп), рисуем отдельным плагином в собственной полосе<br />
+    внизу <code>chartArea</code> (<code>afterDatasetsDraw</code>, <code>bandH = max(28, height*0.16)</code>),<br />
+    нормируя по максимуму модуля; знак → <code>color.jumpUp</code>/<code>color.jumpDown</code>,<br />
+    среднее — пунктиром <code>color.jumpAvg</code>. Лучшая точка по X ищется по<br />
+    ближайшему <code>_midnightTimestamps</code>/<code>data.timestamps</code>, столбики за<br />
+    пределами <code>chartArea</code> отбрасываются.</li>
 </ol>
 <h2 id="chisla-do-posle-provereno-31-08-2026">Числа до/после (проверено 31.08.2026)</h2>
 <table>
@@ -357,27 +463,47 @@
 <li>Инвест-модуль фреймворка — см. <code>PROC_graph_approaches.md</code>.</li>
 <li>Плагины Chart.js: <code>chart_plugins.js</code> (apiErrorPoints, PeriodLabelsPlugin)<br />
   — подключаются через <code>initChartPlugin</code> в <code>invest_chart.js:920–929</code>.</li>
+<li>Цвета тикеров/осей: <code>static/js/chart_config.js</code> (<code>ChartTheme</code>, группа<br />
+  «Цвета тикеров») + <code>invest_chart.js</code> (<code>colorKey</code>, <code>tickerColor</code>) +<br />
+<code>invest_banner.js</code> (<code>themeColor</code>); hft-копии <code>chart_config.js</code>/<code>invest_chart.js</code>.<br />
+  Cache-bust: wclock — <code>surl()</code> (<code>?v=mtime</code>), hft — <code>?v=</code> в <code>templates/index.html</code>.</li>
 </ul>
 <h2 id="svyazi">Связи</h2>
 <ul>
 <li>Конвенции: <code>wclock5/docs/02_project/conventions.md</code> §3 «Графики»</li>
 <li>Код: <code>wclock5/static/js/invest_chart_helpers.js</code>, <code>wclock5/app.py</code>,<br />
 <code>wclock5/hft/static/js/invest_chart_helpers.js</code>, <code>wclock5/hft/app.py</code></li>
-<li>Беклог: <code>wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md</code> (CHRT-FIX)</li>
-<li>Фреймворк: <code>01.lab/02_project/PROC_graph_approaches.md</code></li>
+<li>Беклог: <code>wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md</code> (CHRT-FIX),<br />
+<code>wclock5/docs/02_project/backlogs/backlog_20261021.ldn.md</code> (GRD-09..12),<br />
+<code>wclock5/docs/02_project/backlogs/backlog_20261022.ldn.md</code> (GRD-13)</li>
+<li>Сессия 03.11.2026 (GRD-14..22): <code>parsers/invest/fx_candles.py</code>,<br />
+<code>parsers/invest/backfill_8w.py</code>, <code>parsers/invest/tracked_tickers_daemon.py</code>,<br />
+<code>invest_repo.py</code>, <code>app.py</code>, <code>static/js/invest_chart.js</code></li>
+<li>Фреймворк: <code>01.lab/02_project/PROC_graph_approaches.md</code>,<br />
+<code>01.lab/00_rules/10_samples/CHART_invest.html</code> (+ <code>10_samples/chart_invest/</code>)</li>
 </ul>
 <h2 id="list-izmeneniy">Лист изменений</h2>
 <ul>
-<li><strong>0.2</strong> · 2026-09-16 — GRD-06 (apiErrorPoints: красные точки + ховер-тултип<br />
-  вместо вертикальных пунктиров), GRD-07 (XAU метки периода + s.fmt в<br />
-  PeriodLabelsPlugin), GRD-08 (линия 100% полупрозрачная белая<br />
-<code>rgba(255,255,255,0.85)</code> + <code>borderDash [8,6]</code>); добавлены ссылки на<br />
-  chart_plugins.js.</li>
+<li><strong>0.5</strong> · 2026-11-03 — GRD-14..22: свечи USD/RUB через <code>GetCandles</code> в обе БД</li>
+<li>бэкфилл 8 недель; раздельные ₽-оси от первого ненулевого значения; сетка X<br />
+  как объединение портфеля и тикеров (+<code>_midnightTimestamps</code>); <code>spanGaps:false</code><br />
+  для портфельных линий; тултип <code>DD.MM.YYYY HH:MM</code>; период <code>-N week</code>; роут<br />
+  тикера со слэшем; нормализация кэш-ключа; XAU через Yahoo API без yfinance.</li>
+<li><strong>0.4</strong> · 2026-10-22 — GRD-13 (полоса «Spread» TGLD@ на графике:<br />
+<code>MorningGapPlugin</code> + <code>loadMorningGap</code>, цвета <code>jumpUp/jumpDown/jumpAvg</code>),<br />
+  правило 11; эпик закрыт (все GRD <svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>).</li>
+<li><strong>0.3</strong> · 2026-10-21 — GRD-09 (настройка цветов тикеров в редакторе<br />
+  параметров: <code>ChartTheme</code> + <code>tickerColor</code>/<code>themeColor</code>; группа «Цвета тикеров»<br />
+  последней во 2-м столбце), GRD-10 (метки периода USD/Brent), GRD-11 (метки<br />
+  скрытых серий не рисуются), GRD-12 (Brent <code>#556B2F</code>); правила 9–10; ссылки на<br />
+<code>chart_config.js</code> и беклог 21.10.</li>
+<li><strong>0.2</strong> · 2026-09-16 — GRD-06 (apiErrorPoints), GRD-07 (XAU метки периода +<br />
+<code>s.fmt</code>), GRD-08 (линия 100% полупрозрачная белая + <code>borderDash [8,6]</code>).</li>
 <li><strong>0.1</strong> · 2026-08-31 — создан: разбор инцидента (взрыв точек), правила<br />
   бюджета точек/замка обновления, GRD-01..05, числа до/после.</li>
 </ul></div>
 
-  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+  <div id="footer" class="footer">WClock5 — проектная документация &mdash; Сгенерировано автоматически</div>
 </div>
 
 <script>
@@ -435,6 +561,64 @@ function downloadDoc() {
   a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
 }
+</script>
+<script>
+(function () {
+  function numVal(txt) {
+    var s = String(txt == null ? "" : txt).trim().replace(/[\s$]/g, "").replace(/,/g, ".");
+    if (s === "" || s === "-" || s === "—") return NaN;
+    if (/^free$/i.test(s)) return 0;
+    if (s === "∞") return Infinity;
+    var n = parseFloat(s);
+    return isNaN(n) ? NaN : n;
+  }
+  function sortTable(tbl, colIdx, dir) {
+    var body = tbl.tBodies[0];
+    if (!body) return;
+    var rows = Array.prototype.slice.call(body.rows);
+    var numeric = true;
+    for (var r = 0; r < rows.length; r++) {
+      var c = rows[r].cells[colIdx];
+      if (!c) continue;
+      var t = (c.textContent || "").trim();
+      if (t !== "" && isNaN(numVal(t))) { numeric = false; break; }
+    }
+    rows.sort(function (a, b) {
+      var ca = a.cells[colIdx], cb = b.cells[colIdx];
+      if (!ca || !cb) return 0;
+      var cmp;
+      if (numeric) { cmp = numVal(ca.textContent) - numVal(cb.textContent); }
+      else { cmp = String(ca.textContent).trim().localeCompare(String(cb.textContent).trim(), "ru"); }
+      return dir === "asc" ? cmp : -cmp;
+    });
+    rows.forEach(function (r) { body.appendChild(r); });
+  }
+  function initSortableTables() {
+    var tables = document.querySelectorAll("table.sortable-table");
+    Array.prototype.forEach.call(tables, function (tbl) {
+      var heads = Array.prototype.slice.call(tbl.querySelectorAll("thead th"));
+      heads.forEach(function (th, idx) {
+        th.addEventListener("click", function () {
+          var dir = th.getAttribute("data-dir") === "asc" ? "desc" : "asc";
+          heads.forEach(function (h) { h.removeAttribute("data-dir"); h.classList.remove("asc", "desc"); });
+          th.setAttribute("data-dir", dir);
+          th.classList.add(dir);
+          sortTable(tbl, idx, dir);
+        });
+      });
+      var ds = tbl.getAttribute("data-default-sort");
+      if (ds) {
+        var p = ds.split(":");
+        var ci = parseInt(p[0], 10);
+        var d = p[1] === "asc" ? "asc" : "desc";
+        if (heads[ci]) { heads[ci].setAttribute("data-dir", d); heads[ci].classList.add(d); }
+        sortTable(tbl, ci, d);
+      }
+    });
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", initSortableTables); }
+  else { initSortableTables(); }
+})();
 </script>
 </body>
 </html>

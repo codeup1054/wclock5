@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='2' y='2' width='44' height='44' rx='10' fill='%23f37435'/%3E%3Ccircle cx='24' cy='24' r='12' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Ccircle cx='24' cy='24' r='4' fill='%23fff'/%3E%3C/svg%3E">
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
@@ -153,6 +154,11 @@
   .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
             letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
   @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+  table.sortable-table th { cursor: pointer; user-select: none; }
+  table.sortable-table th:hover { background: #2a313e; }
+  table.sortable-table th::after { content: " ⇅"; opacity: .4; font-size: .9em; }
+  table.sortable-table th.asc::after { content: " ▲"; opacity: 1; color: #f37435; }
+  table.sortable-table th.desc::after { content: " ▼"; opacity: 1; color: #f37435; }
 </style>
 </head>
 <body>
@@ -170,8 +176,8 @@
       <span class="brand">WClock5</span>
     </div>
     <h1 id="page-title">Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi</h1>
-    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
-    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">🚧</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.1</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-09-03</span></span></div>
+    <p class="sub">Проектная документация — конвенции, эпики, беклоги</p>
+    <div id="doc-meta" class="doc-meta"><span class="meta-item"><span class="meta-label">Фонд</span><span class="meta-value">GEN</span></span><span class="meta-item"><span class="meta-label">Тип</span><span class="meta-value">EPIC</span></span><span class="meta-item"><span class="meta-label">Статус</span><span class="meta-value">✅</span></span><span class="meta-item"><span class="meta-label">Версия</span><span class="meta-value">0.4</span></span><span class="meta-item"><span class="meta-label">Обновлено</span><span class="meta-value">2026-11-03</span></span></div>
   </div>
   
 
@@ -249,6 +255,42 @@ CSS-скейлинг шрифтов баннера (container query), скрыт
 <td>Удалены <code>buildFinamTariffTip</code>/<code>FINAM_TIERS</code>/IIFE и CSS <code>.finam-tariff-css-tip</code></td>
 <td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
 </tr>
+<tr>
+<td>UI-07</td>
+<td>Баннер-таблица: колонка тикера + строки валюты/нефти</td>
+<td>первая ячейка <code>banner-td-ticker</code> (тикер, <code>15px</code>, полужирный, слева) для всех строк; строки <code>USD</code>/<code>Brent</code> в таблице периодов</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-08</td>
+<td>Строка «Spread» (утренний гэп TGLD@) в баннер-таблице</td>
+<td><code>renderMorningGapRow()</code> — те же 8 колонок, что у ассетов: метка <code>Spread</code> + ср. гэп за период % + день/неделя/период (% и абс. ₽), из <code>_tgld_gap.horizons</code> (<code>/api/invest/tickers</code>)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td>UI-09</td>
+<td>Папка профилей + файловый API</td>
+<td><code>profiles/</code> в корне проекта (том <code>./profiles:/app/profiles</code>), <code>GET/POST/DELETE /api/profiles[/&lt;name&gt;]</code>; имя валидируется по запрещённым символам <code>\ / : * ? " &lt; &gt; \|</code> и управляющим байтам (кириллица и пробелы разрешены), запись атомарная <code>.tmp</code> + <code>os.replace</code></td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>UI-10</td>
+<td>Профиль <code>PC_fin.json</code> — полный снимок</td>
+<td><code>format/version/name/saved_at/device_id</code> + <code>panels</code> (17 панелей) + <code>panel_profiles</code> + <code>theme</code> + <code>settings</code> + <code>user_settings</code>; собирается из БД объединением <code>user_settings</code> по всем устройствам (свежее значение по ключу)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>UI-11</td>
+<td>Кнопки «Экспорт» / «Импорт» профиля</td>
+<td><code>collectSnapshot()</code> → файл в выбранную папку (<code>showSaveFilePicker</code>) + копия в <code>profiles/</code>; импорт: выбор <code>.json</code> → confirm → панели/профили/тема/настройки → reload; fallback на <code>&lt;a download&gt;</code> без File System Access API</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
+<tr>
+<td>UI-12</td>
+<td>Finam в баннере капитала</td>
+<td><code>apply_retention</code> удаляла последний сырой снапшот источника → <code>/api/invest/capital</code> отдавал только Tinkoff; теперь чистка сохраняет <code>MAX(ts_epoch)</code> по каждому <code>source</code> (и в <code>portfolio_positions</code>, и в <code>portfolio_history</code>)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> 03.11</td>
+</tr>
 </tbody>
 </table>
 <h2 id="pravila-ui-spravochnik">Правила UI (справочник)</h2>
@@ -266,6 +308,23 @@ CSS-скейлинг шрифтов баннера (container query), скрыт
 <li><strong>Шрифты баннера — cqi</strong> — размеры в единицах контейнера (inline-size),<br />
    чтобы ресайз панели масштабировал текст (см. conventions §6). Фикс. px — только<br />
    для структурных неуправляемых элементов.</li>
+<li><strong>Первый столбец таблицы периодов = тикер</strong> — подпись тикера в первой ячейке<br />
+   (<code>banner-td-ticker</code>: <code>15px</code>, полужирный, по левому краю, <code>white-space:nowrap</code>)<br />
+   для всех строк; цвет тикера — из <code>ChartTheme</code> (<code>themeColor</code>).</li>
+<li><strong>Строки-метрики = формат строк актива</strong> — не-ценовые строки (напр. <code>Spread</code>)<br />
+   рендерятся теми же 8 колонками, что и тикеры: метка + значение за период +<br />
+   день/неделя/период (в % и абс.), чтобы таблица оставалась выровненной.</li>
+<li><strong>Профиль настроек — файл, а не только localStorage</strong> — экспорт даёт<br />
+   самодостаточный JSON (панели + профили + тема + все настройки), пригодный<br />
+   для переноса на другое устройство и для версионирования; серверная копия в<br />
+<code>profiles/</code> — точка обмена, локальный файл — выбор пользователя.</li>
+<li><strong>Нативный выбор файла — из жеста</strong> — <code>showSaveFilePicker()</code> вызывается<br />
+   прямо в обработчике клика и <strong>до</strong> любого <code>prompt()</code>; <code>JSON.stringify</code><br />
+   выполняется <strong>до</strong> <code>createWritable()</code> (тот сразу усекает файл: ошибка<br />
+   сериализации/сервера оставляла пустой файл).</li>
+<li><strong>Баннер не теряет источник</strong> — ретеншен сырых снапшотов обязан оставлять<br />
+    последнюю запись каждого <code>source</code>, иначе источник пропадает из<br />
+<code>/api/invest/capital</code>, хотя данные в бакетах есть.</li>
 </ol>
 <h2 id="primenenie">Применение</h2>
 <ul>
@@ -274,20 +333,37 @@ CSS-скейлинг шрифтов баннера (container query), скрыт
 <li><code>static/js/invest_banner.js</code> — <code>presentSources</code>, T+F row, <code>#invest_banner_total_content</code></li>
 <li><code>static/js/panel_resize.js</code>, <code>panel_configs.js</code> — регистрация <code>invest_banner_total</code></li>
 <li><code>static/css/wclock.css</code> — cqi-шрифты, <code>.banner-total-only</code>, контейнеры панелей</li>
+<li><code>static/js/panel_profiles.js</code> — профили: <code>collectSnapshot</code>, <code>exportProfile</code>,<br />
+<code>importProfileObject</code>, <code>pickAndImport</code>, <code>writeToHandle</code></li>
+<li><code>app.py</code> — <code>PROFILES_DIR</code>, <code>_profile_path</code>, <code>api_profiles_list</code>, <code>api_profile</code></li>
+<li><code>profiles/PC_fin.json</code> — эталонный полный снимок настроек проекта</li>
 </ul>
 <h2 id="svyazi">Связи</h2>
 <ul>
-<li>Конвенции: <code>docs/02_project/conventions.md</code> §4 «Панели», §6 «cqi-скейлинг»</li>
+<li>Конвенции: <code>docs/02_project/conventions.md</code> §4 «Панели», §6 «cqi-скейлинг»,<br />
+  §14 «Профили настроек: файлы, экспорт/импорт»</li>
 <li>Эпик: <code>docs/02_project/epics/EPIC_api_settings.md</code> (настройка сбора → скрытие источника)</li>
-<li>Беклог: <code>docs/02_project/backlogs/backlog_20260903.ldn.md</code></li>
+<li>Фреймворк: <code>01.lab/02_project/epics/EPIC_panel_profiles.md</code>,<br />
+<code>01.lab/02_project/PROP_conventions.md</code> (P14)</li>
+<li>Беклог: <code>docs/02_project/backlogs/backlog_20260903.ldn.md</code>,<br />
+<code>docs/02_project/backlogs/backlog_20261021.ldn.md</code> (UI-07),<br />
+<code>docs/02_project/backlogs/backlog_20261022.ldn.md</code> (UI-08)</li>
 </ul>
 <h2 id="list-izmeneniy">Лист изменений</h2>
 <ul>
+<li><strong>0.4</strong> · 2026-11-03 — UI-09 (папка <code>profiles/</code> + файловый API), UI-10<br />
+  (<code>PC_fin.json</code> — полный снимок), UI-11 (экспорт/импорт через File System<br />
+  Access API + fallback), UI-12 (Finam в баннере: ретеншен сохраняет последний<br />
+  снапшот источника); правила 8–10.</li>
+<li><strong>0.3</strong> · 2026-10-22 — UI-08 (строка «Spread» в баннер-таблице, 8 колонок<br />
+  как у активов), правило 7; эпик закрыт (все UI <svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>).</li>
+<li><strong>0.2</strong> · 2026-10-21 — UI-07 (первый столбец баннер-таблицы = тикер, строки<br />
+<code>USD</code>/<code>Brent</code>); правило 6.</li>
 <li><strong>0.1</strong> · 2026-09-03 — создан: UI-01..06, правила, связи (единая модалка,<br />
   Итого-панель, cqi, скрытие при 1 API).</li>
 </ul></div>
 
-  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+  <div id="footer" class="footer">WClock5 — проектная документация &mdash; Сгенерировано автоматически</div>
 </div>
 
 <script>
@@ -345,6 +421,64 @@ function downloadDoc() {
   a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
 }
+</script>
+<script>
+(function () {
+  function numVal(txt) {
+    var s = String(txt == null ? "" : txt).trim().replace(/[\s$]/g, "").replace(/,/g, ".");
+    if (s === "" || s === "-" || s === "—") return NaN;
+    if (/^free$/i.test(s)) return 0;
+    if (s === "∞") return Infinity;
+    var n = parseFloat(s);
+    return isNaN(n) ? NaN : n;
+  }
+  function sortTable(tbl, colIdx, dir) {
+    var body = tbl.tBodies[0];
+    if (!body) return;
+    var rows = Array.prototype.slice.call(body.rows);
+    var numeric = true;
+    for (var r = 0; r < rows.length; r++) {
+      var c = rows[r].cells[colIdx];
+      if (!c) continue;
+      var t = (c.textContent || "").trim();
+      if (t !== "" && isNaN(numVal(t))) { numeric = false; break; }
+    }
+    rows.sort(function (a, b) {
+      var ca = a.cells[colIdx], cb = b.cells[colIdx];
+      if (!ca || !cb) return 0;
+      var cmp;
+      if (numeric) { cmp = numVal(ca.textContent) - numVal(cb.textContent); }
+      else { cmp = String(ca.textContent).trim().localeCompare(String(cb.textContent).trim(), "ru"); }
+      return dir === "asc" ? cmp : -cmp;
+    });
+    rows.forEach(function (r) { body.appendChild(r); });
+  }
+  function initSortableTables() {
+    var tables = document.querySelectorAll("table.sortable-table");
+    Array.prototype.forEach.call(tables, function (tbl) {
+      var heads = Array.prototype.slice.call(tbl.querySelectorAll("thead th"));
+      heads.forEach(function (th, idx) {
+        th.addEventListener("click", function () {
+          var dir = th.getAttribute("data-dir") === "asc" ? "desc" : "asc";
+          heads.forEach(function (h) { h.removeAttribute("data-dir"); h.classList.remove("asc", "desc"); });
+          th.setAttribute("data-dir", dir);
+          th.classList.add(dir);
+          sortTable(tbl, idx, dir);
+        });
+      });
+      var ds = tbl.getAttribute("data-default-sort");
+      if (ds) {
+        var p = ds.split(":");
+        var ci = parseInt(p[0], 10);
+        var d = p[1] === "asc" ? "asc" : "desc";
+        if (heads[ci]) { heads[ci].setAttribute("data-dir", d); heads[ci].classList.add(d); }
+        sortTable(tbl, ci, d);
+      }
+    });
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", initSortableTables); }
+  else { initSortableTables(); }
+})();
 </script>
 </body>
 </html>

@@ -21,6 +21,8 @@
       xau: '#cc7722',
       usd: '#3ba3ff',
       brent: '#556B2F',
+      tdiv: '#e8a33d',
+      trnd: '#7b6bd6',
       jumpUp: '#1fc163',
       jumpDown: '#e74c3c',
       jumpAvg: '#ffffff'
@@ -53,7 +55,9 @@
       { path: 'color.tgld', label: 'TGLD (золото)', type: 'color' },
       { path: 'color.xau', label: 'XAU/USD', type: 'color' },
       { path: 'color.usd', label: 'USD/RUB', type: 'color' },
-      { path: 'color.brent', label: 'Brent (нефть)', type: 'color' }
+      { path: 'color.brent', label: 'Brent (нефть)', type: 'color' },
+      { path: 'color.tdiv', label: 'С5 TDIV', type: 'color' },
+      { path: 'color.trnd', label: 'С3 TRND', type: 'color' }
     ]},
     { group: 'Spread TGLD', fields: [
       { path: 'color.jumpUp', label: 'Гэп вверх', type: 'color' },

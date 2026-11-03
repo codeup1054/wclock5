@@ -1,0 +1,30 @@
+{
+  "sources": [
+    {
+      "id": "tdiv",
+      "label": "С5 TDIV",
+      "broker": "tinkoff",
+      "token_env": "TDIV_TOKEN",
+      "account_env": "TDIV_ACCOUNT_ID",
+      "interval_env": "TDIV_UPDATE_INTERVAL_SEC",
+      "daemon": "parsers/invest/account_invest_daemon.py"
+    },
+    {
+      "id": "tinkoff",
+      "label": "Tinkoff",
+      "broker": "tinkoff",
+      "token_env": "API_TOKEN",
+      "account_env": "ACCOUNT_ID",
+      "interval_env": "UPDATE_INTERVAL_SEC",
+      "daemon": "parsers/invest/tinkoff_invest_daemon.py"
+    },
+    {
+      "id": "trnd",
+      "label": "С3 TRND",
+      "broker": "tinkoff",
+      "token_env": "TRND_TOKEN",
+      "account_env": "TRND_ACCOUNT_ID",
+      "interval_env": "TRND_UPDATE_INTERVAL_SEC"
+    }
+  ]
+}

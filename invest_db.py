@@ -72,6 +72,22 @@ def init_invest_db():
     }.items():
         cur.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
 
+    # FX-курсы (USD/RUB и др.) с детализацией как портфель
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS fx_rates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            ts_epoch INTEGER NOT NULL,
+            pair TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'tinkoff',
+            close REAL NOT NULL,
+            bid REAL,
+            ask REAL,
+            UNIQUE(ts_epoch, pair, source)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_rates_ts_pair ON fx_rates(ts_epoch, pair, source)")
+
     conn.commit()
     conn.close()
 

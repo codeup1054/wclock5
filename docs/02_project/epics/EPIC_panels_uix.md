@@ -2,8 +2,8 @@
 title: Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi
 fnd: GEN
 typ: EPIC
-ver: 0.3
-updated: 2026-10-22
+ver: 0.4
+updated: 2026-11-03
 status: ✅
 ---
 # Эпик — UI/UX панели: единая модалка Отчёты, баннер-панели, cqi
@@ -32,6 +32,10 @@ CSS-скейлинг шрифтов баннера (container query), скрыт
 | UI-06 | Убран тултип с тарифом | Удалены `buildFinamTariffTip`/`FINAM_TIERS`/IIFE и CSS `.finam-tariff-css-tip` | ✅ |
 | UI-07 | Баннер-таблица: колонка тикера + строки валюты/нефти | первая ячейка `banner-td-ticker` (тикер, `15px`, полужирный, слева) для всех строк; строки `USD`/`Brent` в таблице периодов | ✅ |
 | UI-08 | Строка «Spread» (утренний гэп TGLD@) в баннер-таблице | `renderMorningGapRow()` — те же 8 колонок, что у ассетов: метка `Spread` + ср. гэп за период % + день/неделя/период (% и абс. ₽), из `_tgld_gap.horizons` (`/api/invest/tickers`) | ✅ |
+| UI-09 | Папка профилей + файловый API | `profiles/` в корне проекта (том `./profiles:/app/profiles`), `GET/POST/DELETE /api/profiles[/<name>]`; имя валидируется по запрещённым символам `\ / : * ? " < > \|` и управляющим байтам (кириллица и пробелы разрешены), запись атомарная `.tmp` + `os.replace` | ✅ 03.11 |
+| UI-10 | Профиль `PC_fin.json` — полный снимок | `format/version/name/saved_at/device_id` + `panels` (17 панелей) + `panel_profiles` + `theme` + `settings` + `user_settings`; собирается из БД объединением `user_settings` по всем устройствам (свежее значение по ключу) | ✅ 03.11 |
+| UI-11 | Кнопки «Экспорт» / «Импорт» профиля | `collectSnapshot()` → файл в выбранную папку (`showSaveFilePicker`) + копия в `profiles/`; импорт: выбор `.json` → confirm → панели/профили/тема/настройки → reload; fallback на `<a download>` без File System Access API | ✅ 03.11 |
+| UI-12 | Finam в баннере капитала | `apply_retention` удаляла последний сырой снапшот источника → `/api/invest/capital` отдавал только Tinkoff; теперь чистка сохраняет `MAX(ts_epoch)` по каждому `source` (и в `portfolio_positions`, и в `portfolio_history`) | ✅ 03.11 |
 
 ## Правила UI (справочник)
 
@@ -54,6 +58,17 @@ CSS-скейлинг шрифтов баннера (container query), скрыт
 7. **Строки-метрики = формат строк актива** — не-ценовые строки (напр. `Spread`)
    рендерятся теми же 8 колонками, что и тикеры: метка + значение за период +
    день/неделя/период (в % и абс.), чтобы таблица оставалась выровненной.
+8. **Профиль настроек — файл, а не только localStorage** — экспорт даёт
+   самодостаточный JSON (панели + профили + тема + все настройки), пригодный
+   для переноса на другое устройство и для версионирования; серверная копия в
+   `profiles/` — точка обмена, локальный файл — выбор пользователя.
+9. **Нативный выбор файла — из жеста** — `showSaveFilePicker()` вызывается
+   прямо в обработчике клика и **до** любого `prompt()`; `JSON.stringify`
+   выполняется **до** `createWritable()` (тот сразу усекает файл: ошибка
+   сериализации/сервера оставляла пустой файл).
+10. **Баннер не теряет источник** — ретеншен сырых снапшотов обязан оставлять
+    последнюю запись каждого `source`, иначе источник пропадает из
+    `/api/invest/capital`, хотя данные в бакетах есть.
 
 ## Применение
 
@@ -62,17 +77,28 @@ CSS-скейлинг шрифтов баннера (container query), скрыт
 - `static/js/invest_banner.js` — `presentSources`, T+F row, `#invest_banner_total_content`
 - `static/js/panel_resize.js`, `panel_configs.js` — регистрация `invest_banner_total`
 - `static/css/wclock.css` — cqi-шрифты, `.banner-total-only`, контейнеры панелей
+- `static/js/panel_profiles.js` — профили: `collectSnapshot`, `exportProfile`,
+  `importProfileObject`, `pickAndImport`, `writeToHandle`
+- `app.py` — `PROFILES_DIR`, `_profile_path`, `api_profiles_list`, `api_profile`
+- `profiles/PC_fin.json` — эталонный полный снимок настроек проекта
 
 ## Связи
 
-- Конвенции: `docs/02_project/conventions.md` §4 «Панели», §6 «cqi-скейлинг»
+- Конвенции: `docs/02_project/conventions.md` §4 «Панели», §6 «cqi-скейлинг»,
+  §14 «Профили настроек: файлы, экспорт/импорт»
 - Эпик: `docs/02_project/epics/EPIC_api_settings.md` (настройка сбора → скрытие источника)
+- Фреймворк: `01.lab/02_project/epics/EPIC_panel_profiles.md`,
+  `01.lab/02_project/PROP_conventions.md` (P14)
 - Беклог: `docs/02_project/backlogs/backlog_20260903.ldn.md`,
   `docs/02_project/backlogs/backlog_20261021.ldn.md` (UI-07),
   `docs/02_project/backlogs/backlog_20261022.ldn.md` (UI-08)
 
 ## Лист изменений
 
+- **0.4** · 2026-11-03 — UI-09 (папка `profiles/` + файловый API), UI-10
+  (`PC_fin.json` — полный снимок), UI-11 (экспорт/импорт через File System
+  Access API + fallback), UI-12 (Finam в баннере: ретеншен сохраняет последний
+  снапшот источника); правила 8–10.
 - **0.3** · 2026-10-22 — UI-08 (строка «Spread» в баннер-таблице, 8 колонок
   как у активов), правило 7; эпик закрыт (все UI ✅).
 - **0.2** · 2026-10-21 — UI-07 (первый столбец баннер-таблицы = тикер, строки

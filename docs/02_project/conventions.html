@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Конвенции WClock5</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect x='2' y='2' width='44' height='44' rx='10' fill='%23f37435'/%3E%3Ccircle cx='24' cy='24' r='12' fill='none' stroke='%23fff' stroke-width='3'/%3E%3Ccircle cx='24' cy='24' r='4' fill='%23fff'/%3E%3C/svg%3E">
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; background: #fbfbf9;
@@ -153,6 +154,11 @@
   .footer { text-align: center; color: #aa957f; font-size: 10px; text-transform: uppercase;
             letter-spacing: 2px; margin-top: 28px; padding-top: 16px; border-top: 2px solid #e2dbd3; }
   @media (min-width: 640px) { .footer { font-size: 12px; margin-top: 40px; padding-top: 24px; } }
+  table.sortable-table th { cursor: pointer; user-select: none; }
+  table.sortable-table th:hover { background: #2a313e; }
+  table.sortable-table th::after { content: " ⇅"; opacity: .4; font-size: .9em; }
+  table.sortable-table th.asc::after { content: " ▲"; opacity: 1; color: #f37435; }
+  table.sortable-table th.desc::after { content: " ▼"; opacity: 1; color: #f37435; }
 </style>
 </head>
 <body>
@@ -170,7 +176,7 @@
       <span class="brand">WClock5</span>
     </div>
     <h1 id="page-title">Конвенции WClock5</h1>
-    <p class="sub">Терминал инвестора и погодный дашборд — конвенции, эпики, беклоги</p>
+    <p class="sub">Проектная документация — конвенции, эпики, беклоги</p>
     
   </div>
   
@@ -189,6 +195,9 @@
     <a href="#9-chart-js-defensive-update-pattern">Chart.js: defensive…</a>
     <a href="#10-nastroyki-sbora-cherez-api-tinkoff-finam">Настройки сбора чер…</a>
     <a href="#11-demony-dannykh-pravki-na-servere-tg-turnover-i-dr">Демоны данных: прав…</a>
+    <a href="#12-mediator-dannykh-mn-21">Медиатор данных (Mn…</a>
+    <a href="#13-provaly-dannykh-artefakty-invest-buckets">Провалы данных (арт…</a>
+    <a href="#14-profili-nastroek-fayly-eksport-import">Профили настроек: ф…</a>
     <a href="#list-izmeneniy">Лист изменений</a>
     <span class="dl" data-dl="conventions">
       <button type="button" class="dl-btn" onclick="downloadPdf()">PDF</button>
@@ -291,6 +300,15 @@
 <a href="#11-demony-dannykh-pravki-na-servere-tg-turnover-i-dr">11. Демоны данных: правки на сервере (tg_turnover и др.)</a>
 </li>
 <li>
+<a href="#12-mediator-dannykh-mn-21">12. Медиатор данных (Mn-21)</a>
+</li>
+<li>
+<a href="#13-provaly-dannykh-artefakty-invest-buckets">13. Провалы данных (артефакты invest_buckets)</a>
+</li>
+<li>
+<a href="#14-profili-nastroek-fayly-eksport-import">14. Профили настроек: файлы, экспорт/импорт</a>
+</li>
+<li>
 <a href="#list-izmeneniy">Лист изменений</a>
 </li></ul></div>
   </div>
@@ -298,10 +316,10 @@
 
   <div id="content" class="content prose">
 <ul>
-<li>ver: 0.7</li>
-<li>updated: 2026-09-16</li>
-<li>scope: деплой, инвест-данные, графики, панели (в т.ч. browser-зоны), паттерны, cqi-скейлинг, минутные свечи, авто-refresh, настройки сбора через API, демоны данных, промпт-рецепты</li>
-<li>источник: сессия 21.08–16.09.2026</li>
+<li>ver: 0.11</li>
+<li>updated: 2026-11-03</li>
+<li>scope: деплой, инвест-данные, графики, панели (в т.ч. browser-зоны), паттерны, cqi-скейлинг, минутные свечи, авто-refresh, настройки сбора через API, демоны данных, медиатор данных, промпт-рецепты, провалы данных, профили настроек (экспорт/импорт)</li>
+<li>источник: сессия 21.08–03.11.2026</li>
 </ul>
 <h2 id="0-prompt-retsept-posle-zadachi">0. Промпт-рецепт после задачи</h2>
 <p>После <strong>завершения любой задачи</strong> (правка визуала, логики, деплой) ассистент<br />
@@ -485,8 +503,8 @@ Row-классы <code>settings-col-first/second</code> НЕ использов�
 <tbody>
 <tr>
 <td>tileW × tileH</td>
-<td>23 × 23</td>
-<td><code>round(SPACING / sin(45°))</code> ≈ 22.6 → 23</td>
+<td>25 × 25</td>
+<td><code>round(SPACING / sin(45°))</code> ≈ 25.5 → 25</td>
 </tr>
 <tr>
 <td>SPACING</td>
@@ -774,12 +792,24 @@ Row-классы <code>settings-col-first/second</code> НЕ использов�
 <td><code>12.5cqi</code></td>
 <td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
 </tr>
+<tr>
+<td><code>#wind_cond_precip_panel</code></td>
+<td>иконки <code>img[id*=condition]</code>, стрелки <code>div[id*='_wind_dir_a']</code>, скорости/направления/осадки</td>
+<td>иконки <code>min(22cqi,44cqh)</code>, шрифт <code>min(16cqi,36cqh)</code> (<code>container-type: size</code>)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
+<tr>
+<td><code>#press_humidity_temp_panel</code></td>
+<td>давление/влажность/темп/feels_like (плоская сетка 2×4, <code>#temp</code> → <code>display: contents</code>)</td>
+<td>колонки <code>1fr 1fr 1fr 0.5fr</code>, шрифт <code>min(22cqi,46cqh)</code>, <code>feels_like</code> ×0.7 (<code>container-type: size</code>)</td>
+<td><svg class="icon" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#4b8765"/><path d="M6 10l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></td>
+</tr>
 </tbody>
 </table>
 <p><strong>Баннерные панели — контейнеры</strong> (<code>container-type: inline-size</code> на<br />
 <code>#invest_banner_capital/_table/_total</code>): строки капитала/оборота, бары активов<br />
 и таблица масштабируются по ширине панели. Фон/структура — px (<code>.asset-bar</code>).</p>
-<p><strong>Остальные</strong> (clock_panel, moon_panel, wind_cond_precip_panel, press_humidity_temp_panel)<br />
+<p><strong>Остальные</strong> (clock_panel, moon_panel)<br />
 пока в <code>PANEL_CONTENT_SELECTORS</code> / <code>PANEL_BASE_SIZES</code> — поэтапно перевести.</p>
 <p><strong>Правила:</strong><br />
 - Убрать панель из <code>PANEL_CONTENT_SELECTORS</code> и <code>PANEL_BASE_SIZES</code> (<code>panel_resize.js</code>)<br />
@@ -1005,13 +1035,202 @@ GET возвращает из инвест-БД.</p>
    → в контейнере <code>/app/parsers/invest/invest_portfolio.db</code>, это один файл).<br />
    Проверка данных: <code>docker exec wclock5-app python3 -c "…"</code>.</li>
 </ol>
+<h2 id="12-mediator-dannykh-mn-21">12. Медиатор данных (Mn-21)</h2>
+<p>Один POST <code>/api/data_mediator</code> в минуту вместо N периодических GET — дельта-шина<br />
+панели (эпик <code>EPIC_mediator_data.md</code>, ADR <code>0006_mediator_proxy_incremental.md</code>).</p>
+<p><strong>Протокол (сервер <code>app.py: api_data_mediator</code>):</strong><br />
+- body: <code>{"v": {секция: токен клиента}, "params": {секция: {…}}, "write": {секция: {…}}}</code>.<br />
+- <code>v</code> пуст → клиент «с нуля» → все секции в <code>changed</code>.<br />
+- ответ: <code>{changed: {секция: payload}, tokens: {секция: токен}, writes, ts}</code>.<br />
+- payload в <code>changed</code> несут <strong>полные</strong> данные секции — клиент рисует из них<br />
+  без повторного GET к <code>/api/*</code>.<br />
+- Токен секции = SHA-256(sort_keys JSON), 16 hex, для <code>invest.history</code> — <code>str(_latest_epoch)</code>.<br />
+- Чтение — <code>_DATA_MEDIATOR_READERS</code>; записи — <code>_DATA_MEDIATOR_WRITERS</code><br />
+  (<code>battery: {device_id, value}</code>); гранулярность записей <code>_DATA_MEDIATOR_WRITE_INTERVAL</code><br />
+  (<code>battery</code> 60с).<br />
+- <strong>Инвест-секции читаются теми же payload-хелперами, что GET</strong><br />
+  (<code>_invest_history_payload</code>/<code>_invest_tickers_payload</code>/<code>_invest_turnover_payload</code>) —<br />
+  один источник, медиатор и <code>/api/invest/*</code> не расходятся.</p>
+<p><strong>Клиент (<code>static/js/panel_mediator.js</code>):</strong><br />
+- <code>PanelMediator.subscribe(sect, fn, {params})</code> — подписчик + провайдер параметров;<br />
+  в <code>v</code> уходят только подписанные секции.<br />
+- Смена параметров провайдера → инвалидация токена → force delta (полный payload нового диапазона).<br />
+- API наружу: <code>subscribe</code>, <code>getLatest(sect)</code>, <code>getLatestAt(sect)</code>, <code>invalidate(sect)</code>, <code>write(sect, payload)</code>, <code>healthy()</code>.<br />
+- Токены в localStorage <code>wclock5_mediator_tokens</code>; опрос 10с (единый тик дашборда,<br />
+  POLL_MS); пропуск при <code>document.hidden</code>; при недоступности <code>healthy=false</code> и<br />
+  виджеты возвращаются к GET-fallback.<br />
+- <strong>Маршрут секций</strong>: weather→<code>window.renderWeatherData</code>; charts_data→<code>window.renderWeatherChart</code>;<br />
+  battery.history→<code>window.renderBatteryHistory</code> (battery.js <code>drawBatteryChart(&lt;массив&gt;)</code>);<br />
+  invest.tickers/turnover/history→InvestBanner + <code>window.__investTickerCache</code>/<code>InvestHistoryCache.primeFromMediator</code>;<br />
+  invest.turnover_details→InvestBanner (тултип блока оборотов); settings→<code>window.settings</code>.</p>
+<p><strong>Виджеты (fallback на GET при застое медиатора):</strong><br />
+- invest.history: <code>InvestHistoryCache.primeFromMediator(interval, period, start_ts, end_ts, raw)</code>,<br />
+  TTL 70с — <code>get()</code> отдаёт медиаторный payload без GET.<br />
+- invest.tickers: <code>getLatest('invest.tickers')</code> → <code>window.__investTickerCache</code> + рендер.<br />
+- battery: <code>sendBatteryLevel()</code> → <code>PanelMediator.write('battery', {device_id, value})</code>;<br />
+  при недоступности медиатора — старый POST <code>/api/battery</code>.</p>
+<h2 id="13-provaly-dannykh-artefakty-invest-buckets">13. Провалы данных (артефакты invest_buckets)</h2>
+<p><strong>Симптом-кейс (12/10/2026, инцидент):</strong> 20 минутных свечей <code>invest_buckets</code><br />
+(source=<code>finam</code>, res=<code>min</code>, 12:03–12:22 UTC) показывали <code>close</code> ≈ 3.54M вместо<br />
+нормальных ~8.4M; единственный такой провал за всю историю. График портфеля резко<br />
+«проваливался» до ~3M (пользователь видел ~13:15 МСК). Диагностика и устранение —<br />
+<code>sh/data_scan.py</code> + интерполяция (беклог <code>backlog_20261013.ldn.md</code>).</p>
+<p><strong>Правила:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Аспект</th>
+<th>Правило</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Детекция</td>
+<td><code>sh/data_scan.py</code> (scan): окно = <code>close[i] &lt; factor*base</code> (default factor 0.7), <code>&gt;= min_run</code> подряд (default 2) и возврат к норме; смена уровня/пропуск без восстановления — информационные <code>tail</code>, не провал; <code>--list</code> — группы source/res и объёмы</td>
+</tr>
+<tr>
+<td>Устранение</td>
+<td><code>--fix</code> — линейная интерполяция окна между соседними нормальными точками (OHLC + tgld_*, нормализация свечи: <code>open</code>=close prev, <code>low</code>=min, <code>high</code>=max), <code>tgld_total</code>=close</td>
+</tr>
+<tr>
+<td>Бэкап</td>
+<td>перед <code>--fix</code> затронутые строки пишутся в <code>{db}.bak_{ts}_DELETE_AFTER_TEST</code> — удалять после тестирования</td>
+</tr>
+<tr>
+<td>Проверка</td>
+<td>повторный <code>scan</code> без окон; <code>--list</code> корректен</td>
+</tr>
+<tr>
+<td>Прогон на проде</td>
+<td>локально копию БД; или <code>scp sh/data_scan.py root@217.114.8.5:/tmp/ &amp;&amp; ssh root@217.114.8.5 "python3 /tmp/data_scan.py --db /var/www/wclock5.startupassist.ru/parsers/invest/invest_portfolio.db"</code> (только scan; <code>--fix</code> — осторожно, влияет на график)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Почему детекция по порогу, а не по Δ:</strong> нормальная минутная волатильность<br />
+finam-портфеля — единицы процентов; 42%-й провал сразу виден. Одинокие артефакты<br />
+(1 минута) ловятся при <code>--min-run 1</code>, но в горячем пути графика заметны только<br />
+окна ≥ 2 минут.</p>
+<p><strong>Потенциальный источник:</strong> близнецы-значения ~3 542 551/3 544 504 выглядят как<br />
+респонс-заглушка демона Финама (<code>finam_invest_daemon.py</code>); при повторе — проверить<br />
+демон (OPS-15, <code>EPIC_ops_reliability.md</code>).</p>
+<h2 id="14-profili-nastroek-fayly-eksport-import">14. Профили настроек: файлы, экспорт/импорт</h2>
+<p><strong>Находка (03.11.2026):</strong> профиль панелей жил только в <code>localStorage</code> +<br />
+<code>user_settings</code>, поэтому перенести раскладку на другое устройство или<br />
+зафиксировать состояние проекта было нечем.</p>
+<p><strong>Формат файла</strong> (<code>profiles/&lt;имя&gt;.json</code>) — самодостаточный снимок:</p>
+<table>
+<thead>
+<tr>
+<th>Ключ</th>
+<th>Содержимое</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>format</code> / <code>version</code></td>
+<td><code>"wclock-profile"</code> / <code>1</code></td>
+</tr>
+<tr>
+<td><code>name</code> / <code>saved_at</code> / <code>device_id</code></td>
+<td>идентификация снимка</td>
+</tr>
+<tr>
+<td><code>panels</code></td>
+<td>позиции/размеры/видимость всех панелей (<code>PanelResize.capturePanelConfig</code>)</td>
+</tr>
+<tr>
+<td><code>panel_profiles</code></td>
+<td><code>{active, profiles:[{name, config}]}</code></td>
+</tr>
+<tr>
+<td><code>theme</code></td>
+<td><code>ChartTheme.all()</code> (font/line/hatch/color)</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td>глобальные настройки (<code>/api/settings</code>)</td>
+</tr>
+<tr>
+<td><code>user_settings</code></td>
+<td>пользовательские (<code>/api/user_settings/&lt;device&gt;</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>API</strong> (<code>app.py</code>): <code>GET /api/profiles</code>, <code>GET|POST|DELETE /api/profiles/&lt;name&gt;</code>.<br />
+Имя валидируется по <strong>запрещённым</strong> символам (<code>\ / : * ? " &lt; &gt; |</code>, управляющие<br />
+байты, ведущая точка) — кириллица и пробелы допустимы, <code>Вариант 1</code> работает.<br />
+Запись атомарная: <code>.tmp</code> + <code>os.replace</code>. Папка монтируется в контейнер<br />
+(<code>./profiles:/app/profiles</code>).</p>
+<p><strong>Экспорт</strong> (<code>PanelProfiles.exportProfile</code>): <code>showSaveFilePicker()</code> вызывается<br />
+прямо из клика и <strong>до</strong> <code>prompt()</code>; <code>JSON.stringify</code> — <strong>до</strong><br />
+<code>createWritable()</code>; файл в выбранной папке и копия в <code>profiles/</code> пишутся<br />
+независимо (<code>Promise.all</code>). Без File System Access API — <code>&lt;a download&gt;</code>.</p>
+<p><strong>Импорт</strong> (<code>importProfileObject</code>): подтверждение → панели<br />
+(<code>applyConfigToPanels</code> + <code>savePanelConfig</code>), профили, тема (<code>ChartTheme.set</code>),<br />
+<code>POST /api/settings</code> и <code>/api/user_settings/&lt;device&gt;</code> → перезагрузка.</p>
+<p><strong>Грабли:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Симптом</th>
+<th>Причина</th>
+<th>Лечение</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Файл сохранился пустым</td>
+<td><code>createWritable()</code> усекает файл сразу, а ошибка возникала позже (серверный 400 на имя «Вариант 1»)</td>
+<td>сериализовать до открытия файла; local и server — независимые промисы</td>
+</tr>
+<tr>
+<td><code>SecurityError</code> у пикера</td>
+<td>вызов после <code>prompt()</code> теряет пользовательский жест</td>
+<td>пикер первым, имя задаётся в самом диалоге</td>
+</tr>
+<tr>
+<td>Профиль не найден на сервере</td>
+<td>имя с пробелом/кириллицей отбивалось regex <code>^[A-Za-z0-9_.\-]+$</code></td>
+<td>валидировать по чёрному списку символов, а не по белому</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Примеры:</strong> <code>static/js/panel_profiles.js</code>, <code>app.py</code>, <code>profiles/PC_fin.json</code>;<br />
+общий паттерн — <code>01.lab/02_project/epics/EPIC_panel_profiles.md</code>,<br />
+<code>01.lab/02_project/PROP_conventions.md</code> (P14).</p>
 <h2 id="list-izmeneniy">Лист изменений</h2>
 <p>Версии <code>X.Y</code>. Новые записи — сверху.</p>
 <ul>
-<li><strong>0.7</strong> · 2026-09-16 — §11 демоны данных: деплой демонов на хосте через<br />
+<li>
+<p><strong>0.11</strong> · 2026-11-03 — §14 профили настроек: файл <code>profiles/&lt;name&gt;.json</code><br />
+  (panels + panel_profiles + theme + settings + user_settings), API<br />
+<code>/api/profiles</code>, экспорт через <code>showSaveFilePicker</code> (жест до <code>prompt</code>,<br />
+  сериализация до <code>createWritable</code>), импорт с применением и перезагрузкой;<br />
+  грабли пустого файла и валидации имён.</p>
+</li>
+<li>
+<p><strong>0.10</strong> ≡ 2026-10-13 - §13 провалы данных: детекция<br />
+  (<code>sh/data_scan.py</code> scan+fix), интерполяция с временным бэкапом<br />
+<code>*_DELETE_AFTER_TEST</code>, инцидент 12/10/2026.</p>
+</li>
+<li>
+<p><strong>0.9</strong> ≡ 2026-09-18 - §12 обновление под шаг 2: опрос 10с (POLL_MS, единый<br />
+  тик), <code>getLatestAt</code>, weather/settings через медиатор (GET — fallback), новая<br />
+  секция <code>invest.turnover_details</code> (strategy_summary + «Тариф процентный» из<br />
+  bot_events; в клиенте — тултип блока оборотов), serulerный TTL тикеров 30с.</p>
+</li>
+<li>
+<p><strong>0.8</strong> ≡ 2026-09-18 - §12 медиатор данных: invest-секции<br />
+  (history/tickers/turnover) в <code>/api/data_mediator</code> через общие payload-хелперы,<br />
+  клиентский <code>PanelMediator</code> (подписки, инвалидация по params, write), перевод<br />
+  invest_banner/invest_chart/battery на медиатор с GET-fallback.</p>
+</li>
+<li>
+<p><strong>0.7</strong> · 2026-09-16 — §11 демоны данных: деплой демонов на хосте через<br />
   scp+systemctl (не docker); правило «новый пост не перезатирается старым»<br />
   в strategy_summary (проверка msg_ts &gt; ts_epoch перед UPDATE); рабочая БД<br />
-<code>parsers/invest/invest_portfolio.db</code> — bind-mount хоста в контейнер.</li>
+<code>parsers/invest/invest_portfolio.db</code> — bind-mount хоста в контейнер.</p>
+</li>
 <li><strong>0.6</strong> · 2026-09-09 — §4 панели: настройки в 2 div-столбца (grid,<br />
   построчное заполнение первой/второй половиной); browser-зоны<br />
   (<code>#browser_fullscreen</code>/<code>#browser_reload</code>) как отдельная подтема — вид,<br />
@@ -1034,7 +1253,7 @@ GET возвращает из инвест-БД.</p>
   авто-refresh, свежесть данных), §8 минутные свечи (portfolio_min, 30 дней),<br />
   §9 Chart.js defensive update pattern.</li>
 <li><strong>0.2</strong> · 2026-08-25 — §5 паттерны штриховки: CanvasPattern (hatchPattern,<br />
-  rgba hex-конвертация, кеш), параметры тайла (23×23, SPACING 18, dpr/4),<br />
+  rgba hex-конвертация, кеш), параметры тайла (25×25, SPACING 18, dpr/4),<br />
   углы 45°/-45°, порядок стека (LQDT→TMON→TGLD), легенда 3 столбца,<br />
   быстрый деплой (deploy_js.sh), §5.8 легенда drag&amp;drop/touch/cookie.</li>
 <li><strong>0.1</strong> · 2026-08-22 — первичная версия: деплой (порт 10405, surl),<br />
@@ -1043,7 +1262,7 @@ GET возвращает из инвест-БД.</p>
   куки-позиции, drag&amp;drop).</li>
 </ul></div>
 
-  <div id="footer" class="footer">WClock5 — конвенции фреймворка и документация проекта &mdash; Сгенерировано автоматически</div>
+  <div id="footer" class="footer">WClock5 — проектная документация &mdash; Сгенерировано автоматически</div>
 </div>
 
 <script>
@@ -1215,6 +1434,64 @@ function downloadDoc() {
   a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 100);
 }
+</script>
+<script>
+(function () {
+  function numVal(txt) {
+    var s = String(txt == null ? "" : txt).trim().replace(/[\s$]/g, "").replace(/,/g, ".");
+    if (s === "" || s === "-" || s === "—") return NaN;
+    if (/^free$/i.test(s)) return 0;
+    if (s === "∞") return Infinity;
+    var n = parseFloat(s);
+    return isNaN(n) ? NaN : n;
+  }
+  function sortTable(tbl, colIdx, dir) {
+    var body = tbl.tBodies[0];
+    if (!body) return;
+    var rows = Array.prototype.slice.call(body.rows);
+    var numeric = true;
+    for (var r = 0; r < rows.length; r++) {
+      var c = rows[r].cells[colIdx];
+      if (!c) continue;
+      var t = (c.textContent || "").trim();
+      if (t !== "" && isNaN(numVal(t))) { numeric = false; break; }
+    }
+    rows.sort(function (a, b) {
+      var ca = a.cells[colIdx], cb = b.cells[colIdx];
+      if (!ca || !cb) return 0;
+      var cmp;
+      if (numeric) { cmp = numVal(ca.textContent) - numVal(cb.textContent); }
+      else { cmp = String(ca.textContent).trim().localeCompare(String(cb.textContent).trim(), "ru"); }
+      return dir === "asc" ? cmp : -cmp;
+    });
+    rows.forEach(function (r) { body.appendChild(r); });
+  }
+  function initSortableTables() {
+    var tables = document.querySelectorAll("table.sortable-table");
+    Array.prototype.forEach.call(tables, function (tbl) {
+      var heads = Array.prototype.slice.call(tbl.querySelectorAll("thead th"));
+      heads.forEach(function (th, idx) {
+        th.addEventListener("click", function () {
+          var dir = th.getAttribute("data-dir") === "asc" ? "desc" : "asc";
+          heads.forEach(function (h) { h.removeAttribute("data-dir"); h.classList.remove("asc", "desc"); });
+          th.setAttribute("data-dir", dir);
+          th.classList.add(dir);
+          sortTable(tbl, idx, dir);
+        });
+      });
+      var ds = tbl.getAttribute("data-default-sort");
+      if (ds) {
+        var p = ds.split(":");
+        var ci = parseInt(p[0], 10);
+        var d = p[1] === "asc" ? "asc" : "desc";
+        if (heads[ci]) { heads[ci].setAttribute("data-dir", d); heads[ci].classList.add(d); }
+        sortTable(tbl, ci, d);
+      }
+    });
+  }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", initSortableTables); }
+  else { initSortableTables(); }
+})();
 </script>
 </body>
 </html>

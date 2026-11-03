@@ -4,6 +4,7 @@ VALID_KEY = "6HKJ809-YUI67-HKJJL-5677-HJKK"
 SECRET_MODE_KEY = "INVEST_MODE"
 
 import os
+import re
 import sqlite3
 import json
 import time
@@ -326,6 +327,92 @@ def api_settings():
         return jsonify(get_settings())
 
 
+# === Профили настроек: файлы profiles/<name>.json (экспорт/импорт между устройствами) ===
+PROFILES_DIR = os.path.join(BASE_DIR, "profiles")
+# Запрещаем только то, что ломает путь или fs: разделители, служебные символы,
+# управляющие байты. Кириллица и пробелы в именах разрешены («Вариант 1»).
+_PROFILE_BAD_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+
+
+def _profile_path(name):
+    """Имя профиля → безопасный путь внутри PROFILES_DIR (без обхода каталогов)."""
+    base = str(name or "").strip()
+    if base.lower().endswith(".json"):
+        base = base[:-5]
+    base = base.strip()
+    if not base or base in (".", "..") or base.startswith("."):
+        return None
+    if len(base) > 120 or _PROFILE_BAD_CHARS.search(base):
+        return None
+    os.makedirs(PROFILES_DIR, exist_ok=True)
+    return os.path.join(PROFILES_DIR, base + ".json")
+
+
+@app.route("/api/profiles", methods=["GET"])
+def api_profiles_list():
+    """Список сохранённых профилей в папке profiles/."""
+    os.makedirs(PROFILES_DIR, exist_ok=True)
+    items = []
+    for fn in sorted(os.listdir(PROFILES_DIR)):
+        if not fn.lower().endswith(".json"):
+            continue
+        fp = os.path.join(PROFILES_DIR, fn)
+        try:
+            st = os.stat(fp)
+        except OSError:
+            continue
+        items.append({
+            "name": fn[:-5],
+            "file": fn,
+            "size": st.st_size,
+            "mtime": int(st.st_mtime),
+        })
+    return jsonify({"profiles": items, "dir": "profiles"})
+
+
+@app.route("/api/profiles/<name>", methods=["GET", "POST", "DELETE"])
+def api_profile(name):
+    """Чтение / запись / удаление одного профиля."""
+    path = _profile_path(name)
+    if not path:
+        return jsonify({"error": "Bad profile name"}), 400
+
+    if request.method == "GET":
+        if not os.path.exists(path):
+            return jsonify({"error": "Profile not found"}), 404
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError) as e:
+            return jsonify({"error": f"Read error: {e}"}), 500
+        resp = make_response(jsonify(data))
+        resp.headers["Content-Disposition"] = f'inline; filename="{os.path.basename(path)}"'
+        return resp
+
+    if request.method == "DELETE":
+        if not os.path.exists(path):
+            return jsonify({"error": "Profile not found"}), 404
+        try:
+            os.remove(path)
+        except OSError as e:
+            return jsonify({"error": str(e)}), 500
+        return jsonify({"status": "ok", "name": name})
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "JSON object required"}), 400
+    payload.setdefault("name", os.path.basename(path)[:-5])
+    payload.setdefault("saved_at", datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except OSError as e:
+        return jsonify({"error": f"Write error: {e}"}), 500
+    return jsonify({"status": "ok", "name": payload["name"], "file": os.path.basename(path)})
+
+
 # === API для конфигов панелей по device_id ===
 @app.route("/api/panel_config/<device_id>", methods=["GET"])
 def get_panel_config(device_id):
@@ -442,7 +529,7 @@ _turnover_cache = {"data": None, "at": 0}
 
 def invest_cache_key(endpoint, **params):
     safe = {"-": "m", ".": "_", "/": "_", " ": "_"}
-    key = endpoint
+    key = str(endpoint).translate(str.maketrans(safe))
     for k, v in sorted(params.items()):
         if v is not None:
             key += f"_{k}={str(v).translate(str.maketrans(safe))}"
@@ -459,28 +546,35 @@ def cached_invest(endpoint, db_paths, params, generator, ttl=None):
     """
     import time as _time
     os.makedirs(CACHE_DIR, exist_ok=True)
-    cache_file = os.path.join(CACHE_DIR, invest_cache_key(endpoint, **params) + ".json")
+    cache_file = os.path.join(CACHE_DIR, invest_cache_key(endpoint, **(params or {})) + ".json")
     
     # Max mtime among all relevant DB files
     db_mtime = 0
-    for path in db_paths if isinstance(db_paths, list) else [db_paths]:
-        if os.path.exists(path):
-            db_mtime = max(db_mtime, os.path.getmtime(path))
+    try:
+        paths = db_paths if isinstance(db_paths, list) else [db_paths]
+        for path in paths:
+            if path and os.path.exists(path):
+                db_mtime = max(db_mtime, os.path.getmtime(path))
+    except Exception:
+        db_mtime = 0
     
     now = _time.time()
     # If cache exists and is fresh per TTL (or per DB mtime) → serve cache
     if os.path.exists(cache_file):
-        cache_mtime = os.path.getmtime(cache_file)
-        fresh = (now - cache_mtime) < ttl if ttl else (cache_mtime >= db_mtime)
-        if fresh:
-            try:
-                with open(cache_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
+        try:
+            cache_mtime = os.path.getmtime(cache_file)
+            fresh = (now - cache_mtime) < ttl if ttl else (cache_mtime >= db_mtime)
+            if fresh:
                 try:
-                    os.remove(cache_file)
-                except OSError:
-                    pass
+                    with open(cache_file, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    try:
+                        os.remove(cache_file)
+                    except OSError:
+                        pass
+        except Exception:
+            pass
     
     # Generate fresh data
     data = generator()
@@ -490,13 +584,16 @@ def cached_invest(endpoint, db_paths, params, generator, ttl=None):
         return data
     
     # Write cache atomically
-    tmp = cache_file + "." + str(os.getpid()) + ".tmp"
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
     try:
-        os.replace(tmp, cache_file)
-    except (FileNotFoundError, OSError):
-        pass  # another request already cached
+        tmp = cache_file + "." + str(os.getpid()) + ".tmp"
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        try:
+            os.replace(tmp, cache_file)
+        except (FileNotFoundError, OSError):
+            pass  # another request already cached
+    except Exception:
+        pass
     
     return data
 
@@ -711,7 +808,13 @@ def _morning_gap_from_rows(rows, figi=MORNING_GAP_FIGI):
             "summary": _morning_gap_summary(days)}
 
 @app.route("/api/invest/ticker/<ticker>")
-def api_invest_ticker(ticker):
+@app.route("/api/invest/ticker/<base>/<quote>")
+def api_invest_ticker(ticker=None, base=None, quote=None):
+    # Пары со слэшем (USD/RUB, XAU/USD) не матчатся дефолтным строковым
+    # конвертером Flask: %2F декодируется до роутинга. Поэтому вторая ветка:
+    # два сегмента пути склеиваются обратно в тикер.
+    if ticker is None:
+        ticker = f"{base}/{quote}"
     if not os.path.exists(TRACKED_TICKERS_DB_PATH):
         return jsonify({"error": "Ticker DB not found"}), 404
     
@@ -765,6 +868,25 @@ def api_invest_ticker(ticker):
     if isinstance(data, dict) and data.get("_error"):
         return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
     return jsonify(data)
+
+
+@app.route("/api/invest/fx")
+def api_invest_fx():
+    pair = request.args.get('pair', 'USD/RUB')
+    interval = request.args.get('interval', 'hour')
+    period = request.args.get('period', '-7 day')
+    bucket_size = request.args.get('bucket_size')
+    try:
+        bucket_size = int(bucket_size) if bucket_size else None
+    except Exception:
+        bucket_size = None
+    try:
+        data = invest_repo.read_fx(pair=pair, period=period, interval=interval, bucket_size=bucket_size, db_path=INVEST_DB_PATH)
+        if isinstance(data, dict) and data.get("_error"):
+            return jsonify(data), data.get("_error_code", 500)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"_error": str(e), "_error_code": 500}), 500
 
 
 @app.route("/api/invest/ticker/<ticker>/morning_gap")

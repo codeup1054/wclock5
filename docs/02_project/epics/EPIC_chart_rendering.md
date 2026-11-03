@@ -2,8 +2,8 @@
 title: Эпик — Отрисовка графиков: производительность и ловушки
 fnd: GEN
 typ: EPIC
-ver: 0.4
-updated: 2026-10-22
+ver: 0.5
+updated: 2026-11-03
 status: ✅
 ---
 # Эпик — Отрисовка графиков: производительность и ловушки
@@ -51,6 +51,15 @@ status: ✅
 | GRD-11 | Метки скрытых серий не рисуются | `PeriodLabelsPlugin` skip при `!chart.isDatasetVisible`; матч источника и датасета по `datasetLabel` | ✅ |
 | GRD-12 | Цвет Brent — болотный | `#556B2F` в chart+banner (wclock+hft) | ✅ |
 | GRD-13 | Полоса «Spread» TGLD@ на графике | `MorningGapPlugin` — столбики утреннего гэпа в нижней полосе (`bandH = max(28, area.height*0.16)`), знак → `color.jumpUp/jumpDown`, пунктир среднего `color.jumpAvg`; данные `/api/invest/ticker/TGLD@/morning_gap` (wclock) / `/api/hft/ticker/TGLD@/morning_gap` (hft) | ✅ |
+| GRD-14 | Свечи USD/RUB вместо одной точки | `parsers/invest/fx_candles.py`: `MarketDataService/GetCandles` (figi `BBG0013HGFT4`, USD000UTSTOM), запись **в обе БД** — `fx_rates` (портфельная) и `last_prices` (её читает график); автообновление из `tracked_tickers_daemon` (`update_once(minutes=120)`); бэкфилл 8 недель смешанными интервалами (1min 0–2 дня, 5min 2–14, hour 14–56) | ✅ 03.11 |
+| GRD-15 | Масштаб ₽-осей от первого ненулевого значения | `buildScales`/`recomputePortfolioAxis`: **раздельные** диапазоны `y_portfolio` и `y_finam` (Finam ~8.5 млн против Tinkoff ~57 тыс.), `min = max(0, lo − pad)` без прижатия к нулю; `T+F` в расчёт шкалы не входит | ✅ 03.11 |
+| GRD-16 | Сетка X = объединение портфеля и тикеров | `buildGridFromTickers(chart, tickersData, interval, currentTimestamps)`: если бакетов истории < 20, а у тикеров ≥ 20 — ось строится по объединению; значения переносятся по бакету, `chart._midnightTimestamps` синхронизируется | ✅ 03.11 |
+| GRD-17 | Портфельные линии не тянутся через пустоту | `spanGaps: false` для `Tinkoff ₽/Finam ₽/T+F ₽/%` — при периоде раньше начала сбора линии нет, а не прямая через пустой участок | ✅ 03.11 |
+| GRD-18 | Тултип: дата + время | `title` → `DD.MM.YYYY HH:MM`; таймстемп берётся из `chart.data.timestamps` (а не `_midnightTimestamps`, который отставал после перестройки сетки) | ✅ 03.11 |
+| GRD-19 | Период в неделях | `invest_repo._PERIOD_RE` + `_UNIT_SECONDS['week'] = 604800`: `-8 week` больше не откатывается к 35 дням | ✅ 03.11 |
+| GRD-20 | Тикер со слэшем в URL | `@app.route("/api/invest/ticker/<base>/<quote>")` + склейка в `api_invest_ticker`: `/api/invest/ticker/USD/RUB` не матчился строковым конвертером Flask (`%2F` декодируется до роутинга) | ✅ 03.11 |
+| GRD-21 | Кэш ответов не роняет 404 | `invest_cache_key` нормализует `/` в endpoint (иначе файл `ticker_USD/RUB_…` уходил в несуществующий подкаталог), запись кэша обёрнута в `try` | ✅ 03.11 |
+| GRD-22 | Живое XAU без yfinance | `_fetch_xau_from_yahoo_api()` — тот же источник через `query1.finance.yahoo.com/v8/finance/chart/GC=F`, фолбэк после yfinance; образ без пакета больше не теряет XAU | ✅ 03.11 |
 
 ## Правила отрисовки (справочник для новых графиков)
 
@@ -132,10 +141,19 @@ status: ✅
 - Беклог: `wclock5/docs/02_project/backlogs/backlog_20260831.ldn.md` (CHRT-FIX),
   `wclock5/docs/02_project/backlogs/backlog_20261021.ldn.md` (GRD-09..12),
   `wclock5/docs/02_project/backlogs/backlog_20261022.ldn.md` (GRD-13)
-- Фреймворк: `01.lab/02_project/PROC_graph_approaches.md`
+- Сессия 03.11.2026 (GRD-14..22): `parsers/invest/fx_candles.py`,
+  `parsers/invest/backfill_8w.py`, `parsers/invest/tracked_tickers_daemon.py`,
+  `invest_repo.py`, `app.py`, `static/js/invest_chart.js`
+- Фреймворк: `01.lab/02_project/PROC_graph_approaches.md`,
+  `01.lab/00_rules/10_samples/CHART_invest.html` (+ `10_samples/chart_invest/`)
 
 ## Лист изменений
 
+- **0.5** · 2026-11-03 — GRD-14..22: свечи USD/RUB через `GetCandles` в обе БД
+  + бэкфилл 8 недель; раздельные ₽-оси от первого ненулевого значения; сетка X
+  как объединение портфеля и тикеров (+`_midnightTimestamps`); `spanGaps:false`
+  для портфельных линий; тултип `DD.MM.YYYY HH:MM`; период `-N week`; роут
+  тикера со слэшем; нормализация кэш-ключа; XAU через Yahoo API без yfinance.
 - **0.4** · 2026-10-22 — GRD-13 (полоса «Spread» TGLD@ на графике:
   `MorningGapPlugin` + `loadMorningGap`, цвета `jumpUp/jumpDown/jumpAvg`),
   правило 11; эпик закрыт (все GRD ✅).

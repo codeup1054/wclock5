@@ -754,6 +754,17 @@ div#browser_reload.panel-dragging {
     gap: 10px;
 }
 
+/* Подпись источника в строке капитала (Finam / Тинвест / С5 TDIV) */
+.invest-banner-host .banner-capital-label {
+    margin-right: auto;
+    font-size: 3.4cqi;
+    font-weight: 600;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .invest-banner-host table.banner-turnover-block {
     border-collapse: collapse;
     width: 33cqi;
@@ -788,25 +799,40 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 3.3cqi;
+    /* 3.0cqi вместо 3.3: таблица из 8 колонок должна влезать в панель
+       без обрезки последнего столбца */
+    font-size: 3.0cqi;
     margin: 2px 0;
 }
 
 .invest-banner-host .banner-table td {
-    padding: 0px 3px;
+    padding: 0px 2px;
     text-align: right;
 }
 
+/* Первый столбец (тикер/счёт) — по ширине самой длинной метки:
+   ширина 1% + nowrap не даёт колонке растягиваться и выравнивает все строки. */
+.invest-banner-host .banner-table td:first-child {
+    width: 1%;
+    white-space: nowrap;
+    padding-right: 6px;
+}
+
 .invest-banner-host [class*="banner-td-"] {
-    font-size: 3cqi;
+    font-size: 2.8cqi;
 }
 
 .invest-banner-host .banner-td-change {
-    min-width: 65px;
+    min-width: 7.2cqi;
+}
+
+/* Числовые ячейки не переносим: «8 895 047» должно оставаться одной строкой */
+.invest-banner-host .banner-td-num {
+    white-space: nowrap;
 }
 
 .invest-banner-host .banner-td-pct {
-    min-width: 50px;
+    min-width: 5.6cqi;
 }
 
 .invest-banner-host .banner-td-empty {
@@ -871,6 +897,15 @@ div#browser_reload.panel-dragging {
     display: flex;
     flex-direction: row;
     align-items: center;
+}
+
+/* Колонка меток счетов фиксированной ширины — полосы начинаются с одного X */
+.invest-banner-host .asset-row-label {
+    flex: 0 0 44px;
+    width: 44px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .invest-banner-host .asset-bar-container {
@@ -2095,6 +2130,41 @@ body.edit-mode .panel-fullscreen-btn {
     font-size: 0.85rem;
 }
 
+/* Строка источника: свотч цвета + название слева, тумблер справа */
+.panel-row .coll-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.panel-row .coll-color {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.panel-row .coll-color::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.panel-row .coll-color::-webkit-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
+
+.panel-row .coll-color::-moz-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
+
 /* Toggle Switch */
 .switch {
     position: relative;
@@ -2222,6 +2292,25 @@ input:checked + .slider:before {
 
 .pp-btn-del:hover {
     background: #a04444;
+}
+
+/* Профили: экспорт/импорт JSON */
+.pp-btn-export {
+    background: #2f5f8a;
+    border-color: #4a7fae;
+}
+
+.pp-btn-export:hover {
+    background: #3a6f9f;
+}
+
+.pp-btn-import {
+    background: #4b3f7a;
+    border-color: #6d5da8;
+}
+
+.pp-btn-import:hover {
+    background: #5a4c8f;
 }
 
 /* Temperature range settings */

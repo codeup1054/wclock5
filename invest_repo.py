@@ -71,8 +71,8 @@ def to_epoch(value):
     return int(parse_ts(value).timestamp())
 
 
-_PERIOD_RE = re.compile(r"^(-[\d.]+)\s*(day|hour|minute|second)s?$")
-_UNIT_SECONDS = {"day": 86400, "hour": 3600, "minute": 60, "second": 1}
+_PERIOD_RE = re.compile(r"^(-[\d.]+)\s*(day|hour|minute|second|week)s?$")
+_UNIT_SECONDS = {"day": 86400, "hour": 3600, "minute": 60, "second": 1, "week": 604800}
 
 
 def period_to_seconds(period):
@@ -370,8 +370,26 @@ def apply_retention_impl(conn, cur, db_path=None):
               f"{sum(h['volume'] for h in hours.values())} минутных", flush=True)
 
     # ---------- Чистка ----------
-    cur.execute("DELETE FROM portfolio_positions WHERE ts_epoch < ?", (raw_cutoff,))
-    cur.execute("DELETE FROM portfolio_history WHERE ts_epoch < ?", (raw_cutoff,))
+    # Сырые снапшоты старше окна удаляем, но ПОСЛЕДНИЙ снапшот каждого источника
+    # оставляем: из него читается структура капитала для баннера
+    # (read_capital_structure). Иначе источник, который пишет реже окна
+    # ретеншена, пропадает из баннера, хотя данные в бакетах есть.
+    cur.execute("""
+        DELETE FROM portfolio_positions
+        WHERE ts_epoch < ?
+          AND ts_epoch < (
+              SELECT MAX(p2.ts_epoch) FROM portfolio_positions p2
+              WHERE p2.source = portfolio_positions.source
+          )
+    """, (raw_cutoff,))
+    cur.execute("""
+        DELETE FROM portfolio_history
+        WHERE ts_epoch < ?
+          AND ts_epoch < (
+              SELECT MAX(h2.ts_epoch) FROM portfolio_history h2
+              WHERE h2.source = portfolio_history.source
+          )
+    """, (raw_cutoff,))
     cur.execute("DELETE FROM invest_buckets WHERE res='min' AND ts_epoch < ?", (min_cutoff,))
     cur.execute("DELETE FROM invest_buckets WHERE res='hour' AND ts_epoch < ?", (candle_cutoff,))
     # Legacy-таблицы остаются только как fallback-чтение до миграции; писателей
@@ -1431,3 +1449,94 @@ def read_bot_events(period="-35 day", db_path=None):
             c["level"] = "info"
 
     return {"events": events, "summary": summary}
+
+
+# ================================================================
+# FX-курсы (USD/RUB) — хранение и чтение с детализацией как портфель
+# ================================================================
+
+def upsert_fx_rate(ts_epoch, pair="USD/RUB", close=None, bid=None, ask=None, source="tinkoff", db_path=None):
+    if close is None and bid is None and ask is None:
+        return False
+    if close is None:
+        close = bid if bid is not None else ask
+    if close is None:
+        return False
+    try:
+        ts = int(ts_epoch)
+        conn = connect(db_path or DB_PATH)
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS fx_rates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ts_epoch INTEGER NOT NULL,
+                pair TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'tinkoff',
+                close REAL NOT NULL,
+                bid REAL,
+                ask REAL,
+                UNIQUE(ts_epoch, pair, source)
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_fx_rates_ts_pair ON fx_rates(ts_epoch, pair, source)")
+        cur.execute("""
+            INSERT OR REPLACE INTO fx_rates (timestamp, ts_epoch, pair, source, close, bid, ask)
+            VALUES (datetime(?, 'unixepoch'), ?, ?, ?, ?, ?, ?)
+        """, (ts, ts, pair, source, float(close), float(bid) if bid is not None else None, float(ask) if ask is not None else None))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def read_fx(pair="USD/RUB", period="-7 day", interval="hour", bucket_size=None, db_path=None):
+    if not os.path.exists(db_path or DB_PATH):
+        return {"_error": "Invest DB not found", "_error_code": 404}
+    try:
+        cutoff = cutoff_epoch(period)
+        if bucket_size is None:
+            bucket_size = {'minute': 60, 'fivemin': 300, 'twentymin': 1200, 'hour': 3600, 'sixhour': 21600, 'day': 86400}.get(interval, 3600)
+        conn = connect(db_path or DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        has_fx = cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='fx_rates'").fetchone() is not None
+        if not has_fx:
+            conn.close()
+            return {"pair": pair, "interval": interval, "prices": []}
+        rows = cur.execute("""
+            SELECT ts_epoch, close, bid, ask, source
+            FROM fx_rates
+            WHERE pair=? AND ts_epoch >= ?
+            ORDER BY ts_epoch ASC
+        """, (pair, cutoff)).fetchall()
+        conn.close()
+        if not rows:
+            return {"pair": pair, "interval": interval, "prices": []}
+        agg = {}
+        for r in rows:
+            b = int(r["ts_epoch"]) // int(bucket_size) * int(bucket_size)
+            if b not in agg:
+                agg[b] = {"ts": b, "open": r["close"], "high": r["close"], "low": r["close"], "close": r["close"], "n": 1}
+            else:
+                a = agg[b]
+                a["high"] = max(a["high"], r["close"])
+                a["low"] = min(a["low"], r["close"])
+                a["close"] = r["close"]
+                a["n"] += 1
+        out = []
+        for b in sorted(agg.keys()):
+            a = agg[b]
+            out.append({
+                "timestamp": datetime.utcfromtimestamp(b).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                "ts_epoch": b,
+                "open": round(a["open"], 4),
+                "high": round(a["high"], 4),
+                "low": round(a["low"], 4),
+                "close": round(a["close"], 4),
+                "price": round(a["close"], 4),
+            })
+        return {"pair": pair, "interval": interval, "prices": out}
+    except Exception as e:
+        return {"_error": str(e), "_error_code": 500}

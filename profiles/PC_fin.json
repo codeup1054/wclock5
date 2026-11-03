@@ -1,0 +1,543 @@
+{
+  "format": "wclock-profile",
+  "version": 1,
+  "name": "PC_fin",
+  "saved_at": "2026-11-03T10:12:40+00:00",
+  "device_id": "mozilla50windowsnt10_mw0h85p6",
+  "panels": {
+    "invest_panel": {
+      "top": "671px",
+      "left": "5px",
+      "right": "",
+      "bottom": "",
+      "width": "970px",
+      "height": "401px",
+      "visible": true
+    },
+    "invest_banner_capital": {
+      "top": "209px",
+      "left": "14px",
+      "right": "",
+      "bottom": "",
+      "width": "518px",
+      "height": "144px",
+      "visible": true
+    },
+    "invest_banner_table": {
+      "top": "417px",
+      "left": "8px",
+      "right": "",
+      "bottom": "",
+      "width": "887px",
+      "height": "247px",
+      "visible": true
+    },
+    "invest_banner_total": {
+      "top": "384px",
+      "left": "9px",
+      "right": "",
+      "bottom": "",
+      "width": "448px",
+      "height": "64px",
+      "visible": false
+    },
+    "weather_panel": {
+      "top": "94px",
+      "left": "602px",
+      "right": "",
+      "bottom": "",
+      "width": "475px",
+      "height": "303px",
+      "visible": true
+    },
+    "battery_indicator_panel": {
+      "top": "5px",
+      "left": "907px",
+      "right": "",
+      "bottom": "",
+      "width": "155px",
+      "height": "38px",
+      "visible": false
+    },
+    "battery_chart_panel": {
+      "top": "490px",
+      "left": "6px",
+      "right": "",
+      "bottom": "",
+      "width": "529px",
+      "height": "130px",
+      "visible": false
+    },
+    "press_humidity_temp_panel": {
+      "top": "5px",
+      "left": "599px",
+      "right": "",
+      "bottom": "",
+      "width": "206px",
+      "height": "87px",
+      "visible": true
+    },
+    "wind_cond_precip_panel": {
+      "top": "5px",
+      "left": "815px",
+      "right": "",
+      "bottom": "",
+      "width": "206px",
+      "height": "89px",
+      "visible": true
+    },
+    "sun_panel": {
+      "top": "5px",
+      "left": "6px",
+      "right": "",
+      "bottom": "",
+      "width": "492px",
+      "height": "58px",
+      "visible": true
+    },
+    "clock_panel": {
+      "top": "44px",
+      "left": "5px",
+      "right": "",
+      "bottom": "",
+      "width": "445px",
+      "height": "167px",
+      "visible": true
+    },
+    "seconds_panel": {
+      "top": "89px",
+      "left": "365px",
+      "right": "",
+      "bottom": "",
+      "width": "73px",
+      "height": "75px",
+      "visible": true
+    },
+    "date_panel": {
+      "top": "79px",
+      "left": "475px",
+      "right": "",
+      "bottom": "",
+      "width": "115px",
+      "height": "141px",
+      "visible": true
+    },
+    "moon_panel": {
+      "top": "6px",
+      "left": "498px",
+      "right": "",
+      "bottom": "",
+      "width": "66px",
+      "height": "67px",
+      "visible": true
+    },
+    "chart_control_panel": {
+      "top": "355px",
+      "left": "22px",
+      "right": "",
+      "bottom": "",
+      "width": "539px",
+      "height": "60px",
+      "visible": true
+    },
+    "browser_fullscreen": {
+      "top": "71px",
+      "left": "17px",
+      "right": "",
+      "bottom": "",
+      "width": "183px",
+      "height": "148px",
+      "visible": true
+    },
+    "browser_reload": {
+      "top": "72px",
+      "left": "204px",
+      "right": "",
+      "bottom": "",
+      "width": "188px",
+      "height": "123px",
+      "visible": true
+    }
+  },
+  "panel_profiles": {
+    "profiles": [
+      {
+        "name": "Вариант 1",
+        "config": {
+          "invest_panel": {
+            "top": "696px",
+            "left": "38px",
+            "right": "",
+            "bottom": "",
+            "width": "765px",
+            "height": "351px",
+            "visible": true
+          },
+          "invest_banner_capital": {
+            "top": "191px",
+            "left": "5px",
+            "right": "",
+            "bottom": "",
+            "width": "448px",
+            "height": "120px",
+            "visible": true
+          },
+          "invest_banner_table": {
+            "top": "251px",
+            "left": "5px",
+            "right": "",
+            "bottom": "",
+            "width": "448px",
+            "height": "135px",
+            "visible": true
+          },
+          "invest_banner_total": {
+            "top": "326px",
+            "left": "5px",
+            "right": "",
+            "bottom": "",
+            "width": "448px",
+            "height": "64px",
+            "visible": true
+          },
+          "weather_panel": {
+            "top": "193px",
+            "left": "579px",
+            "right": "",
+            "bottom": "",
+            "width": "475px",
+            "height": "303px",
+            "visible": true
+          },
+          "battery_indicator_panel": {
+            "top": "5px",
+            "left": "907px",
+            "right": "",
+            "bottom": "",
+            "width": "155px",
+            "height": "38px",
+            "visible": true
+          },
+          "battery_chart_panel": {
+            "top": "270px",
+            "left": "27px",
+            "right": "",
+            "bottom": "",
+            "width": "529px",
+            "height": "414px",
+            "visible": true
+          },
+          "press_humidity_temp_panel": {
+            "top": "508px",
+            "left": "580px",
+            "right": "",
+            "bottom": "",
+            "width": "469px",
+            "height": "172px",
+            "visible": true
+          },
+          "wind_cond_precip_panel": {
+            "top": "8px",
+            "left": "597px",
+            "right": "",
+            "bottom": "",
+            "width": "457px",
+            "height": "179px",
+            "visible": true
+          },
+          "sun_panel": {
+            "top": "5px",
+            "left": "6px",
+            "right": "",
+            "bottom": "",
+            "width": "492px",
+            "height": "58px",
+            "visible": true
+          },
+          "clock_panel": {
+            "top": "44px",
+            "left": "5px",
+            "right": "",
+            "bottom": "",
+            "width": "445px",
+            "height": "167px",
+            "visible": true
+          },
+          "seconds_panel": {
+            "top": "5px",
+            "left": "390px",
+            "right": "",
+            "bottom": "",
+            "width": "73px",
+            "height": "75px",
+            "visible": true
+          },
+          "date_panel": {
+            "top": "113px",
+            "left": "447px",
+            "right": "",
+            "bottom": "",
+            "width": "167px",
+            "height": "123px",
+            "visible": true
+          },
+          "moon_panel": {
+            "top": "11px",
+            "left": "504px",
+            "right": "",
+            "bottom": "",
+            "width": "200px",
+            "height": "200px",
+            "visible": true
+          },
+          "chart_control_panel": {
+            "top": "633px",
+            "left": "50px",
+            "right": "",
+            "bottom": "",
+            "width": "400px",
+            "height": "60px",
+            "visible": true
+          },
+          "browser_fullscreen": {
+            "top": "5vh",
+            "left": "1vw",
+            "right": "",
+            "bottom": "",
+            "width": "22vw",
+            "height": "22vh",
+            "visible": true
+          },
+          "browser_reload": {
+            "top": "5vh",
+            "left": "22vw",
+            "right": "",
+            "bottom": "",
+            "width": "22vw",
+            "height": "22vh",
+            "visible": true
+          }
+        }
+      },
+      {
+        "name": "Вариант 2",
+        "config": {
+          "invest_panel": {
+            "top": "671px",
+            "left": "5px",
+            "right": "",
+            "bottom": "",
+            "width": "970px",
+            "height": "401px",
+            "visible": true
+          },
+          "invest_banner_capital": {
+            "top": "209px",
+            "left": "14px",
+            "right": "",
+            "bottom": "",
+            "width": "518px",
+            "height": "144px",
+            "visible": true
+          },
+          "invest_banner_table": {
+            "top": "417px",
+            "left": "8px",
+            "right": "",
+            "bottom": "",
+            "width": "887px",
+            "height": "247px",
+            "visible": true
+          },
+          "invest_banner_total": {
+            "top": "384px",
+            "left": "9px",
+            "right": "",
+            "bottom": "",
+            "width": "448px",
+            "height": "64px",
+            "visible": false
+          },
+          "weather_panel": {
+            "top": "94px",
+            "left": "602px",
+            "right": "",
+            "bottom": "",
+            "width": "475px",
+            "height": "303px",
+            "visible": true
+          },
+          "battery_indicator_panel": {
+            "top": "5px",
+            "left": "907px",
+            "right": "",
+            "bottom": "",
+            "width": "155px",
+            "height": "38px",
+            "visible": false
+          },
+          "battery_chart_panel": {
+            "top": "490px",
+            "left": "6px",
+            "right": "",
+            "bottom": "",
+            "width": "529px",
+            "height": "130px",
+            "visible": false
+          },
+          "press_humidity_temp_panel": {
+            "top": "5px",
+            "left": "599px",
+            "right": "",
+            "bottom": "",
+            "width": "206px",
+            "height": "87px",
+            "visible": true
+          },
+          "wind_cond_precip_panel": {
+            "top": "5px",
+            "left": "815px",
+            "right": "",
+            "bottom": "",
+            "width": "206px",
+            "height": "89px",
+            "visible": true
+          },
+          "sun_panel": {
+            "top": "5px",
+            "left": "6px",
+            "right": "",
+            "bottom": "",
+            "width": "492px",
+            "height": "58px",
+            "visible": true
+          },
+          "clock_panel": {
+            "top": "44px",
+            "left": "5px",
+            "right": "",
+            "bottom": "",
+            "width": "445px",
+            "height": "167px",
+            "visible": true
+          },
+          "seconds_panel": {
+            "top": "89px",
+            "left": "365px",
+            "right": "",
+            "bottom": "",
+            "width": "73px",
+            "height": "75px",
+            "visible": true
+          },
+          "date_panel": {
+            "top": "79px",
+            "left": "475px",
+            "right": "",
+            "bottom": "",
+            "width": "115px",
+            "height": "141px",
+            "visible": true
+          },
+          "moon_panel": {
+            "top": "6px",
+            "left": "498px",
+            "right": "",
+            "bottom": "",
+            "width": "66px",
+            "height": "67px",
+            "visible": true
+          },
+          "chart_control_panel": {
+            "top": "355px",
+            "left": "22px",
+            "right": "",
+            "bottom": "",
+            "width": "539px",
+            "height": "60px",
+            "visible": true
+          },
+          "browser_fullscreen": {
+            "top": "71px",
+            "left": "17px",
+            "right": "",
+            "bottom": "",
+            "width": "183px",
+            "height": "148px",
+            "visible": true
+          },
+          "browser_reload": {
+            "top": "72px",
+            "left": "204px",
+            "right": "",
+            "bottom": "",
+            "width": "188px",
+            "height": "123px",
+            "visible": true
+          }
+        }
+      }
+    ],
+    "active": "Вариант 2"
+  },
+  "theme": {
+    "font": {
+      "axis": 21,
+      "axisTitle": 42,
+      "share": 18.9,
+      "ticker": 27.3,
+      "portfolio": 21
+    },
+    "line": {
+      "ticker": 0.75,
+      "portfolio": 1,
+      "pct": 1,
+      "total": 2,
+      "layer": 0.5,
+      "ref": 0.5
+    },
+    "hatch": {
+      "spacing": 18,
+      "lineWidth": 1,
+      "alpha": 0.45
+    },
+    "color": {
+      "portfolio": "#2cba99",
+      "finam": "#5b6ee8",
+      "total": "#aaaaaa",
+      "ref": "#ffffff",
+      "tgld": "#FFD700",
+      "xau": "#cc7722",
+      "usd": "#3ba3ff",
+      "brent": "#556B2F",
+      "jumpUp": "#1fc163",
+      "jumpDown": "#e74c3c",
+      "jumpAvg": "#ffffff"
+    }
+  },
+  "legend": null,
+  "settings": {
+    "PARSE_INTERVAL": "1800",
+    "MAIL_RU_INTERVAL": "120",
+    "YANDEX_MOON_INTERVAL": "86400",
+    "REFRESH_DATA_INTERVAL": "120",
+    "BATTERY_SET_INTERVAL": "600",
+    "RELOAD_PAGE_INTERVAL": "259200",
+    "panel_config_desktop": "{\"invest_panel\":{\"top\":\"319px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"555px\",\"height\":\"357px\"},\"invest_panel_banner\":{\"top\":\"196px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"368px\",\"height\":\"324px\"},\"weather_panel\":{\"top\":\"199px\",\"left\":\"529px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"462px\",\"height\":\"303px\"},\"battery_indicator_panel\":{\"top\":\"5px\",\"left\":\"836px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"155px\",\"height\":\"38px\"},\"battery_chart_panel\":{\"top\":\"270px\",\"left\":\"27px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"529px\",\"height\":\"414px\"},\"press_humidity_temp_panel\":{\"top\":\"502px\",\"left\":\"529px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"462px\",\"height\":\"181px\"},\"wind_cond_precip_panel\":{\"top\":\"10px\",\"left\":\"533px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"453px\",\"height\":\"184px\"},\"sun_panel\":{\"top\":\"5px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"480px\",\"height\":\"81px\"},\"clock_panel\":{\"top\":\"31px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"498px\",\"height\":\"187px\"},\"seconds_panel\":{\"top\":\"210px\",\"left\":\"381px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"127px\",\"height\":\"111px\"},\"date_panel\":{\"top\":\"18px\",\"left\":\"380px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"254px\",\"height\":\"159px\"},\"moon_panel\":{\"top\":\"168px\",\"left\":\"488px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"83px\",\"height\":\"82px\"},\"chart_control_panel\":{\"top\":\"645px\",\"left\":\"57px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"319px\",\"height\":\"43px\"}}",
+    "panel_config_tablet": "{\"invest_panel\":{\"top\":\"283px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"560px\",\"height\":\"395px\",\"visible\":true},\"invest_panel_banner\":{\"top\":\"201px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"380px\",\"height\":\"299px\",\"visible\":true},\"weather_panel\":{\"top\":\"168px\",\"left\":\"581px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"418px\",\"height\":\"370px\",\"visible\":true},\"battery_indicator_panel\":{\"top\":\"5px\",\"left\":\"890px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"109px\",\"height\":\"27px\",\"visible\":true},\"battery_chart_panel\":{\"top\":\"270px\",\"left\":\"27px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"370px\",\"height\":\"290px\",\"visible\":true},\"press_humidity_temp_panel\":{\"top\":\"528px\",\"left\":\"580px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"419px\",\"height\":\"150px\",\"visible\":true},\"wind_cond_precip_panel\":{\"top\":\"6px\",\"left\":\"576px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"424px\",\"height\":\"160px\",\"visible\":true},\"sun_panel\":{\"top\":\"5px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"482px\",\"height\":\"74px\",\"visible\":true},\"clock_panel\":{\"top\":\"27px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"470px\",\"height\":\"173px\",\"visible\":true},\"seconds_panel\":{\"top\":\"209px\",\"left\":\"371px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"112px\",\"height\":\"83px\",\"visible\":true},\"date_panel\":{\"top\":\"17px\",\"left\":\"393px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"288px\",\"height\":\"136px\",\"visible\":true},\"moon_panel\":{\"top\":\"202px\",\"left\":\"429px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"223px\",\"height\":\"138px\",\"visible\":true},\"chart_control_panel\":{\"top\":\"618px\",\"left\":\"26px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"250px\",\"height\":\"60px\",\"visible\":true}}"
+  },
+  "user_settings": {
+    "invest_panel_extrema": "0",
+    "wclock_panel_config": "{\"battery_chart_panel\":{\"visible\":true},\"invest_banner\":{\"visible\":true}}",
+    "invest_panel_period": "-90 day",
+    "invest_panel_time": "1",
+    "invest_panel_change": "0",
+    "invest_panel_start_ts": "1792490841",
+    "invest_panel_end_ts": "live",
+    "invest_chart_dpi": "0.9",
+    "weather_chart_dpi": "1.9",
+    "chart_smoothing": "0",
+    "chart_theme": "{\"font\":{\"axis\":21,\"axisTitle\":42,\"share\":18.9,\"ticker\":27.3,\"portfolio\":21},\"line\":{\"ticker\":0.75,\"portfolio\":1,\"pct\":1,\"total\":2,\"layer\":0.5,\"ref\":0.5},\"hatch\":{\"spacing\":18,\"lineWidth\":1,\"alpha\":0.45},\"color\":{\"portfolio\":\"#2cba99\",\"finam\":\"#5b6ee8\",\"total\":\"#aaaaaa\",\"ref\":\"#ffffff\",\"tgld\":\"#FFD700\",\"xau\":\"#cc7722\",\"usd\":\"#3ba3ff\",\"brent\":\"#556B2F\",\"jumpUp\":\"#1fc163\",\"jumpDown\":\"#e74c3c\",\"jumpAvg\":\"#ffffff\"}}",
+    "wclock_panel_profiles": "{\"profiles\":[{\"name\":\"Вариант 1\",\"config\":{\"invest_panel\":{\"top\":\"696px\",\"left\":\"38px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"765px\",\"height\":\"351px\",\"visible\":true},\"invest_banner_capital\":{\"top\":\"191px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"448px\",\"height\":\"120px\",\"visible\":true},\"invest_banner_table\":{\"top\":\"251px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"448px\",\"height\":\"135px\",\"visible\":true},\"invest_banner_total\":{\"top\":\"326px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"448px\",\"height\":\"64px\",\"visible\":true},\"weather_panel\":{\"top\":\"193px\",\"left\":\"579px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"475px\",\"height\":\"303px\",\"visible\":true},\"battery_indicator_panel\":{\"top\":\"5px\",\"left\":\"907px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"155px\",\"height\":\"38px\",\"visible\":true},\"battery_chart_panel\":{\"top\":\"270px\",\"left\":\"27px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"529px\",\"height\":\"414px\",\"visible\":true},\"press_humidity_temp_panel\":{\"top\":\"508px\",\"left\":\"580px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"469px\",\"height\":\"172px\",\"visible\":true},\"wind_cond_precip_panel\":{\"top\":\"8px\",\"left\":\"597px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"457px\",\"height\":\"179px\",\"visible\":true},\"sun_panel\":{\"top\":\"5px\",\"left\":\"6px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"492px\",\"height\":\"58px\",\"visible\":true},\"clock_panel\":{\"top\":\"44px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"445px\",\"height\":\"167px\",\"visible\":true},\"seconds_panel\":{\"top\":\"5px\",\"left\":\"390px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"73px\",\"height\":\"75px\",\"visible\":true},\"date_panel\":{\"top\":\"113px\",\"left\":\"447px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"167px\",\"height\":\"123px\",\"visible\":true},\"moon_panel\":{\"top\":\"11px\",\"left\":\"504px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"200px\",\"height\":\"200px\",\"visible\":true},\"chart_control_panel\":{\"top\":\"633px\",\"left\":\"50px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"400px\",\"height\":\"60px\",\"visible\":true},\"browser_fullscreen\":{\"top\":\"5vh\",\"left\":\"1vw\",\"right\":\"\",\"bottom\":\"\",\"width\":\"22vw\",\"height\":\"22vh\",\"visible\":true},\"browser_reload\":{\"top\":\"5vh\",\"left\":\"22vw\",\"right\":\"\",\"bottom\":\"\",\"width\":\"22vw\",\"height\":\"22vh\",\"visible\":true}}},{\"name\":\"Вариант 2\",\"config\":{\"invest_panel\":{\"top\":\"671px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"970px\",\"height\":\"401px\",\"visible\":true},\"invest_banner_capital\":{\"top\":\"209px\",\"left\":\"14px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"518px\",\"height\":\"144px\",\"visible\":true},\"invest_banner_table\":{\"top\":\"417px\",\"left\":\"8px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"887px\",\"height\":\"247px\",\"visible\":true},\"invest_banner_total\":{\"top\":\"384px\",\"left\":\"9px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"448px\",\"height\":\"64px\",\"visible\":false},\"weather_panel\":{\"top\":\"94px\",\"left\":\"602px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"475px\",\"height\":\"303px\",\"visible\":true},\"battery_indicator_panel\":{\"top\":\"5px\",\"left\":\"907px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"155px\",\"height\":\"38px\",\"visible\":false},\"battery_chart_panel\":{\"top\":\"490px\",\"left\":\"6px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"529px\",\"height\":\"130px\",\"visible\":false},\"press_humidity_temp_panel\":{\"top\":\"5px\",\"left\":\"599px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"206px\",\"height\":\"87px\",\"visible\":true},\"wind_cond_precip_panel\":{\"top\":\"5px\",\"left\":\"815px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"206px\",\"height\":\"89px\",\"visible\":true},\"sun_panel\":{\"top\":\"5px\",\"left\":\"6px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"492px\",\"height\":\"58px\",\"visible\":true},\"clock_panel\":{\"top\":\"44px\",\"left\":\"5px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"445px\",\"height\":\"167px\",\"visible\":true},\"seconds_panel\":{\"top\":\"89px\",\"left\":\"365px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"73px\",\"height\":\"75px\",\"visible\":true},\"date_panel\":{\"top\":\"79px\",\"left\":\"475px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"115px\",\"height\":\"141px\",\"visible\":true},\"moon_panel\":{\"top\":\"6px\",\"left\":\"498px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"66px\",\"height\":\"67px\",\"visible\":true},\"chart_control_panel\":{\"top\":\"355px\",\"left\":\"22px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"539px\",\"height\":\"60px\",\"visible\":true},\"browser_fullscreen\":{\"top\":\"71px\",\"left\":\"17px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"183px\",\"height\":\"148px\",\"visible\":true},\"browser_reload\":{\"top\":\"72px\",\"left\":\"204px\",\"right\":\"\",\"bottom\":\"\",\"width\":\"188px\",\"height\":\"123px\",\"visible\":true}}}],\"active\":\"Вариант 2\"}"
+  }
+}

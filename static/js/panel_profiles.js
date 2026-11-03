@@ -256,6 +256,8 @@
 
         const $save = $('<button class="pp-btn pp-btn-apply" disabled>Сохранить</button>');
         const $saveAs = $('<button class="pp-btn pp-btn-saveas">Сохранить как…</button>');
+        const $export = $('<button class="pp-btn pp-btn-export" title="Сохранить все настройки в profiles/<имя>.json">Экспорт</button>');
+        const $import = $('<button class="pp-btn pp-btn-import" title="Загрузить профиль из JSON-файла">Импорт</button>');
         const $delete = $('<button class="pp-btn pp-btn-del">Удалить</button>');
 
         $save.on('click', function () {
@@ -276,6 +278,23 @@
             saveCurrentToProfile(name.trim());
             rebuildOptions($select, name.trim());
             toast('Создан профиль «' + name.trim() + '»');
+        });
+
+        $export.on('click', function () {
+            const id = ($select.val() || 'PC_fin').replace(/\.json$/i, '');
+            // Есть нативный диалог — не тратим жест пользователя на prompt:
+            // папку и имя файла выбирают прямо в окне сохранения.
+            if (typeof window.showSaveFilePicker === 'function') {
+                exportProfile(id);
+                return;
+            }
+            const name = prompt('Имя файла профиля (profiles/<имя>.json):', id);
+            if (!name || !name.trim()) return;
+            exportProfile(name.trim().replace(/\.json$/i, ''));
+        });
+
+        $import.on('click', function () {
+            pickAndImport();
         });
 
         $delete.on('click', function () {
@@ -309,7 +328,7 @@
             });
         });
 
-        $row.append($label, $select, $save, $saveAs, $delete);
+        $row.append($label, $select, $save, $saveAs, $export, $import, $delete);
 
         // вставка первой строкой (сразу после заголовка модалки)
         if ($content) {
@@ -358,6 +377,239 @@
         return $row;
     }
 
+    // ============================================================
+    // Экспорт / импорт профиля (файлы profiles/<name>.json)
+    // ============================================================
+
+    function deviceId() {
+        return (typeof getOrCreateDeviceId === 'function') ? getOrCreateDeviceId() : '';
+    }
+
+    function fetchJson(url, opts) {
+        return fetch(url, opts || {}).then(function (r) {
+            if (!r.ok) throw new Error(url + ' → ' + r.status);
+            return r.json();
+        });
+    }
+
+    // Полный снимок настроек: панели + профили + тема + серверные настройки.
+    function collectSnapshot(name) {
+        var did = deviceId();
+        return Promise.all([
+            fetchJson('/api/settings').catch(function () { return {}; }),
+            did ? fetchJson('/api/user_settings/' + encodeURIComponent(did)).catch(function () { return {}; }) : Promise.resolve({})
+        ]).then(function (res) {
+            var data = loadProfiles();
+            var theme = (window.ChartTheme && typeof ChartTheme.all === 'function') ? ChartTheme.all() : {};
+            // Тема может жить только на сервере (другое устройство/новый браузер).
+            if ((!theme || !Object.keys(theme).length) && res[1] && res[1].chart_theme) {
+                try { theme = JSON.parse(res[1].chart_theme); } catch (e) { theme = {}; }
+            }
+            return {
+                format: 'wclock-profile',
+                version: 1,
+                name: name || data.active || 'profile',
+                saved_at: new Date().toISOString(),
+                device_id: did,
+                panels: currentConfig(),
+                panel_profiles: data,
+                theme: theme,
+                legend: (typeof window.getLegendState === 'function') ? window.getLegendState() : null,
+                settings: res[0] || {},
+                user_settings: res[1] || {}
+            };
+        });
+    }
+
+    function downloadJson(name, obj) {
+        try {
+            var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = name + '.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+        } catch (e) {
+            console.warn('[PanelProfiles] download error:', e);
+        }
+    }
+
+    // Запись в выбранный пользователем файл (File System Access API).
+    // ВАЖНО: текст сериализуем ДО createWritable — он сразу усекает файл,
+    // и любая ошибка сериализации оставила бы пустой файл на диске.
+    function writeToHandle(handle, text) {
+        return handle.createWritable().then(function (w) {
+            return w.write(new Blob([text], { type: 'application/json' }))
+                .then(function () { return w.close(); });
+        });
+    }
+
+    // Выбор файла/папки до асинхронной работы: showSaveFilePicker вызывается
+    // строго в обработчике клика, иначе браузер ругается на отсутствие жеста.
+    function pickSaveFile(name) {
+        if (typeof window.showSaveFilePicker !== 'function') return null;
+        try {
+            return window.showSaveFilePicker({
+                suggestedName: (name || 'PC_fin') + '.json',
+                types: [{ description: 'JSON-профиль настроек', accept: { 'application/json': ['.json'] } }]
+            });
+        } catch (e) {
+            console.warn('[PanelProfiles] showSaveFilePicker:', e);
+            return null;
+        }
+    }
+
+    // Экспорт: снимок → файл в выбранную папку + копия в profiles/ на сервере.
+    // Запись файла и серверное сохранение независимы: сбой сервера не должен
+    // оставлять пользователя без файла (и наоборот).
+    function exportProfile(name) {
+        var picker = pickSaveFile(name);
+
+        return (picker || Promise.resolve(null)).then(function (handle) {
+            return collectSnapshot(name).then(function (snap) {
+                // Сериализуем один раз и заранее.
+                var text = JSON.stringify(snap, null, 2);
+
+                var localWrite = handle
+                    ? writeToHandle(handle, text)
+                    : Promise.resolve(downloadJson(snap.name, snap));
+
+                var serverSave = fetch('/api/profiles/' + encodeURIComponent(snap.name), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: text
+                }).then(function (r) {
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    return r.json();
+                }).catch(function (e) {
+                    console.warn('[PanelProfiles] server save failed:', e);
+                    return null;
+                });
+
+                return Promise.all([localWrite, serverSave]).then(function (res) {
+                    var savedOnServer = !!res[1];
+                    if (handle) {
+                        toast('Файл «' + snap.name + '.json» сохранён' +
+                              (savedOnServer ? ' (копия в profiles/)' : ''));
+                    } else {
+                        toast('Профиль «' + snap.name + '» сохранён' +
+                              (savedOnServer ? ' в profiles/' : ''));
+                    }
+                    return snap;
+                });
+            });
+        }).catch(function (e) {
+            // Отмена выбора файла — не ошибка, молча выходим.
+            if (e && (e.name === 'AbortError' || e.name === 'NotAllowedError')) return;
+            console.warn('[PanelProfiles] export error:', e);
+            toast('Ошибка экспорта: ' + (e && e.message ? e.message : e));
+        });
+    }
+
+    function applyThemeSnapshot(theme) {
+        if (!theme || !window.ChartTheme) return;
+        Object.keys(theme).forEach(function (group) {
+            var val = theme[group];
+            if (val && typeof val === 'object') {
+                Object.keys(val).forEach(function (k) {
+                    try { ChartTheme.set(group + '.' + k, val[k]); } catch (e) {}
+                });
+            }
+        });
+        if (typeof window.InvestChartCore !== 'undefined' && ChartTheme.invalidatePatterns) { /* noop */ }
+        if (window.InvestChartCore && typeof InvestChartCore.invalidatePatterns === 'function') {
+            InvestChartCore.invalidatePatterns();
+        }
+    }
+
+    // Импорт снимка: панели, профили, тема, серверные настройки.
+    function importProfileObject(obj, opts) {
+        opts = opts || {};
+        if (!obj || typeof obj !== 'object' || !obj.panels) {
+            toast('Некорректный файл профиля');
+            return Promise.reject(new Error('bad profile'));
+        }
+
+        var tasks = [];
+        var did = deviceId();
+
+        if (obj.settings && Object.keys(obj.settings).length) {
+            tasks.push(fetch('/api/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(obj.settings)
+            }).catch(function (e) { console.warn('[PanelProfiles] settings import:', e); }));
+        }
+        if (did && obj.user_settings && Object.keys(obj.user_settings).length) {
+            tasks.push(fetch('/api/user_settings/' + encodeURIComponent(did), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: obj.user_settings })
+            }).catch(function (e) { console.warn('[PanelProfiles] user_settings import:', e); }));
+        }
+
+        applyThemeSnapshot(obj.theme);
+
+        if (window.PanelResize && typeof PanelResize.applyConfigToPanels === 'function') {
+            window.PanelResize.applyConfigToPanels(obj.panels);
+        }
+        if (window.PanelResize && typeof PanelResize.savePanelConfig === 'function') {
+            window.PanelResize.savePanelConfig(obj.panels);
+        }
+
+        var name = obj.name || 'imported';
+        var data = loadProfiles();
+        var existing = data.profiles.find(function (p) { return p.name === name; });
+        if (existing) existing.config = obj.panels;
+        else data.profiles.push({ name: name, config: obj.panels });
+        data.active = name;
+        saveProfiles(data);
+
+        return Promise.all(tasks).then(function () {
+            toast('Профиль «' + name + '» импортирован');
+            if (opts.reload !== false) {
+                setTimeout(function () { location.reload(); }, 900);
+            }
+        });
+    }
+
+    function importFromFile(file) {
+        if (!file) return;
+        var reader = new FileReader();
+        reader.onload = function () {
+            var obj = null;
+            try { obj = JSON.parse(reader.result); } catch (e) {
+                toast('Файл не является JSON');
+                return;
+            }
+            showConfirm('Импортировать профиль «' + (obj.name || file.name) + '»?',
+                'Текущие настройки панелей будут заменены.', function () {
+                    importProfileObject(obj);
+                });
+        };
+        reader.readAsText(file);
+    }
+
+    function pickAndImport() {
+        var input = document.getElementById('pp-import-file');
+        if (!input) {
+            input = document.createElement('input');
+            input.type = 'file';
+            input.id = 'pp-import-file';
+            input.accept = 'application/json,.json';
+            input.style.display = 'none';
+            input.addEventListener('change', function () {
+                if (input.files && input.files[0]) importFromFile(input.files[0]);
+                input.value = '';
+            });
+            document.body.appendChild(input);
+        }
+        input.click();
+    }
+
     window.PanelProfiles = {
         loadProfiles: loadProfiles,
         saveProfiles: saveProfiles,
@@ -368,7 +620,12 @@
         saveCurrentToActive: saveCurrentToActive,
         deleteProfile: deleteProfile,
         updateVisibility: updateVisibility,
-        renderRow: renderRow
+        renderRow: renderRow,
+        collectSnapshot: collectSnapshot,
+        exportProfile: exportProfile,
+        importProfileObject: importProfileObject,
+        importFromFile: importFromFile,
+        pickAndImport: pickAndImport
     };
 
 })(window);

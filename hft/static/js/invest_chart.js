@@ -826,7 +826,7 @@
                 var mean = (d.summary && d.summary.mean) || 0;
                 maxAbs = Math.max(maxAbs, Math.abs(mean));
 
-                var bandH = Math.max(28, Math.round(area.height * 0.16));
+                var bandH = Math.max(56, Math.round(area.height * 0.32));
                 var yMid = area.bottom - bandH / 2;
                 var yScale = (bandH / 2) / maxAbs;
                 var up = ChartTheme.get('color.jumpUp', '#1fc163');

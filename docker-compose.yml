@@ -24,6 +24,7 @@ services:
       - ./odintsovo_weather.db:/app/odintsovo_weather.db
       - ./cache:/app/cache
       - ./logs:/app/logs
+      - ./profiles:/app/profiles
 
   weather-parser:
     build: .
@@ -85,6 +86,42 @@ services:
       - ./parsers/invest:/app/parsers/invest
       - ./parsers/invest/tracked_tickers.db:/app/parsers/invest/tracked_tickers.db
       - ./parsers/invest/candles.db:/app/parsers/invest/candles.db
+
+  tdiv-invest-parser:
+    build: .
+    image: ${DOCKER_PREFIX:-wclock5}-inv
+    container_name: ${DOCKER_PREFIX:-wclock5}-tdiv-inv
+    command: python parsers/invest/account_invest_daemon.py
+    environment:
+      - INVEST_SOURCE=tdiv
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - wclock-net
+    volumes:
+      - ./parsers/invest:/app/parsers/invest
+      - ./invest_db.py:/app/invest_db.py
+      - ./invest_repo.py:/app/invest_repo.py
+      - ./invest_portfolio.db:/app/invest_portfolio.db
+
+  trnd-invest-parser:
+    build: .
+    image: ${DOCKER_PREFIX:-wclock5}-inv
+    container_name: ${DOCKER_PREFIX:-wclock5}-trnd-inv
+    command: python parsers/invest/account_invest_daemon.py
+    environment:
+      - INVEST_SOURCE=trnd
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - wclock-net
+    volumes:
+      - ./parsers/invest:/app/parsers/invest
+      - ./invest_db.py:/app/invest_db.py
+      - ./invest_repo.py:/app/invest_repo.py
+      - ./invest_portfolio.db:/app/invest_portfolio.db
 
 networks:
   wclock-net:

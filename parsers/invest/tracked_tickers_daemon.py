@@ -15,6 +15,10 @@ import ssl
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import invest_repo as repo
+try:
+    import fx_candles
+except Exception:
+    fx_candles = None
 
 # === Загрузка .env ===
 PROJECT_ROOT = os.getcwd()
@@ -166,15 +170,55 @@ def _fetch_xau_from_yfinance():
         print(f"  ⚠️ yfinance: {e}", flush=True)
         return None, None
 
+def _fetch_xau_from_yahoo_api():
+    """Свежая цена XAU/USD (GC=F) через Yahoo Chart API — без yfinance.
+
+    yfinance в образе может отсутствовать, а сам эндпоинт доступен обычным
+    HTTP-запросом. Возвращает (iso_utc, price) либо (None, None).
+    """
+    import urllib.parse
+    import urllib.request
+    try:
+        url = ("https://query1.finance.yahoo.com/v8/finance/chart/"
+               + urllib.parse.quote("GC=F") + "?interval=5m&range=1d")
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "Accept": "application/json",
+        })
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode())
+        result = (data.get("chart") or {}).get("result") or []
+        if not result:
+            return None, None
+        res = result[0]
+        stamps = res.get("timestamp") or []
+        closes = ((res.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+        for ts, close in reversed(list(zip(stamps, closes))):
+            if close and close > 0:
+                dt = datetime.fromtimestamp(int(ts), tz=timezone.utc)
+                return dt.strftime("%Y-%m-%dT%H:%M:%SZ"), float(close)
+        return None, None
+    except Exception as e:
+        print(f"  ⚠️ yahoo api: {e}", flush=True)
+        return None, None
+
+
 def fetch_xau_price():
-    """Получить XAU/USD: сначала yfinance (свежие), потом candles.db (история)."""
+    """Получить XAU/USD: yfinance → Yahoo API → candles.db (история)."""
     now_utc = None
     yf_price = None
 
     # 1) Попробовать yfinance (свежая цена)
     now_utc, yf_price = _fetch_xau_from_yfinance()
+
+    # 1b) Фолбэк без зависимости: тот же источник через HTTP
+    if yf_price is None:
+        now_utc, yf_price = _fetch_xau_from_yahoo_api()
+        if yf_price is not None:
+            print(f"  📈 XAU yahoo: ${yf_price:.2f}", flush=True)
+            _save_xau_to_candles_db(now_utc, yf_price)
     if yf_price is not None:
-        print(f"  📈 XAU yfinance: ${yf_price:.2f}", flush=True)
+        print(f"  📈 XAU: ${yf_price:.2f}", flush=True)
         _save_xau_to_candles_db(now_utc, yf_price)
 
     # 2) Если yfinance не сработал — взять из candles.db
@@ -280,6 +324,13 @@ def save_prices(last_prices):
         price = price_to_float(item.get("price"))
         repo.write_price(figi, ticker, class_code, price, db_path=DB_PATH)
         saved += 1
+        # Дублируем USD/RUB в fx_rates для детализации как портфель
+        if ticker == "USD/RUB" or figi == "USD_RUB":
+            try:
+                ts = int(time.time())
+                repo.upsert_fx_rate(ts, pair="USD/RUB", close=round(price, 4), source="tinkoff", db_path=os.path.join(os.path.dirname(__file__), "invest_portfolio.db"))
+            except Exception:
+                pass
     repo.apply_ticker_retention(days=200, db_path=DB_PATH)
     return saved
 
@@ -322,12 +373,22 @@ def main():
             if xau:
                 saved += save_xau_price(xau)
 
-            # USD/RUB через T-Invest (GetLastPrices)
+            # USD/RUB через T-Invest (GetLastPrices + свечи)
             try:
                 usd = fetch_usd_price()
                 if usd:
                     saved += save_xau_price(usd)
                     print(f"  💵 USD/RUB: {usd['price']:.2f}", flush=True)
+                    try:
+                        ts = int(time.time())
+                        repo.upsert_fx_rate(ts, pair="USD/RUB", close=round(usd['price'], 4), source="tinkoff", db_path=os.path.join(os.path.dirname(__file__), "invest_portfolio.db"))
+                    except Exception:
+                        pass
+                try:
+                    if fx_candles:
+                        fx_candles.update_once(minutes=120, interval_key="1min")
+                except Exception:
+                    pass
             except Exception as e:
                 print(f"  ⚠️ USD/RUB: {e}", flush=True)
 

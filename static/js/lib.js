@@ -59,10 +59,11 @@ function chartDpiValue(target) {
 window.chartDpiValue = chartDpiValue;
 
 function chartFontScale(target) {
-    // Влияние DPI-слайдера на шрифт ослаблено в 3 раза: отклонение масштаба
-    // от 1 делится на 3 (при dpi=2 масштаб = 1, без изменений).
-    const raw = chartDpiValue(target) / 2;
-    return Math.max(0.5, 1 + (raw - 1) / 3);
+    // Масштаб пропорционален DPI: 2.0 — базовый вид (×1), 0.5 — мелко
+    // (×0.4), 3.0 — крупно (×1.5). Раньше отклонение сглаживалось делением
+    // на 3, и слайдер почти не влиял (×0.75…×1.17) — «не работает».
+    const dpi = chartDpiValue(target) / 2;
+    return Math.max(0.4, Math.min(2, dpi));
 }
 window.chartFontScale = chartFontScale;
 
@@ -611,12 +612,39 @@ function populateSettingsContent($content) {
         window.PanelProfiles.renderRow($content, 'invest_banner_capital');
     }
 
-    // === Сбор данных через API инвест-демонов (Tinkoff / Finam) ===
+    // === Сбор данных через API инвест-демонов (Tinkoff / Finam / счета) ===
     const $collTitle = $('<div class="settings-section-title" style="margin:10px 0 2px;font-size:11px;color:#999;text-transform:uppercase;">Сбор данных через API</div>');
     $col2.append($collTitle);
 
-    function makeCollectionRow(label, key) {
-        const $row = $('<div class="panel-row"><span>' + label + '</span></div>');
+    function makeCollectionRow(label, key, sourceId) {
+        const $row = $('<div class="panel-row"></div>');
+
+        // Цвет источника — перед подписью: свотч открывает палитру и сразу
+        // перекрашивает линию на графике, метки баннера и легенду.
+        const srcMeta = (window.InvestSources && window.InvestSources.get)
+            ? window.InvestSources.get(sourceId) : null;
+        const colorKey = (srcMeta && srcMeta.colorKey) || sourceId;
+        const colorPath = 'color.' + colorKey;
+        const curColor = (window.ChartTheme && ChartTheme.get)
+            ? ChartTheme.get(colorPath, (srcMeta && srcMeta.color) || '#888')
+            : '#888';
+
+        const $main = $('<span class="coll-main"></span>');
+        const $color = $('<input type="color" class="coll-color">')
+            .attr('title', 'Цвет ' + label)
+            .attr('data-color-path', colorPath)
+            .val(curColor);
+        $color.on('input change', function () {
+            const val = this.value;
+            if (window.ChartTheme && ChartTheme.set) {
+                ChartTheme.set(colorPath, val);
+                if (typeof window.notifyChartThemeChange === 'function') {
+                    window.notifyChartThemeChange();
+                }
+            }
+        });
+        $main.append($color, $('<span>' + label + '</span>'));
+
         const $sw = $('<label class="switch"></label>');
         const $cb = $('<input type="checkbox">').prop('checked', getSetting(key, '1') !== '0');
         $cb.on('change', function() {
@@ -624,11 +652,20 @@ function populateSettingsContent($content) {
             saveSettingsToServer({ [key]: this.checked ? '1' : '0' });
         });
         $sw.append($cb, '<span class="slider"></span>');
-        $row.append($sw);
+        $row.append($main, $sw);
         return $row;
     }
-    $col2.append(makeCollectionRow('Tinkoff', 'invest_collection_tinkoff_enabled'));
-    $col2.append(makeCollectionRow('Finam', 'invest_collection_finam_enabled'));
+
+    // Названия берём из реестра источников (static/js/invest_sources.js):
+    // сколько токенов/счетов заведено — столько и переключателей.
+    const collSources = (window.InvestSources && typeof window.InvestSources.list === 'function')
+        ? window.InvestSources.list()
+        : [{ id: 'tinkoff', label: 'Tinkoff' }, { id: 'finam', label: 'Finam' }];
+
+    collSources.forEach(function(src) {
+        if (src.enabled === false) return;
+        $col2.append(makeCollectionRow(src.label, 'invest_collection_' + src.id + '_enabled', src.id));
+    });
 }
 
 window.populateSettingsContent = populateSettingsContent;
