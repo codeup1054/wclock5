@@ -862,39 +862,42 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const totalCapital = portfolioRows.reduce(function(s, r) { return s + r.currentTotal; }, 0);
         const showInlineTotal = !isTotalPanelVisible() && portfolioRows.length > 1;
 
-        // === CAPITAL: отдельные строки портфелей (цвет = источник) ===
-        capHtml += `<div class="banner-capital" id="invest-banner-capital" style="text-align:right;">`;
+        // === CAPITAL: таблица «метка | значение/полосы» ===
+        // Слева — метки вида F:TGLD (одинаковые для строк значений и строк баров),
+        // справа — колонка 300px: сверху значения, ниже полосы активов.
+        capHtml += `<div class="banner-capital" id="invest-banner-capital">`;
         if (showInlineTotal) {
-            // Итог оформлен как обычная строка: «Портфель» слева, сумма справа —
-            // тот же шрифт и та же сетка, что у счетов.
             capHtml += `<div class="banner-capital-line banner-total-capital" id="banner-capital-total">` +
                 `<span class="banner-capital-label" style="color:#a7aeae;">Портфель</span>` +
                 `<span class="banner-capital-value" style="color:#d6d6d6;">${formatCurrency(totalCapital)}</span>` +
                 `</div>`;
         }
-        portfolioRows.forEach(function(row) {
-            capHtml += `<div class="banner-capital-line"><span class="banner-capital-label" style="color:${row.color};">${row.label}</span><span class="banner-capital-value">${formatCurrency(row.currentTotal)}</span>${renderTurnoverBlock(row.source, row.currentTotal)}</div>`;
-        });
-        capHtml += `</div>`;
 
-        // === ASSETS BARS: капитал слева + бары справа ===
         if (portfolioRows.length > 0) {
             // Отдельная панель «Итого»: только значение, без подписей.
             if ($totalHost.length) {
                 $totalHost.html(`<div class="banner-total-only">${formatCurrency(totalCapital)}</div>`);
             }
-            capHtml += `<div class="banner-assets-row">`;
-            capHtml += `<div class="banner-assets" id="invest-assets-bars">`;
+
+            capHtml += `<div class="banner-capital-grid">`;
+
+            // 1..N — значения капитала
+            portfolioRows.forEach(function(row) {
+                const lbl = row.instrument ? (row.marker + ':' + row.instrument) : row.label;
+                capHtml += `<div class="bcg-row">` +
+                    `<span class="bcg-label" title="${row.label}" style="color:${row.color};">${lbl}</span>` +
+                    `<span class="bcg-value" style="color:${row.color};">${formatCurrency(row.currentTotal)}</span>` +
+                    `</div>`;
+            });
+
+            // N+1..2N — полосы активов
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;
-                capHtml += `<div class="asset-row">`;
-                // Метка счёта в полосе активов — как в таблице: «F:TGLD», «T:CNRU».
-                const assetLabel = row.instrument ? (row.marker + ':' + row.instrument) : row.marker;
-                capHtml += `<span class="asset-row-label" title="${row.label}" style="color:${row.color};font-size:10px;font-weight:bold;margin: 0px 4px 0px 5px;">${assetLabel}</span>`;
-                capHtml += `<div class="asset-bar-container">`;
+                const lbl = row.instrument ? (row.marker + ':' + row.instrument) : row.label;
+                capHtml += `<div class="bcg-row">` +
+                    `<span class="bcg-label" title="${row.label}" style="color:${row.color};">${lbl}</span>` +
+                    `<div class="bcg-bars"><div class="asset-bar-container">`;
                 row.assets.forEach(function(asset) {
-                    // Класс по типу актива — цвет/прозрачность задаётся в wclock.css,
-                    // чтобы не дублировать альфу в JS-копиях баннера.
                     let barClass = '';
                     if (asset.ticker.includes('TGLD')) barClass = 'asset-bar-tgld';
                     else if (asset.ticker.includes('TMON')) barClass = 'asset-bar-tmon';
@@ -909,12 +912,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
                     capHtml += `<span class="asset-bar ${barClass}" title="${assetTitle} — ${formatCurrency(asset.percent / 100 * row.currentTotal)} ₽" style="width: ${Math.max(asset.percent, 1)}%;"><span class="asset-bar-label">${asset.percent.toFixed(1)}%</span></span>`;
                 });
-                capHtml += `</div>`;
-                capHtml += `</div>`;
+                capHtml += `</div></div></div>`;
             });
-            capHtml += `</div>`;
+
             capHtml += `</div>`;
         }
+        capHtml += `</div>`;
 
         // === TABLE: banner-row-portfolio — T+F итого + строки по источникам ===
         tblHtml += `<table class="banner-table" id="invest-banner-table"><tbody>`;
