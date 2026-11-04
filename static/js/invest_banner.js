@@ -524,6 +524,201 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return String(Math.round(n));
     }
 
+    // Полосы долей для таблицы (первый столбец) — те же классы, что в «Капитале».
+    function barClassFor(asset) {
+        var t = String(asset.ticker || '') + ' ' + String(asset.name || '');
+        if (t.includes('TGLD')) return 'asset-bar-tgld';
+        if (t.includes('TMON')) return 'asset-bar-tmon';
+        if (t.includes('LQDT')) return 'asset-bar-lqdt';
+        if (t.includes('RUB') || String(asset.name || '').includes('Руб')) return 'asset-bar-rub';
+        return 'asset-bar-other';
+    }
+
+    function assetTitleFor(asset) {
+        var n = String(asset.name || '');
+        if (n.includes('TGLD')) return 'Золото (TGLD)';
+        if (n.includes('TMON')) return 'Обл. Минфин (TMON)';
+        if (n.includes('RUB')) return 'Рубль';
+        return n;
+    }
+
+    // Микрографик (sparkline) за последние N дней — SVG, без перерисовки.
+    function sparklineSvg(prices, color, days) {
+        if (!Array.isArray(prices) || prices.length < 2) return '';
+        var cutoff = Date.now() - (days || 7) * 86400 * 1000;
+        var pts = [];
+        for (var i = 0; i < prices.length; i++) {
+            var t = Date.parse(prices[i].timestamp);
+            var v = Number(prices[i].price);
+            if (!isFinite(t) || !isFinite(v) || v <= 0 || t < cutoff) continue;
+            pts.push([t, v]);
+        }
+        if (pts.length < 2) return '';
+        var t0 = pts[0][0], t1 = pts[pts.length - 1][0];
+        var span = Math.max(1, t1 - t0);
+        var min = Infinity, max = -Infinity;
+        for (var j = 0; j < pts.length; j++) {
+            if (pts[j][1] < min) min = pts[j][1];
+            if (pts[j][1] > max) max = pts[j][1];
+        }
+        var range = Math.max(1e-9, max - min);
+        var coords = pts.map(function(p) {
+            var x = ((p[0] - t0) / span) * 100;
+            var y = 22 - ((p[1] - min) / range) * 20;
+            return x.toFixed(1) + ',' + y.toFixed(1);
+        }).join(' ');
+        return '<svg class="spark" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">' +
+            '<polyline points="' + coords + '" fill="none" stroke="' + color + '" stroke-width="1.6" ' +
+            'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
+    }
+
+    function shareBarsHtml(assets) {
+        if (!assets || !assets.length) return '';
+        var html = '<div class="asset-bar-container">';
+        assets.forEach(function(a) {
+            var pct = (a.percent != null) ? a.percent : 0;
+            html += '<span class="asset-bar ' + barClassFor(a) + '" title="' +
+                assetTitleFor(a) + ' — ' + formatCurrency(a.value) + ' ₽" style="width:' +
+                Math.max(pct, 1) + '%;"><span class="asset-bar-label">' + pct.toFixed(1) + '%</span></span>';
+        });
+        return html + '</div>';
+    }
+
+    // === Попап с увеличенным графиком (доли / микрографик) ===
+    var _hoverData = { shares: {}, sparks: {} };
+    var _hoverEl = null;
+
+    var SHARE_COLORS = {
+        'asset-bar-tgld': '#d4a017',
+        'asset-bar-tmon': '#ff7800',
+        'asset-bar-lqdt': '#dc648c',
+        'asset-bar-rub': 'rgba(255,255,255,0.35)',
+        'asset-bar-other': '#5f7d8c'
+    };
+
+    function ensureHoverPopup() {
+        if (_hoverEl && _hoverEl.parentNode) return _hoverEl;
+        var el = document.createElement('div');
+        el.className = 'banner-hover-popup';
+        el.style.display = 'none';
+        var cv = document.createElement('canvas');
+        cv.width = 360;
+        cv.height = 220;
+        el.appendChild(cv);
+        document.body.appendChild(el);
+        _hoverEl = el;
+        return el;
+    }
+
+    function hideHoverPopup() {
+        if (_hoverEl) _hoverEl.style.display = 'none';
+    }
+
+    function placeHoverPopup(target) {
+        var el = ensureHoverPopup();
+        var r = target.getBoundingClientRect();
+        el.style.display = 'block';
+        var w = el.offsetWidth || 360, h = el.offsetHeight || 220;
+        var x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+        var y = r.bottom + 6;
+        if (y + h > window.innerHeight - 8) y = Math.max(8, r.top - h - 6);
+        el.style.left = x + 'px';
+        el.style.top = y + 'px';
+        return el.querySelector('canvas').getContext('2d');
+    }
+
+    function drawSharesChart(ctx, assets) {
+        var W = ctx.canvas.width, H = ctx.canvas.height;
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(10, 14, 18, 0.96)';
+        ctx.fillRect(0, 0, W, H);
+        if (!assets || !assets.length) return;
+
+        var padL = 12, barY = 26, barH = 44, barW = W - padL * 2, x = padL;
+        var total = assets.reduce(function(s, a) { return s + (Number(a.value) || 0); }, 0) || 1;
+
+        assets.forEach(function(a) {
+            var w = Math.max(2, (Number(a.value) || 0) / total * barW);
+            ctx.fillStyle = SHARE_COLORS[barClassFor(a)] || '#5f7d8c';
+            ctx.fillRect(x, barY, w, barH);
+            if (w > 42) {
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText((a.percent != null ? a.percent : 0).toFixed(1) + '%', x + w / 2, barY + barH / 2);
+            }
+            x += w;
+        });
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        var ly = barY + barH + 20;
+        assets.slice(0, 6).forEach(function(a) {
+            ctx.fillStyle = SHARE_COLORS[barClassFor(a)] || '#5f7d8c';
+            ctx.fillRect(padL, ly - 4, 10, 8);
+            ctx.fillStyle = '#e6eef5';
+            ctx.font = '12px sans-serif';
+            var pct = (a.percent != null ? a.percent : 0).toFixed(1);
+            ctx.fillText(assetTitleFor(a) + ' — ' + pct + '% · ' + formatCurrency(a.value) + ' ₽', padL + 16, ly);
+            ly += 22;
+        });
+    }
+
+    function drawSparkChart(ctx, prices, color) {
+        var W = ctx.canvas.width, H = ctx.canvas.height;
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(10, 14, 18, 0.96)';
+        ctx.fillRect(0, 0, W, H);
+
+        var cutoff = Date.now() - 7 * 86400 * 1000;
+        var pts = [];
+        (prices || []).forEach(function(p) {
+            var t = Date.parse(p.timestamp), v = Number(p.price);
+            if (isFinite(t) && isFinite(v) && v > 0 && t >= cutoff) pts.push([t, v]);
+        });
+        if (pts.length < 2) return;
+
+        var padL = 52, padR = 12, padT = 14, padB = 26;
+        var plotW = W - padL - padR, plotH = H - padT - padB;
+        var t0 = pts[0][0], t1 = pts[pts.length - 1][0], span = Math.max(1, t1 - t0);
+        var min = Math.min.apply(null, pts.map(function(p) { return p[1]; }));
+        var max = Math.max.apply(null, pts.map(function(p) { return p[1]; }));
+        var range = Math.max(1e-9, max - min);
+
+        // сетка + подписи Y
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.fillStyle = '#9fb3c8';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (var i = 0; i <= 4; i++) {
+            var y = padT + plotH * i / 4;
+            ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
+            var val = max - range * i / 4;
+            ctx.fillText(val >= 1000 ? Math.round(val).toLocaleString('ru-RU') : val.toFixed(2), padL - 6, y);
+        }
+        // сетка + даты X
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (var j = 0; j <= 4; j++) {
+            var x = padL + plotW * j / 4;
+            ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH); ctx.stroke();
+            var d = new Date(t0 + span * j / 4);
+            ctx.fillText(String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0'), x, padT + plotH + 6);
+        }
+
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        pts.forEach(function(p, k) {
+            var x = padL + (p[0] - t0) / span * plotW;
+            var y = padT + (1 - (p[1] - min) / range) * plotH;
+            if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+    }
+
     function renderTurnoverBlock(source, capital) {
         if (!turnoverData || !capital) {
             console.warn('[TurnoverBlock] SKIP:', source, 'turnoverData=', !!turnoverData, 'capital=', capital);
@@ -589,9 +784,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
         const absStyle = 'opacity:0.2';
         const assetId = label.toLowerCase();
+        _hoverData.sparks[assetId] = { prices: t.prices || [], color: color };
         const rowCls = 'banner-row-asset ' + assetId;
 
         return `<tr id="banner-row-${assetId}" class="${rowCls}">
+            <td class="banner-td-shares" data-hover-spark="${assetId}">${sparklineSvg(t.prices, color, 7)}</td>
             <td id="banner-td-${assetId}-marker" class="banner-td-ticker" style="color:${color};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">${label}</td>
             <td id="banner-td-${assetId}-value" class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
             <td id="banner-td-${assetId}-day-pct" class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
@@ -620,6 +817,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const abs = function(o) { return o ? formatTickerAbs(o.gap_abs) : '—'; };
         const absStyle = 'opacity:0.2';
         return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
+            <td class="banner-td-shares"></td>
             <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
             <td id="banner-td-tgldgap-value" class="banner-td-num" style="color:${col}">${val ? formatPercent(val.gap_pct) : '—'}</td>
             <td id="banner-td-tgldgap-day-pct" class="banner-td-pct ${cls(day)}">${pct(day)}</td>
@@ -921,8 +1119,32 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         }
         capHtml += `</div>`;
 
+        // Данные для попапов при наведении (доли / микрографик)
+        _hoverData.shares = {};
+        _hoverData.sparks = {};
+
         // === TABLE: banner-row-portfolio — T+F итого + строки по источникам ===
         tblHtml += `<table class="banner-table" id="invest-banner-table"><tbody>`;
+
+        _hoverData.shares.__total = null; // заполняется ниже после расчёта totalAssets
+        portfolioRows.forEach(function(r) { _hoverData.shares[r.source] = r.assets; });
+
+        // Доли по всем портфелям вместе — для строки итога
+        var totalAssets = (function() {
+            var map = {};
+            portfolioRows.forEach(function(r) {
+                (r.assets || []).forEach(function(a) {
+                    var k = a.name || a.ticker;
+                    if (!map[k]) map[k] = { name: a.name, ticker: a.ticker, value: 0 };
+                    map[k].value += Number(a.value) || 0;
+                });
+            });
+            var arr = Object.keys(map).map(function(k) { return map[k]; });
+            var tot = arr.reduce(function(s2, a) { return s2 + a.value; }, 0);
+            arr.forEach(function(a) { a.percent = tot ? a.value / tot * 100 : 0; });
+            return arr.sort(function(a, b) { return b.value - a.value; });
+        })();
+        _hoverData.shares.__total = totalAssets;
 
         // --- T+F итого (первая строка): только когда активны 2+ источника ---
         if (portfolioRows.length > 1) {
@@ -948,6 +1170,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
 
             tblHtml += `<tr id="banner-row-total" class="banner-row-portfolio-total">
+            <td class="banner-td-shares" data-hover-shares="__total">${shareBarsHtml(totalAssets)}</td>
             <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;white-space:nowrap;">T+F</td>
             <td id="banner-td-total-value" class="banner-td-num" style="color:#dcdcdc;font-weight:bold;white-space:nowrap;" title="Суммарный капитал по портфелям">${Math.round(tfCurrent).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-total-day-change" class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
@@ -963,6 +1186,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             const rowId = row.source;
             const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
             tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};" title="${row.label}">
+            <td class="banner-td-shares" data-hover-shares="${row.source}">${shareBarsHtml(row.assets)}</td>
             <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + ':' + row.instrument) : row.marker}</td>
             <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-${rowId}-day-pct" class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
@@ -1029,6 +1253,26 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 }
             } catch (e) { /* noop */ }
         }
+        // Попапы при наведении: доли на строках счетов, увеличенный микрографик на тикерах
+        if (!window.__bannerHoverBound) {
+            window.__bannerHoverBound = true;
+            $(document).on('mouseover', '#invest_banner_table_content .banner-td-shares', function() {
+                var cell = this;
+                var sId = cell.getAttribute('data-hover-shares');
+                var kId = cell.getAttribute('data-hover-spark');
+                try {
+                    if (sId && _hoverData.shares[sId]) {
+                        drawSharesChart(placeHoverPopup(cell), _hoverData.shares[sId]);
+                    } else if (kId && _hoverData.sparks[kId]) {
+                        var d = _hoverData.sparks[kId];
+                        drawSparkChart(placeHoverPopup(cell), d.prices, d.color);
+                    }
+                } catch (e) { hideHoverPopup(); }
+            });
+            $(document).on('mouseout', '#invest_banner_table_content .banner-td-shares', hideHoverPopup);
+            window.addEventListener('scroll', hideHoverPopup, true);
+        }
+
         setBannerFreshness(dynData || historyData);
         const t1 = performance.now();
         console.log('[InvestBanner] renderBanner build', (tBuild - t0).toFixed(2) + 'ms', '| dom-set', (t1 - tBuild).toFixed(2) + 'ms', '| total', (t1 - t0).toFixed(2) + 'ms');

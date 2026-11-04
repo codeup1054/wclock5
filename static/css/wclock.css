@@ -805,31 +805,63 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
-    /* 3.0cqi вместо 3.3: таблица из 8 колонок должна влезать в панель
-       без обрезки последнего столбца */
-    font-size: 3.0cqi;
+    /* 9 колонок (включая полосы долей) должны влезать в панель */
+    font-size: 2.7cqi;
     margin: 2px 0;
 }
 
 .invest-banner-host .banner-table td {
-    padding: 0px 2px;
+    padding: 0px 1px;
     text-align: right;
 }
 
 /* Первый столбец (тикер/счёт) — по ширине самой длинной метки:
    ширина 1% + nowrap не даёт колонке растягиваться и выравнивает все строки. */
-.invest-banner-host .banner-table td:first-child {
+.invest-banner-host .banner-table td:nth-child(2) {
     width: 1%;
     white-space: nowrap;
-    padding-right: 6px;
+    padding-right: 2px;
+}
+
+/* Первый столбец таблицы — индикаторы долей активов */
+.invest-banner-host .banner-table .banner-td-shares {
+    /* доля от ширины таблицы — не распирает её фиксированными px */
+    width: 24%;
+    min-width: 96px;
+    padding: 0 2px 0 0;
+}
+
+.invest-banner-host .banner-td-shares .asset-bar-container {
+    display: flex;
+    width: 100%;
+    height: 1.6cqi;
+    min-height: 9px;
+}
+
+.invest-banner-host .banner-td-shares .asset-bar {
+    /* в таблице сегменты могут быть уже 10px — иначе колонка распирает таблицу */
+    min-width: 0;
+}
+
+.invest-banner-host .banner-td-shares .asset-bar-label {
+    /* в узкой колонке таблицы подписи не показываем: они распирают ячейку,
+       детали остаются в title сегмента */
+    display: none;
+}
+
+.invest-banner-host .banner-td-shares .spark {
+    display: block;
+    width: 100%;
+    height: 1.8cqi;
+    min-height: 10px;
 }
 
 .invest-banner-host [class*="banner-td-"] {
-    font-size: 2.8cqi;
+    font-size: 2.6cqi;
 }
 
 .invest-banner-host .banner-td-change {
-    min-width: 7.2cqi;
+    min-width: 6cqi;
 }
 
 /* Числовые ячейки не переносим: «8 895 047» должно оставаться одной строкой */
@@ -838,7 +870,7 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host .banner-td-pct {
-    min-width: 5.6cqi;
+    min-width: 4.6cqi;
 }
 
 .invest-banner-host .banner-td-empty {
@@ -2496,4 +2528,22 @@ input:checked + .slider:before {
 #mem-info.visible {
     color: rgba(255, 255, 255, 0.9);
     background: rgba(0, 0, 0, 0.8);
+}
+
+
+/* Попап с увеличенным графиком (доли / микрографик) */
+.banner-hover-popup {
+    position: fixed;
+    z-index: 30000;
+    border: 1px solid #2b3a45;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+}
+
+.banner-hover-popup canvas {
+    display: block;
+    width: 360px;
+    height: 220px;
 }
