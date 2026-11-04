@@ -2972,7 +2972,39 @@ try {
         getChart: function() { return investChart; },
         resize: resizeCharts,
         resizeNow: resizeChartsThrottled,
-        registry: TICKER_REGISTRY
+        registry: TICKER_REGISTRY,
+
+        // Видимость серии по её label — для чекбоксов в баннер-таблице.
+        isDatasetVisible: function(label) {
+            var ch = investChart;
+            if (!ch || !ch.data || !ch.data.datasets) return false;
+            for (var i = 0; i < ch.data.datasets.length; i++) {
+                if (ch.data.datasets[i].label === label) {
+                    return (typeof ch.isDatasetVisible === 'function')
+                        ? ch.isDatasetVisible(i)
+                        : ch.data.datasets[i].hidden !== true;
+                }
+            }
+            return false;
+        },
+
+        setDatasetVisible: function(label, visible) {
+            var ch = investChart;
+            if (!ch || !ch.data || !ch.data.datasets) return;
+            var changed = false;
+            for (var i = 0; i < ch.data.datasets.length; i++) {
+                var ds = ch.data.datasets[i];
+                if (ds.label === label) {
+                    ds.hidden = !visible;
+                    changed = true;
+                }
+            }
+            if (!changed) return;
+            // сохраняем состояние легенды ДО применения, иначе applyLegendState
+            // вернёт старое значение и переключатель «залипнет»
+            saveLegendState();
+            ch.update('none');
+        }
     };
 
 })(jQuery);

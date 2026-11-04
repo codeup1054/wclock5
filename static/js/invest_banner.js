@@ -572,6 +572,19 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
     }
 
+    // Чекбокс видимости серии на графике (синхрон с легендой).
+    function visCell(datasetLabel) {
+        if (!datasetLabel) return '<td class="banner-td-vis"></td>';
+        var visible = true;
+        try {
+            if (window.InvestPlot && typeof InvestPlot.isDatasetVisible === 'function') {
+                visible = InvestPlot.isDatasetVisible(datasetLabel) !== false;
+            }
+        } catch (e) { /* noop */ }
+        return '<td class="banner-td-vis"><input type="checkbox" class="banner-vis" data-dataset="' +
+            datasetLabel.replace(/"/g, '&quot;') + '"' + (visible ? ' checked' : '') + '></td>';
+    }
+
     function shareBarsHtml(assets) {
         if (!assets || !assets.length) return '';
         var html = '<div class="asset-bar-container">';
@@ -788,6 +801,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const rowCls = 'banner-row-asset ' + assetId;
 
         return `<tr id="banner-row-${assetId}" class="${rowCls}">
+            ${visCell(label)}
             <td class="banner-td-shares" data-hover-spark="${assetId}">${sparklineSvg(t.prices, color, 7)}</td>
             <td id="banner-td-${assetId}-marker" class="banner-td-ticker" style="color:${color};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">${label}</td>
             <td id="banner-td-${assetId}-value" class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
@@ -817,6 +831,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const abs = function(o) { return o ? formatTickerAbs(o.gap_abs) : '—'; };
         const absStyle = 'opacity:0.4';
         return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
+            <td class="banner-td-vis"></td>
             <td class="banner-td-shares"></td>
             <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
             <td id="banner-td-tgldgap-value" class="banner-td-num" style="color:${col}">${val ? formatPercent(val.gap_pct) : '—'}</td>
@@ -1170,6 +1185,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             var tfPeriodCls = tfAbsP >= 0 ? 'change-positive' : 'change-negative';
 
             tblHtml += `<tr id="banner-row-total" class="banner-row-portfolio-total">
+            <td class="banner-td-vis"></td>
             <td class="banner-td-shares" data-hover-shares="__total">${shareBarsHtml(totalAssets)}</td>
             <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;white-space:nowrap;">T+F</td>
             <td id="banner-td-total-value" class="banner-td-num" style="color:#dcdcdc;font-weight:bold;white-space:nowrap;" title="Суммарный капитал по портфелям">${Math.round(tfCurrent).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
@@ -1186,6 +1202,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             const rowId = row.source;
             const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
             tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};" title="${row.label}">
+            ${visCell(row.label + ', ₽')}
             <td class="banner-td-shares" data-hover-shares="${row.source}">${shareBarsHtml(row.assets)}</td>
             <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + ':' + row.instrument) : row.marker}</td>
             <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
@@ -1270,6 +1287,15 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 } catch (e) { hideHoverPopup(); }
             });
             $(document).on('mouseout', '#invest_banner_table_content .banner-td-shares', hideHoverPopup);
+            $(document).on('change', '#invest_banner_table_content .banner-vis', function() {
+                var label = this.getAttribute('data-dataset');
+                if (!label) return;
+                try {
+                    if (window.InvestPlot && typeof InvestPlot.setDatasetVisible === 'function') {
+                        InvestPlot.setDatasetVisible(label, this.checked);
+                    }
+                } catch (e) { console.warn('[InvestBanner] vis toggle:', e); }
+            });
             window.addEventListener('scroll', hideHoverPopup, true);
         }
 

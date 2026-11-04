@@ -805,8 +805,8 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
-    /* 9 колонок (включая полосы долей) должны влезать в панель */
-    font-size: 2.7cqi;
+    /* 10 колонок (чекбокс + доли + метрики) должны влезать в панель */
+    font-size: 2.5cqi;
     margin: 2px 0;
 }
 
@@ -821,6 +821,23 @@ div#browser_reload.panel-dragging {
     width: 1%;
     white-space: nowrap;
     padding-right: 2px;
+}
+
+/* Столбец с чекбоксом видимости серии на графике */
+.invest-banner-host .banner-table .banner-td-vis {
+    width: 1%;
+    padding: 0 2px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.invest-banner-host .banner-td-vis input {
+    width: 12px;
+    height: 12px;
+    margin: 0;
+    accent-color: #2cba99;
+    cursor: pointer;
+    vertical-align: middle;
 }
 
 /* Первый столбец таблицы — индикаторы долей активов */
@@ -857,7 +874,7 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host [class*="banner-td-"] {
-    font-size: 2.6cqi;
+    font-size: 2.4cqi;
 }
 
 .invest-banner-host .banner-td-change {
