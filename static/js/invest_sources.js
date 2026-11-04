@@ -19,14 +19,13 @@
     var SOURCES = [
         // Порядок = порядок строк в баннере и колонок легенды.
         // marker — буква БРОКЕРА: T = Тинвест (все его счета), F = Финам.
-        // shortLabel — необязательная подпись для первой колонки таблицы
-        // (по умолчанию берётся крупнейший инструмент счёта).
-        { id: 'finam',   label: 'Finam',    marker: 'F', broker: 'finam',   colorKey: 'finam',     color: '#5b6ee8', axis: 'y_finam',     enabled: true },
+        // shortLabel — подпись в первой колонке таблицы; sep — разделитель.
+        { id: 'finam',   label: 'Finam',    marker: 'F', sep: '.', broker: 'finam',   colorKey: 'finam',     color: '#5b6ee8', axis: 'y_finam',     enabled: true, shortLabel: '2081076' },
+        { id: 'funit2',  label: 'Единый 2102939', marker: 'F', sep: '.', broker: 'finam', colorKey: 'funit2', color: '#7d5ed6', axis: 'y_funit2', enabled: true, shortLabel: '2102939' },
+        { id: 'funit',   label: 'Единый 800619',  marker: 'F', sep: '.', broker: 'finam', colorKey: 'funit',  color: '#c04ad0', axis: 'y_funit',  enabled: true, shortLabel: '800619' },
         { id: 'tinkoff', label: 'Tinkoff',  marker: 'T', broker: 'tinkoff', colorKey: 'portfolio', color: '#2cba99', axis: 'y_portfolio', enabled: true },
         { id: 'tdiv',    label: 'С5 TDIV',  marker: 'T', broker: 'tinkoff', colorKey: 'tdiv',      color: '#e8a33d', axis: 'y_tdiv',      enabled: true },
-        { id: 'trnd',    label: 'С3 TRND',  marker: 'T', broker: 'tinkoff', colorKey: 'trnd',      color: '#7b6bd6', axis: 'y_trnd',      enabled: true, shortLabel: 'C3 TRND' },
-        { id: 'funit',   label: 'Единый 800619',  marker: 'F', broker: 'finam', colorKey: 'funit',  color: '#c04ad0', axis: 'y_funit',  enabled: true, shortLabel: '800619' },
-        { id: 'funit2',  label: 'Единый 2102939', marker: 'F', broker: 'finam', colorKey: 'funit2', color: '#7d5ed6', axis: 'y_funit2', enabled: true, shortLabel: '2102939' }
+        { id: 'trnd',    label: 'С3 TRND',  marker: 'T', broker: 'tinkoff', colorKey: 'trnd',      color: '#7b6bd6', axis: 'y_trnd',      enabled: true, shortLabel: 'C3 TRND' }
     ];
 
     var byId = {};

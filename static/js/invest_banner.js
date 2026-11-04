@@ -986,6 +986,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             SOURCE_META[s.id] = {
                 label: s.label,
                 marker: s.marker || s.label.charAt(0),
+                sep: s.sep || ':',
                 color: (window.InvestSources && window.InvestSources.color)
                     ? window.InvestSources.color(s.id, s.color)
                     : (s.color || '#888'),
@@ -1027,6 +1028,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 source: src,
                 label: meta.label,
                 marker: meta.marker,
+                sep: meta.sep,
                 // Читаемая метка первой колонки: «F:TGLD», «D:TDIV» —
                 // маркер счёта + его крупнейший не-денежный инструмент.
                 instrument: topInstrument(latestPositions, src),
@@ -1098,7 +1100,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
             // 1..N — значения капитала
             portfolioRows.forEach(function(row) {
-                const lbl = row.instrument ? (row.marker + ':' + row.instrument) : row.label;
+                const lbl = row.instrument ? (row.marker + (row.sep || ':') + row.instrument) : row.label;
                 capHtml += `<div class="bcg-row">` +
                     `<span class="bcg-label" title="${row.label}" style="color:${row.color};">${lbl}</span>` +
                     `<span class="bcg-value" style="color:${row.color};">${formatCurrency(row.currentTotal)}</span>` +
@@ -1108,7 +1110,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             // N+1..2N — полосы активов
             portfolioRows.forEach(function(row) {
                 if (row.assets.length === 0) return;
-                const lbl = row.instrument ? (row.marker + ':' + row.instrument) : row.label;
+                const lbl = row.instrument ? (row.marker + (row.sep || ':') + row.instrument) : row.label;
                 capHtml += `<div class="bcg-row">` +
                     `<span class="bcg-label" title="${row.label}" style="color:${row.color};">${lbl}</span>` +
                     `<div class="bcg-bars"><div class="asset-bar-container">`;
@@ -1204,7 +1206,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};" title="${row.label}">
             ${visCell(row.label + ', ₽')}
             <td class="banner-td-shares" data-hover-shares="${row.source}">${shareBarsHtml(row.assets)}</td>
-            <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + ':' + row.instrument) : row.marker}</td>
+            <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + (row.sep || ':') + row.instrument) : row.marker}</td>
             <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-${rowId}-day-pct" class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
             <td id="banner-td-${rowId}-day-change" class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>

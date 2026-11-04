@@ -5,140 +5,157 @@
 
 const PANEL_CONFIG_DESKTOP = {
     "invest_panel": {
-        "top": "260px",
-        "left": "27px",
+        "top": "473px",
+        "left": "13px",
         "right": "",
         "bottom": "",
-        "width": "600px",
-        "height": "500px"
+        "width": "1485px",
+        "height": "517px",
+        "visible": true
     },
     "invest_banner_capital": {
-        "top": "191px",
-        "left": "5px",
+        "top": "185px",
+        "left": "615px",
         "right": "",
         "bottom": "",
-        "width": "448px",
-        "height": "120px"
+        "width": "416px",
+        "height": "259px",
+        "visible": true
     },
     "invest_banner_table": {
-        "top": "251px",
+        "top": "187px",
         "left": "5px",
         "right": "",
         "bottom": "",
-        "width": "448px",
-        "height": "135px"
+        "width": "605px",
+        "height": "284px",
+        "visible": true
     },
     "invest_banner_total": {
-        "top": "326px",
+        "top": "505px",
         "left": "5px",
         "right": "",
         "bottom": "",
         "width": "448px",
-        "height": "64px"
+        "height": "64px",
+        "visible": false
     },
     "weather_panel": {
-        "top": "193px",
-        "left": "579px",
+        "top": "5px",
+        "left": "1044px",
         "right": "",
         "bottom": "",
-        "width": "475px",
-        "height": "303px"
+        "width": "461px",
+        "height": "473px",
+        "visible": true
     },
     "battery_indicator_panel": {
-        "top": "5px",
-        "left": "907px",
+        "top": "8px",
+        "left": "1225px",
         "right": "",
         "bottom": "",
-        "width": "155px",
-        "height": "38px"
+        "width": "74px",
+        "height": "40px",
+        "visible": true
     },
     "battery_chart_panel": {
-        "top": "270px",
-        "left": "27px",
+        "top": "220px",
+        "left": "1072px",
         "right": "",
         "bottom": "",
         "width": "529px",
-        "height": "414px"
+        "height": "414px",
+        "visible": false
     },
     "press_humidity_temp_panel": {
-        "top": "508px",
-        "left": "580px",
+        "top": "13px",
+        "left": "553px",
         "right": "",
         "bottom": "",
-        "width": "469px",
-        "height": "172px"
+        "width": "225px",
+        "height": "107px",
+        "visible": true
     },
     "wind_cond_precip_panel": {
-        "top": "8px",
-        "left": "597px",
+        "top": "12px",
+        "left": "784px",
         "right": "",
         "bottom": "",
-        "width": "457px",
-        "height": "179px"
+        "width": "243px",
+        "height": "108px",
+        "visible": true
     },
     "sun_panel": {
         "top": "5px",
         "left": "6px",
         "right": "",
         "bottom": "",
-        "width": "492px",
-        "height": "58px"
-    },
-    "seconds_panel": {
-        "top": "5px",
-        "left": "390px",
-        "right": "",
-        "bottom": "",
-        "width": "73px",
-        "height": "75px"
+        "width": "348px",
+        "height": "30px",
+        "visible": true
     },
     "clock_panel": {
-        "top": "44px",
+        "top": "14px",
         "left": "5px",
         "right": "",
         "bottom": "",
         "width": "445px",
-        "height": "167px"
+        "height": "167px",
+        "visible": true
+    },
+    "seconds_panel": {
+        "top": "114px",
+        "left": "376px",
+        "right": "",
+        "bottom": "",
+        "width": "73px",
+        "height": "61px",
+        "visible": true
     },
     "date_panel": {
-        "top": "113px",
-        "left": "447px",
+        "top": "14px",
+        "left": "452px",
         "right": "",
         "bottom": "",
-        "width": "167px",
-        "height": "123px"
+        "width": "101px",
+        "height": "168px",
+        "visible": true
     },
     "moon_panel": {
-        "top": "11px",
-        "left": "504px",
+        "top": "16px",
+        "left": "382px",
         "right": "",
         "bottom": "",
-        "width": "200px",
-        "height": "200px"
+        "width": "68px",
+        "height": "63px",
+        "visible": true
     },
     "chart_control_panel": {
-        "top": "633px",
-        "left": "50px",
+        "top": "125px",
+        "left": "542px",
         "right": "",
         "bottom": "",
-        "width": "400px",
-        "height": "60px"
+        "width": "477px",
+        "height": "60px",
+        "visible": true
     },
     "browser_fullscreen": {
-        "top": "5vh",
-        "left": "1vw",
+        "top": "32px",
+        "left": "5px",
         "right": "",
         "bottom": "",
-        "width": "22vw",
-        "height": "22vh"
+        "width": "191px",
+        "height": "129px",
+        "visible": true
     },
     "browser_reload": {
-        "top": "5vh",
-        "left": "22vw",
+        "top": "32px",
+        "left": "188px",
         "right": "",
         "bottom": "",
-        "width": "22vw",
-        "height": "22vh"
+        "width": "192px",
+        "height": "134px",
+        "visible": true
     }
 };
 
