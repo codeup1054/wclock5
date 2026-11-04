@@ -902,6 +902,20 @@ div#browser_reload.panel-dragging {
     padding-left: 1px;
 }
 
+/* «Изменено» — лёгкий зелёный оттенок, чтобы отличать от «скачано»
+   и визуально разделять две соседние колонки с датами. */
+.invest-banner-host .banner-table .banner-td-stamp.banner-td-changed {
+    color: rgba(126, 214, 158, 0.75);
+}
+
+/* Узкая панель: 12 колонок с датами не влезают — жертвуем полосами долей
+   (2-я колонка), чтобы обе колонки «скачано/изменено» остались видны. */
+@container (max-width: 769px) {
+    .invest-banner-host .banner-table td:nth-child(2) {
+        display: none;
+    }
+}
+
 .invest-banner-host .banner-td-empty {
     min-width: 1px;
 }

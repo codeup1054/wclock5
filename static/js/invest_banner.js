@@ -800,9 +800,9 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         var f = key ? (block && block[key]) : block;
         var dl = f ? (Number(f.download_ts) || 0) : 0;
         var ch = f ? (Number(f.change_ts) || 0) : 0;
-        return '<td class="banner-td-stamp" title="Последнее скачивание: ' + formatStampFull(dl) + '">' +
+        return '<td class="banner-td-stamp banner-td-download" title="Последнее скачивание: ' + formatStampFull(dl) + '">' +
                    formatStamp(dl) + '</td>' +
-               '<td class="banner-td-stamp" title="Последнее изменение показателя: ' + formatStampFull(ch) + '">' +
+               '<td class="banner-td-stamp banner-td-changed" title="Последнее изменение показателя: ' + formatStampFull(ch) + '">' +
                    formatStamp(ch) + '</td>';
     }
 
