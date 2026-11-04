@@ -32,20 +32,42 @@ else:
     print(f"⚠️  Файл .env не найден: {dotenv_path}", flush=True)
 
 # === Конфигурация ===
-FINAM_SECRET = os.environ.get("FINAM_SECRET", "").strip()
-FINAM_ACCOUNT_ID = os.environ.get("FINAM_ACCOUNT_ID", "").strip()
-UPDATE_INTERVAL_SEC = int(os.environ.get("FINAM_UPDATE_INTERVAL_SEC", "60"))
+# Источник задаётся INVEST_SOURCE (id из parsers/invest/sources.json).
+# Для основного счёта это "finam" (переменные FINAM_*), для дополнительных —
+# свои префиксы, например FUNIT_SECRET / FUNIT_ACCOUNT_ID.
+SOURCE = (os.environ.get("INVEST_SOURCE") or "finam").strip().lower()
+
+def _load_source_registry():
+    path = os.path.join(os.path.dirname(__file__), "sources.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        for item in data.get("sources", []):
+            if item.get("id") == SOURCE:
+                return item
+    except (OSError, ValueError):
+        pass
+    return {}
+
+_SOURCE = _load_source_registry()
+SOURCE_LABEL = _SOURCE.get("label") or SOURCE.upper()
+_SECRET_ENV = _SOURCE.get("token_env") or f"{SOURCE.upper()}_SECRET"
+_ACCOUNT_ENV = _SOURCE.get("account_env") or f"{SOURCE.upper()}_ACCOUNT_ID"
+_INTERVAL_ENV = _SOURCE.get("interval_env") or f"{SOURCE.upper()}_UPDATE_INTERVAL_SEC"
+
+FINAM_SECRET = os.environ.get(_SECRET_ENV, "").strip()
+FINAM_ACCOUNT_ID = os.environ.get(_ACCOUNT_ENV, "").strip()
+UPDATE_INTERVAL_SEC = int(os.environ.get(_INTERVAL_ENV, "60"))
 
 FINAM_API_BASE = "https://api.finam.ru"
-SOURCE = "finam"
 JWT_TTL_SEC = 10 * 60  # JWT живёт 15 мин, обновляем раньше
 
-print("✅ Демон Finam запущен. Python версия:", sys.version, flush=True)
+print(f"✅ Демон Finam запущен ({SOURCE_LABEL}, source={SOURCE!r}). Python:", sys.version, flush=True)
 print(f"📁 Текущая директория: {__file__}", flush=True)
 print(f"⏱️ Период обновления данных: {UPDATE_INTERVAL_SEC} секунд", flush=True)
 
 if not FINAM_SECRET or not FINAM_ACCOUNT_ID:
-    print("❌ Ошибка: FINAM_SECRET и FINAM_ACCOUNT_ID должны быть заданы в переменных окружения!", flush=True)
+    print(f"❌ Ошибка: {_SECRET_ENV} и {_ACCOUNT_ENV} должны быть заданы в .env!", flush=True)
     sys.exit(1)
 
 # === Путь к БД — рядом с этим файлом ===

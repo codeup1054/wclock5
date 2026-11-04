@@ -25,6 +25,15 @@
       "token_env": "TRND_TOKEN",
       "account_env": "TRND_ACCOUNT_ID",
       "interval_env": "TRND_UPDATE_INTERVAL_SEC"
+    },
+    {
+      "id": "funit",
+      "label": "Единый счёт",
+      "broker": "finam",
+      "token_env": "FUNIT_SECRET",
+      "account_env": "FUNIT_ACCOUNT_ID",
+      "interval_env": "FUNIT_UPDATE_INTERVAL_SEC",
+      "daemon": "parsers/invest/finam_invest_daemon.py"
     }
   ]
 }

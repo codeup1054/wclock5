@@ -782,7 +782,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const weekClass = weekPct !== null ? (weekPct >= 0 ? 'change-positive' : 'change-negative') : '';
         const periodClass = periodPct !== null ? (periodPct >= 0 ? 'change-positive' : 'change-negative') : '';
 
-        const absStyle = 'opacity:0.2';
+        const absStyle = 'opacity:0.4';
         const assetId = label.toLowerCase();
         _hoverData.sparks[assetId] = { prices: t.prices || [], color: color };
         const rowCls = 'banner-row-asset ' + assetId;
@@ -815,7 +815,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         const cls = function(o) { return !o ? '' : (o.gap_pct >= 0 ? 'change-positive' : 'change-negative'); };
         const pct = function(o) { return o ? formatPercent(o.gap_pct) : '—'; };
         const abs = function(o) { return o ? formatTickerAbs(o.gap_abs) : '—'; };
-        const absStyle = 'opacity:0.2';
+        const absStyle = 'opacity:0.4';
         return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
             <td class="banner-td-shares"></td>
             <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
