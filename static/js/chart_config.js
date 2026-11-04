@@ -24,6 +24,7 @@
       tdiv: '#e8a33d',
       trnd: '#7b6bd6',
       funit: '#c04ad0',
+      funit2: '#7d5ed6',
       jumpUp: '#1fc163',
       jumpDown: '#e74c3c',
       jumpAvg: '#ffffff'
@@ -59,7 +60,8 @@
       { path: 'color.brent', label: 'Brent (нефть)', type: 'color' },
       { path: 'color.tdiv', label: 'С5 TDIV', type: 'color' },
       { path: 'color.trnd', label: 'С3 TRND', type: 'color' },
-      { path: 'color.funit', label: 'Единый счёт', type: 'color' }
+      { path: 'color.funit', label: 'Единый 800619', type: 'color' },
+      { path: 'color.funit2', label: 'Единый 2102939', type: 'color' }
     ]},
     { group: 'Метки периода', fields: [
       { path: 'font.badge', label: 'Шрифт бейджей, px', step: 1, min: 8, max: 30 }

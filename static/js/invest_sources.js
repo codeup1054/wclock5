@@ -25,7 +25,8 @@
         { id: 'tinkoff', label: 'Tinkoff',  marker: 'T', broker: 'tinkoff', colorKey: 'portfolio', color: '#2cba99', axis: 'y_portfolio', enabled: true },
         { id: 'tdiv',    label: 'С5 TDIV',  marker: 'T', broker: 'tinkoff', colorKey: 'tdiv',      color: '#e8a33d', axis: 'y_tdiv',      enabled: true },
         { id: 'trnd',    label: 'С3 TRND',  marker: 'T', broker: 'tinkoff', colorKey: 'trnd',      color: '#7b6bd6', axis: 'y_trnd',      enabled: true, shortLabel: 'C3 TRND' },
-        { id: 'funit',   label: 'Единый счёт', marker: 'F', broker: 'finam', colorKey: 'funit',    color: '#c04ad0', axis: 'y_funit',     enabled: true, shortLabel: 'Единый' }
+        { id: 'funit',   label: 'Единый 800619',  marker: 'F', broker: 'finam', colorKey: 'funit',  color: '#c04ad0', axis: 'y_funit',  enabled: true, shortLabel: '800619' },
+        { id: 'funit2',  label: 'Единый 2102939', marker: 'F', broker: 'finam', colorKey: 'funit2', color: '#7d5ed6', axis: 'y_funit2', enabled: true, shortLabel: '2102939' }
     ];
 
     var byId = {};

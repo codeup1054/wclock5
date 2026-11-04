@@ -28,11 +28,20 @@
     },
     {
       "id": "funit",
-      "label": "Единый счёт",
+      "label": "Единый 800619",
       "broker": "finam",
       "token_env": "FUNIT_SECRET",
       "account_env": "FUNIT_ACCOUNT_ID",
       "interval_env": "FUNIT_UPDATE_INTERVAL_SEC",
+      "daemon": "parsers/invest/finam_invest_daemon.py"
+    },
+    {
+      "id": "funit2",
+      "label": "Единый 2102939",
+      "broker": "finam",
+      "token_env": "FUNIT2_SECRET",
+      "account_env": "FUNIT2_ACCOUNT_ID",
+      "interval_env": "FUNIT2_UPDATE_INTERVAL_SEC",
       "daemon": "parsers/invest/finam_invest_daemon.py"
     }
   ]
