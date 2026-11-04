@@ -51,6 +51,11 @@
     <script src="{{ surl('js/index.js') }}"></script>
     <script src="{{ surl('js/panel_mediator.js') }}"></script>
 
+    <!-- Стартовая раскладка: зеркало profiles/default_PC.json
+         («Вариант 2 без капиталов»). Панели встают на места сразу,
+         профиль из JS затем перекрывает эти значения. -->
+    <style id="default-layout">{{ default_layout_css|safe }}</style>
+
 </head>
 <body>
 <div>

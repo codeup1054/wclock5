@@ -66,6 +66,42 @@ def surl(filename):
         v = 0
     return f"{url_for('static', filename=filename)}?v={v}"
 
+# Стартовая раскладка панелей — зеркало profiles/default_PC.json
+# («Вариант 2 без капиталов»). Нужна, чтобы HTML-шаблон отрисовывался
+# по эталонной раскладке сразу, не дожидаясь применения профиля в JS.
+DEFAULT_PROFILE_PATH = os.path.join(BASE_DIR, "profiles", "default_PC.json")
+_default_layout_cache = {"mtime": None, "css": ""}
+
+
+def default_layout_css():
+    """CSS-правила стартовой раскладки из profiles/default_PC.json."""
+    try:
+        mtime = os.stat(DEFAULT_PROFILE_PATH).st_mtime
+        if _default_layout_cache["mtime"] == mtime:
+            return _default_layout_cache["css"]
+        with open(DEFAULT_PROFILE_PATH, encoding="utf-8") as f:
+            snapshot = json.load(f)
+        panels = snapshot.get("panels") or {}
+        rules = []
+        for panel_id, pos in panels.items():
+            props = []
+            for key in ("left", "top", "width", "height"):
+                value = pos.get(key)
+                if value:
+                    props.append(f"{key}:{value}")
+            if pos.get("visible") is False:
+                props.append("display:none")
+            if props:
+                rules.append(f"    #{panel_id}{{{';'.join(props)}}}")
+        css = ""
+        if rules:
+            css = "@media (min-width: 1024px) {\n" + "\n".join(rules) + "\n}"
+        _default_layout_cache.update(mtime=mtime, css=css)
+        return css
+    except Exception as e:
+        print(f"⚠️ default layout: {e}")
+        return ""
+
 # ================================
 # Вспомогательные функции
 # ================================
@@ -1007,7 +1043,9 @@ def index():
     cookie_mode = request.cookies.get('wclock_mode', 'basic')
     
     show_invest = (key_param == VALID_KEY) or (cookie_mode == 'invest')
-    return render_template("index.html", show_invest=show_invest, PAGE_REВOAD_MIN=int(get_settings().get("PAGE_RELOAD_MIN", 4320)))
+    return render_template("index.html", show_invest=show_invest,
+                           default_layout_css=default_layout_css(),
+                           PAGE_REВOAD_MIN=int(get_settings().get("PAGE_RELOAD_MIN", 4320)))
 
 
 

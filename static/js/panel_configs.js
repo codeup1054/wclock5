@@ -14,20 +14,20 @@ const PANEL_CONFIG_DESKTOP = {
         "visible": true
     },
     "invest_banner_capital": {
-        "top": "185px",
-        "left": "615px",
+        "top": "180px",
+        "left": "638px",
         "right": "",
         "bottom": "",
-        "width": "416px",
-        "height": "259px",
-        "visible": true
+        "width": "411px",
+        "height": "265px",
+        "visible": false
     },
     "invest_banner_table": {
-        "top": "187px",
-        "left": "5px",
+        "top": "186px",
+        "left": "10px",
         "right": "",
         "bottom": "",
-        "width": "605px",
+        "width": "928px",
         "height": "284px",
         "visible": true
     },
@@ -42,20 +42,20 @@ const PANEL_CONFIG_DESKTOP = {
     },
     "weather_panel": {
         "top": "5px",
-        "left": "1044px",
+        "left": "1058px",
         "right": "",
         "bottom": "",
-        "width": "461px",
+        "width": "447px",
         "height": "473px",
         "visible": true
     },
     "battery_indicator_panel": {
-        "top": "8px",
-        "left": "1225px",
+        "top": "5px",
+        "left": "1397px",
         "right": "",
         "bottom": "",
-        "width": "74px",
-        "height": "40px",
+        "width": "76px",
+        "height": "30px",
         "visible": true
     },
     "battery_chart_panel": {
@@ -68,21 +68,21 @@ const PANEL_CONFIG_DESKTOP = {
         "visible": false
     },
     "press_humidity_temp_panel": {
-        "top": "13px",
-        "left": "553px",
+        "top": "12px",
+        "left": "544px",
         "right": "",
         "bottom": "",
-        "width": "225px",
+        "width": "259px",
         "height": "107px",
         "visible": true
     },
     "wind_cond_precip_panel": {
-        "top": "12px",
-        "left": "784px",
+        "top": "5px",
+        "left": "802px",
         "right": "",
         "bottom": "",
-        "width": "243px",
-        "height": "108px",
+        "width": "260px",
+        "height": "119px",
         "visible": true
     },
     "sun_panel": {
@@ -113,8 +113,8 @@ const PANEL_CONFIG_DESKTOP = {
         "visible": true
     },
     "date_panel": {
-        "top": "14px",
-        "left": "452px",
+        "top": "12px",
+        "left": "443px",
         "right": "",
         "bottom": "",
         "width": "101px",
@@ -131,12 +131,12 @@ const PANEL_CONFIG_DESKTOP = {
         "visible": true
     },
     "chart_control_panel": {
-        "top": "125px",
+        "top": "136px",
         "left": "542px",
         "right": "",
         "bottom": "",
         "width": "477px",
-        "height": "60px",
+        "height": "49px",
         "visible": true
     },
     "browser_fullscreen": {
