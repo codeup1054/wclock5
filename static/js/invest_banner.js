@@ -782,7 +782,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         $.getJSON('/api/invest/fx/sources?pair=' + encodeURIComponent('USD/RUB') + '&period=-7%20day&_=' + now)
             .done(function(d) {
                 _fxSources = (d && d.sources) ? d.sources : null;
-                if (_fxSources) { try { updateInvestBanner(); } catch (e) {} }
+                if (_fxSources) {
+                    try {
+                        if (window.InvestPlot && InvestPlot.setFxSources) InvestPlot.setFxSources(_fxSources);
+                    } catch (e) { /* нет графика — не критично */ }
+                    try { updateInvestBanner(); } catch (e) {}
+                }
             })
             .fail(function() { /* строки просто не появятся */ });
     }
@@ -790,9 +795,9 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     function renderFxSourceRows() {
         if (!_fxSources || !Object.keys(_fxSources).length) return '';
         var DEFS = [
-            { key: 'cbr',     label: 'USD ЦБ',    color: '#b8c4cc' },
-            { key: 'yahoo',   label: 'USD Yahoo', color: '#d0a000' },
-            { key: 'tinkoff', label: 'USD MOEX',  color: '#3ba3ff' }
+            { key: 'cbr',     label: 'USD ЦБ',    color: '#b8c4cc' },
+            { key: 'yahoo',   label: 'USD Yahoo', color: '#d0a000' },
+            { key: 'tinkoff', label: 'USD MOEX',  color: '#3ba3ff' }
         ];
         var html = '';
         var dayStart = new Date();
@@ -819,7 +824,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 def.color, 7);
 
             html += '<tr id="banner-row-' + id + '" class="banner-row-asset fx-source">' +
-                '<td class="banner-td-vis"></td>' +
+                visCell(def.label) +
                 '<td class="banner-td-shares">' + spark + '</td>' +
                 '<td class="banner-td-ticker" style="color:' + def.color + ';font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">' + def.label + '</td>' +
                 '<td class="banner-td-num" style="color:' + def.color + '">' + last.toFixed(4) + '</td>' +

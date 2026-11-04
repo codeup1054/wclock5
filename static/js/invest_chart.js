@@ -2136,6 +2136,8 @@ try {
 
                 // Load ticker data into chart
                 window.loadTickersToChart(investChart, aggregatedTimestamps);
+                // Серии курсов USD переживают пересборку датасетов
+                if (_fxSourcesCache) applyFxSources(_fxSourcesCache);
 
                 // Повторно применить скрытость серий из легенды: при регулярном
                 // обновлении стек-датасеты TGLD/TMON/LQDT пересоздаются, и их
@@ -2163,6 +2165,7 @@ try {
                     applyLegendState(investChart);
                     recomputePortfolioAxis(investChart);
                     window.loadTickersToChart(investChart, aggregatedTimestamps);
+                    if (_fxSourcesCache) applyFxSources(_fxSourcesCache);
                 }
             }
 
@@ -2947,6 +2950,55 @@ try {
 
     window.investPlotResize = resizeChartsThrottled;
 
+    // Серии курсов USD из разных источников (ЦБ / Yahoo / биржа) — линии на y_usd.
+    var _fxSourcesCache = null;
+    var FX_SOURCE_DEFS = [
+        { key: 'cbr',     label: 'USD ЦБ',    color: '#b8c4cc', dash: [4, 3] },
+        { key: 'yahoo',   label: 'USD Yahoo', color: '#d0a000', dash: [2, 2] },
+        { key: 'tinkoff', label: 'USD MOEX',  color: '#3ba3ff', dash: [] }
+    ];
+
+    function applyFxSources(sources) {
+        var chart = investChart;
+        if (!chart || !chart.data || !chart.data.timestamps) return;
+        var ts = chart.data.timestamps;
+        var legend = getLegendState();
+
+        FX_SOURCE_DEFS.forEach(function(def) {
+            var arr = (sources && sources[def.key]) || [];
+            var label = def.label;
+            var idx = -1;
+            for (var i = 0; i < chart.data.datasets.length; i++) {
+                if (chart.data.datasets[i].label === label) { idx = i; break; }
+            }
+            if (arr.length < 2) {
+                if (idx >= 0) chart.data.datasets.splice(idx, 1);
+                return;
+            }
+            var prices = arr.map(function(p) {
+                return { x: new Date(p.ts * 1000), y: p.close };
+            }).sort(function(a, b) { return a.x - b.x; });
+            var data = aggregateTickerPrices(prices, ts, 'last', window.currentInterval || 'hour');
+            var ds = {
+                label: label,
+                data: data,
+                borderColor: def.color,
+                borderWidth: dpiLine(ChartTheme.get('line.ticker')),
+                borderDash: def.dash,
+                tension: 0,
+                fill: false,
+                pointRadius: 0,
+                pointHoverRadius: 3,
+                spanGaps: false,
+                yAxisID: 'y_usd',
+                hidden: (legend[label] !== undefined) ? legend[label] === true : false
+            };
+            if (idx >= 0) chart.data.datasets[idx] = ds;
+            else chart.data.datasets.push(ds);
+        });
+        chart.update('none');
+    }
+
     window.InvestPlot = {
         update: function() {
             if (!window.InvestPlot.initialized) {
@@ -2973,6 +3025,12 @@ try {
         resize: resizeCharts,
         resizeNow: resizeChartsThrottled,
         registry: TICKER_REGISTRY,
+
+        // Курсы USD по источникам: три пунктирные линии на оси y_usd
+        setFxSources: function(sources) {
+            _fxSourcesCache = sources;
+            try { applyFxSources(sources); } catch (e) { console.warn('[InvestPlot] fx sources:', e); }
+        },
 
         // Видимость серии по её label — для чекбоксов в баннер-таблице.
         isDatasetVisible: function(label) {
