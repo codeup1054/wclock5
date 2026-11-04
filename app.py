@@ -729,6 +729,23 @@ def api_invest_capital():
 # === API для тикеров (TGLD@) ===
 TRACKED_TICKERS_DB_PATH = os.path.join(os.path.dirname(__file__), "parsers", "invest", "tracked_tickers.db")
 
+
+@app.route("/api/invest/freshness")
+def api_invest_freshness():
+    """Свежесть строк баннер-таблицы: скачано / изменено по каждому показателю."""
+    data = cached_invest("freshness", [INVEST_DB_PATH, TRACKED_TICKERS_DB_PATH], {},
+                         lambda: invest_repo.read_freshness(
+                             db_path=INVEST_DB_PATH,
+                             tickers_db_path=TRACKED_TICKERS_DB_PATH),
+                         ttl=15)
+    if isinstance(data, dict) and data.get("_error"):
+        return jsonify({"error": data["_error"]}), data.get("_error_code", 500)
+    resp = make_response(jsonify(data))
+    resp.cache_control.no_store = True
+    resp.cache_control.no_cache = True
+    resp.cache_control.must_revalidate = True
+    return resp
+
 # === Утренний гэп TGLD@ (close прошлой сессии → открытие утренней сессии) ===
 MORNING_GAP_FIGI = "TCS80A101X50"      # TGLD@
 MORNING_GAP_MARKER = "TGLD@"

@@ -773,6 +773,53 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     // === Курсы USD из разных источников (несколько строк в таблице) ===
     let _fxSources = null;
 
+    // Свежесть показателей: когда скачано и когда значение реально менялось.
+    let _freshness = null;
+    let _freshnessLoadedAt = 0;
+
+    function formatStamp(ts) {
+        if (!ts) return '—';
+        var d = new Date(ts * 1000);
+        if (isNaN(d.getTime())) return '—';
+        var p = function(n) { return (n < 10 ? '0' : '') + n; };
+        return p(d.getDate()) + '.' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    function formatStampFull(ts) {
+        if (!ts) return 'нет данных';
+        var d = new Date(ts * 1000);
+        if (isNaN(d.getTime())) return 'нет данных';
+        var p = function(n) { return (n < 10 ? '0' : '') + n; };
+        return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' ' +
+               p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+    }
+
+    // Две последние колонки строки: «скачано» и «изменено».
+    function freshnessCells(section, key) {
+        var block = _freshness && _freshness[section];
+        var f = key ? (block && block[key]) : block;
+        var dl = f ? (Number(f.download_ts) || 0) : 0;
+        var ch = f ? (Number(f.change_ts) || 0) : 0;
+        return '<td class="banner-td-stamp" title="Последнее скачивание: ' + formatStampFull(dl) + '">' +
+                   formatStamp(dl) + '</td>' +
+               '<td class="banner-td-stamp" title="Последнее изменение показателя: ' + formatStampFull(ch) + '">' +
+                   formatStamp(ch) + '</td>';
+    }
+
+    function refreshFreshness(force) {
+        var now = Date.now();
+        if (!force && (now - _freshnessLoadedAt) < 25 * 1000) return;
+        _freshnessLoadedAt = now;
+        $.getJSON('/api/invest/freshness?_=' + now)
+            .done(function(d) {
+                if (d && !d._error && !d.error) {
+                    _freshness = d;
+                    try { updateInvestBanner(); } catch (e) {}
+                }
+            })
+            .fail(function() { /* колонки останутся с прочерками */ });
+    }
+
     // Курсы грузим отдельно от истории: медиаторный путь рендера их не тянет.
     let _fxLoadedAt = 0;
     function refreshFxSources(force) {
@@ -834,6 +881,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 '<td class="banner-td-change" style="opacity:0.2">—</td>' +
                 '<td class="banner-td-pct ' + pcls + '">' + (periodPct >= 0 ? '+' : '') + periodPct.toFixed(2) + '%</td>' +
                 '<td class="banner-td-change ' + pcls + '" style="opacity:0.4">' + (last - arr[0].close >= 0 ? '+' : '') + (last - arr[0].close).toFixed(4) + '</td>' +
+                freshnessCells('fx', def.key) +
                 '</tr>';
         });
         return html;
@@ -880,6 +928,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             <td id="banner-td-${assetId}-week-change" class="banner-td-change ${weekClass}" style="${absStyle}">${weekAbs !== null ? formatTickerAbs(weekAbs) : '—'}</td>
             <td id="banner-td-${assetId}-period-pct" class="banner-td-pct ${periodClass}">${periodPct !== null ? formatPercent(periodPct) : '—'}</td>
             <td id="banner-td-${assetId}-period-change" class="banner-td-change ${periodClass}" style="${absStyle}">${periodAbs !== null ? formatTickerAbs(periodAbs) : '—'}</td>
+            ${freshnessCells('tickers', ticker)}
         </tr>`;
     }
 
@@ -910,6 +959,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             <td id="banner-td-tgldgap-week-change" class="banner-td-change ${cls(week)}" style="${absStyle}">${abs(week)}</td>
             <td id="banner-td-tgldgap-period-pct" class="banner-td-pct ${cls(period)}">${pct(period)}</td>
             <td id="banner-td-tgldgap-period-change" class="banner-td-change ${cls(period)}" style="${absStyle}">${abs(period)}</td>
+            ${freshnessCells('tickers', 'TGLD@')}
         </tr>`;
     }
 
@@ -1126,7 +1176,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             (turnoverData ? Object.keys(turnoverData).sort().map(k => k + ':' + (turnoverData[k].total || 0) + ':' + (turnoverData[k].commission || 0)).join(';') : ''),
             (tickersData ? Object.keys(tickersData).sort().map(k => { const t = tickersData[k]; return k + ':' + (t.current_price || 0) + ':' + (t.day_change_pct || 0); }).join(';') : ''),
             [themeColor('tgld', ''), themeColor('xau', ''), themeColor('usd', ''), themeColor('brent', '')].join(','),
-            rangeStartMs.toString()
+            rangeStartMs.toString(),
+            JSON.stringify(_freshness || null)
         ].join('|');
         if (hashBits === _lastBannerHash) {
             console.log('[InvestBanner] Данные не изменились — DOM пропущен');
@@ -1266,6 +1317,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             <td id="banner-td-total-week-pct" class="banner-td-pct ${tfWeekCls}">${formatPercent(tfPctW)}</td>
             <td id="banner-td-total-period-change" class="banner-td-change ${tfPeriodCls}">${formatChange(tfAbsP)}</td>
             <td id="banner-td-total-period-pct" class="banner-td-pct ${tfPeriodCls}">${formatPercent(tfPctP)}</td>
+            ${freshnessCells('total')}
         </tr>`;
         }
 
@@ -1283,6 +1335,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             <td id="banner-td-${rowId}-week-change" class="banner-td-change ${row.weekChangeClass}">${formatChange(row.absChangeWeek)}</td>
             <td id="banner-td-${rowId}-period-pct" class="banner-td-pct ${row.periodChangeClass}">${formatPercent(row.pctChangePeriod)}</td>
             <td id="banner-td-${rowId}-period-change" class="banner-td-change ${row.periodChangeClass}">${formatChange(row.absChangePeriod)}</td>
+            ${freshnessCells('portfolio', row.source)}
         </tr>`;
         });
 
@@ -1552,12 +1605,15 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     window.InvestBanner = {
         update: updateInvestBanner,
         renderFromData: renderFromData,
-        refreshFxSources: refreshFxSources
+        refreshFxSources: refreshFxSources,
+        refreshFreshness: refreshFreshness
     };
 
     $(document).ready(function() {
         setTimeout(function() { refreshFxSources(true); }, 1200);
+        setTimeout(function() { refreshFreshness(true); }, 1600);
         setInterval(function() { refreshFxSources(false); }, 60 * 1000);
+        setInterval(function() { refreshFreshness(false); }, 30 * 1000);
     });
 
 })(jQuery);

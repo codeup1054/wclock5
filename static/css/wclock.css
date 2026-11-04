@@ -715,7 +715,8 @@ div#browser_reload.panel-dragging {
     top: 0;
     left: 0;
     width: 100%;
-    padding: 1px 1px;
+    /* справа 4px: последние колонки («скачано/изменено») не упираются в рамку */
+    padding: 1px 4px 1px 1px;
     box-sizing: border-box;
     font-family: helvetica, arial, sans-serif;
     font-size: 15px;
@@ -805,8 +806,9 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
-    /* 10 колонок (чекбокс + доли + метрики) должны влезать в панель */
-    font-size: 2.5cqi;
+    /* 12 колонок (чекбокс + доли + метрики + «скачано/изменено»)
+       должны влезать в панель без обрезки справа */
+    font-size: 2.05cqi;
     margin: 2px 0;
 }
 
@@ -843,8 +845,8 @@ div#browser_reload.panel-dragging {
 /* Первый столбец таблицы — индикаторы долей активов */
 .invest-banner-host .banner-table .banner-td-shares {
     /* доля от ширины таблицы — не распирает её фиксированными px */
-    width: 24%;
-    min-width: 96px;
+    width: 20%;
+    min-width: 50px;
     padding: 0 2px 0 0;
 }
 
@@ -888,6 +890,16 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .banner-td-pct {
     min-width: 4.6cqi;
+}
+
+/* Последние две колонки: «скачано» и «изменено» (дата + время).
+   Мельче чисел, иначе 12 колонок перестают влезать в панель. */
+.invest-banner-host .banner-table .banner-td-stamp {
+    font-size: 1.18cqi;
+    color: rgba(214, 232, 245, 0.55);
+    white-space: nowrap;
+    min-width: 3.3cqi;
+    padding-left: 1px;
 }
 
 .invest-banner-host .banner-td-empty {

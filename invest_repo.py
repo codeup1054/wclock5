@@ -1577,3 +1577,170 @@ def read_fx(pair="USD/RUB", period="-7 day", interval="hour", bucket_size=None, 
         return {"pair": pair, "interval": interval, "prices": out}
     except Exception as e:
         return {"_error": str(e), "_error_code": 500}
+
+# ================================================================
+# Свежесть строк баннер-таблицы
+# ================================================================
+
+def read_freshness(fx_pair="USD/RUB", days=30, db_path=None, tickers_db_path=None):
+    """Когда показатель скачан и когда он последний раз менялся.
+
+    Колонки «дата и время» в баннер-таблице:
+      download_ts — время последней записи данных (последний снапшот/котировка),
+      change_ts   — время последнего фактического изменения значения
+                    (соседние одинаковые значения не считаются).
+
+    Возвращает:
+      {
+        "portfolio": {source: {download_ts, change_ts}},
+        "total":     {download_ts, change_ts},          # сумма всех счетов
+        "tickers":   {ticker: {download_ts, change_ts}}, # TGLD@, XAU/USD, ...
+        "fx":        {source: {download_ts, change_ts}}  # cbr / yahoo / tinkoff
+      }
+    """
+    out = {"portfolio": {}, "total": {"download_ts": 0, "change_ts": 0},
+           "tickers": {}, "fx": {}}
+    cutoff = int(now_dt().timestamp()) - int(days) * 86400
+
+    # --- Портфели: снапшоты позиций + история итогов ---
+    if os.path.exists(db_path or DB_PATH):
+        try:
+            conn = connect(db_path or DB_PATH)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                SELECT source, ts_epoch, total_value
+                FROM portfolio_history
+                WHERE ts_epoch >= ?
+                ORDER BY ts_epoch ASC
+            """, (cutoff,)).fetchall()
+            pos_rows = conn.execute("""
+                SELECT source, MAX(ts_epoch) AS e
+                FROM portfolio_positions
+                GROUP BY source
+            """).fetchall()
+            conn.close()
+
+            pos_ts = {(r["source"] or "tinkoff"): int(r["e"] or 0) for r in pos_rows}
+            per_source, events = {}, []
+            for r in rows:
+                src = r["source"] or "tinkoff"
+                ts = int(r["ts_epoch"] or 0)
+                val = round(float(r["total_value"] or 0), 2)
+                if not ts:
+                    continue
+                per_source.setdefault(src, []).append((ts, val))
+                events.append((ts, src, val))
+
+            for src, series in per_source.items():
+                change_ts = series[0][0]
+                for i in range(1, len(series)):
+                    if series[i][1] != series[i - 1][1]:
+                        change_ts = series[i][0]
+                out["portfolio"][src] = {
+                    "download_ts": max(pos_ts.get(src, 0), series[-1][0]),
+                    "change_ts": change_ts,
+                }
+            # Портфель со снапшотами, но без истории в окне
+            for src, ts in pos_ts.items():
+                out["portfolio"].setdefault(src, {"download_ts": ts, "change_ts": ts})
+
+            # --- Итог T+F: последний снапшот и последнее изменение суммы ---
+            events.sort(key=lambda e: e[0])
+            last_val, prev_sum, total_change = {}, None, (events[0][0] if events else 0)
+            for ts, src, val in events:
+                last_val[src] = val
+                cur_sum = round(sum(last_val.values()), 2)
+                if prev_sum is None or cur_sum != prev_sum:
+                    total_change = ts
+                prev_sum = cur_sum
+            out["total"] = {
+                "download_ts": max(pos_ts.values()) if pos_ts else (events[-1][0] if events else 0),
+                "change_ts": total_change,
+            }
+        except Exception as e:
+            out["portfolio"]["_error"] = str(e)
+
+    # --- Тикеры: последняя котировка и последнее изменение цены ---
+    if os.path.exists(tickers_db_path or TICKERS_DB_PATH):
+        try:
+            conn = connect(tickers_db_path or TICKERS_DB_PATH)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute("""
+                WITH t AS (
+                    SELECT figi, ts_epoch, price,
+                           LAG(price) OVER (PARTITION BY figi ORDER BY ts_epoch) AS prev_price
+                    FROM last_prices
+                    WHERE ts_epoch >= ?
+                ),
+                agg AS (
+                    SELECT figi,
+                           MAX(ts_epoch) AS download_ts,
+                           MIN(ts_epoch) AS first_ts,
+                           MAX(CASE WHEN prev_price IS NOT NULL AND price != prev_price
+                                    THEN ts_epoch END) AS change_ts
+                    FROM t GROUP BY figi
+                )
+                SELECT a.figi, a.download_ts, a.first_ts, a.change_ts,
+                       (SELECT p.ticker FROM last_prices p
+                        WHERE p.figi = a.figi ORDER BY p.ts_epoch DESC LIMIT 1) AS ticker
+                FROM agg a
+            """, (cutoff,)).fetchall()
+            conn.close()
+            for r in rows:
+                ticker = r["ticker"] or r["figi"]
+                out["tickers"][ticker] = {
+                    "download_ts": int(r["download_ts"] or 0),
+                    # не менялось в окне → «с какого момента держится значение»
+                    "change_ts": int(r["change_ts"] or r["first_ts"] or r["download_ts"] or 0),
+                }
+        except Exception as e:
+            out["tickers"]["_error"] = str(e)
+
+    # --- Курсы USD по источникам ---
+    if os.path.exists(db_path or DB_PATH):
+        try:
+            conn = connect(db_path or DB_PATH)
+            conn.row_factory = sqlite3.Row
+            has_fx = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='fx_rates'"
+            ).fetchone() is not None
+            if has_fx:
+                # fetched_ts — когда котировка реально появилась у нас. У ЦБ
+                # ts_epoch — время публикации (11:30 МСК), может быть в будущем.
+                cols = [c[1] for c in conn.execute("PRAGMA table_info(fx_rates)").fetchall()]
+                has_fetched = "fetched_ts" in cols
+                fx_ts_expr = "COALESCE(fetched_ts, ts_epoch)" if has_fetched else "ts_epoch"
+                rows = conn.execute(f"""
+                    WITH f AS (
+                        SELECT source, ts_epoch, close, {fx_ts_expr} AS fx_ts,
+                               LAG(close) OVER (PARTITION BY source ORDER BY ts_epoch) AS prev_close
+                        FROM fx_rates
+                        WHERE pair=? AND ts_epoch >= ?
+                    )
+                    SELECT source,
+                           MAX(ts_epoch) AS data_ts,
+                           MIN(ts_epoch) AS first_ts,
+                           MAX(fx_ts) AS fetched_ts,
+                           MAX(CASE WHEN prev_close IS NOT NULL AND close != prev_close
+                                    THEN ts_epoch END) AS change_ts,
+                           MAX(CASE WHEN prev_close IS NOT NULL AND close != prev_close
+                                    THEN fx_ts END) AS change_fetched_ts
+                    FROM f GROUP BY source
+                """, (fx_pair, cutoff)).fetchall()
+                for r in rows:
+                    src = r["source"] or "tinkoff"
+                    data_ts = int(r["data_ts"] or 0)
+                    download_ts = int(r["fetched_ts"] or data_ts)
+                    change_ts = int(r["change_ts"] or r["first_ts"] or data_ts)
+                    # Котировка с будущей датой: «изменено» = когда она появилась.
+                    if change_ts > download_ts:
+                        change_ts = int(r["change_fetched_ts"] or download_ts)
+                    out["fx"][src] = {
+                        "download_ts": download_ts,
+                        "change_ts": change_ts,
+                    }
+            conn.close()
+        except Exception as e:
+            out["fx"]["_error"] = str(e)
+
+    return out

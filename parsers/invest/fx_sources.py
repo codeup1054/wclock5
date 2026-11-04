@@ -48,9 +48,16 @@ def _ensure(conn):
             close REAL NOT NULL,
             bid REAL,
             ask REAL,
+            fetched_ts INTEGER,
             UNIQUE(ts_epoch, pair, source)
         )
     """)
+    # Время фактического скачивания (ts_epoch — время самих данных; у ЦБ оно
+    # может быть в будущем: курс публикуется на 11:30 МСК).
+    try:
+        conn.execute("ALTER TABLE fx_rates ADD COLUMN fetched_ts INTEGER")
+    except sqlite3.OperationalError:
+        pass
     conn.execute("CREATE INDEX IF NOT EXISTS idx_fx_rates_ts_pair ON fx_rates(ts_epoch, pair, source)")
 
 
@@ -62,8 +69,8 @@ def _upsert(conn, rows, source):
         if not close or close <= 0:
             continue
         cur.execute("""
-            INSERT INTO fx_rates (timestamp, ts_epoch, pair, source, close)
-            VALUES (datetime(?, 'unixepoch'), ?, ?, ?, ?)
+            INSERT INTO fx_rates (timestamp, ts_epoch, pair, source, close, fetched_ts)
+            VALUES (datetime(?, 'unixepoch'), ?, ?, ?, ?, strftime('%s','now'))
             ON CONFLICT(ts_epoch, pair, source) DO UPDATE SET close = excluded.close
         """, (ts, ts, PAIR, source, round(float(close), 4)))
         n += 1
@@ -87,8 +94,19 @@ def fetch_cbr(days=3):
             value = usd.get("Value")
             if not value:
                 continue
-            # Курс публикуется 11:30 МСК и действует со следующего дня
-            pub = datetime(day.year, day.month, day.day, 11, 30, tzinfo=timezone(timedelta(hours=3)))
+            # Время публикации берём из самого ответа ЦБ (поле Date): до 11:30 МСК
+            # daily_json ещё отдаёт ВЧЕРАШНИЙ курс, и «сегодня 11:30» давало
+            # точку в будущем. Фолбэк — расчётные 11:30 МСК.
+            pub = None
+            raw_date = data.get("Date")
+            if raw_date:
+                try:
+                    pub = datetime.fromisoformat(str(raw_date).replace("Z", "+00:00"))
+                except ValueError:
+                    pub = None
+            if pub is None:
+                pub = datetime(day.year, day.month, day.day, 11, 30,
+                               tzinfo=timezone(timedelta(hours=3)))
             rows.append((int(pub.timestamp()), float(value)))
         except Exception as e:
             print(f"  cbr {day}: {type(e).__name__} {str(e)[:60]}", flush=True)
