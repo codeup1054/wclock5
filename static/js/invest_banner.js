@@ -770,6 +770,70 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             `</table>`;
     }
 
+    // === Курсы USD из разных источников (несколько строк в таблице) ===
+    let _fxSources = null;
+
+    // Курсы грузим отдельно от истории: медиаторный путь рендера их не тянет.
+    let _fxLoadedAt = 0;
+    function refreshFxSources(force) {
+        var now = Date.now();
+        if (!force && (now - _fxLoadedAt) < 5 * 60 * 1000) return;
+        _fxLoadedAt = now;
+        $.getJSON('/api/invest/fx/sources?pair=' + encodeURIComponent('USD/RUB') + '&period=-7%20day&_=' + now)
+            .done(function(d) {
+                _fxSources = (d && d.sources) ? d.sources : null;
+                if (_fxSources) { try { updateInvestBanner(); } catch (e) {} }
+            })
+            .fail(function() { /* строки просто не появятся */ });
+    }
+
+    function renderFxSourceRows() {
+        if (!_fxSources || !Object.keys(_fxSources).length) return '';
+        var DEFS = [
+            { key: 'cbr',     label: 'USD ЦБ',    color: '#b8c4cc' },
+            { key: 'yahoo',   label: 'USD Yahoo', color: '#d0a000' },
+            { key: 'tinkoff', label: 'USD MOEX',  color: '#3ba3ff' }
+        ];
+        var html = '';
+        var dayStart = new Date();
+        dayStart.setHours(0, 0, 0, 0);
+        var dayStartTs = Math.floor(dayStart.getTime() / 1000);
+
+        DEFS.forEach(function (def) {
+            var arr = _fxSources[def.key];
+            if (!Array.isArray(arr) || arr.length < 2) return;
+            var last = arr[arr.length - 1].close;
+            // Дневное изменение = последняя точка vs закрытие предыдущего дня
+            var base = arr[0].close;
+            for (var i = arr.length - 1; i >= 0; i--) {
+                if (arr[i].ts < dayStartTs) { base = arr[i].close; break; }
+            }
+            var dayAbs = last - base;
+            var dayPct = base ? (dayAbs / base * 100) : 0;
+            var periodPct = arr[0].close ? ((last - arr[0].close) / arr[0].close * 100) : 0;
+            var cls = dayAbs >= 0 ? 'change-positive' : 'change-negative';
+            var pcls = periodPct >= 0 ? 'change-positive' : 'change-negative';
+            var id = 'fx-' + def.key;
+            var spark = sparklineSvg(
+                arr.map(function (p) { return { timestamp: new Date(p.ts * 1000).toISOString(), price: p.close }; }),
+                def.color, 7);
+
+            html += '<tr id="banner-row-' + id + '" class="banner-row-asset fx-source">' +
+                '<td class="banner-td-vis"></td>' +
+                '<td class="banner-td-shares">' + spark + '</td>' +
+                '<td class="banner-td-ticker" style="color:' + def.color + ';font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">' + def.label + '</td>' +
+                '<td class="banner-td-num" style="color:' + def.color + '">' + last.toFixed(4) + '</td>' +
+                '<td class="banner-td-pct ' + cls + '">' + (dayPct >= 0 ? '+' : '') + dayPct.toFixed(2) + '%</td>' +
+                '<td class="banner-td-change ' + cls + '" style="opacity:0.4">' + (dayAbs >= 0 ? '+' : '') + dayAbs.toFixed(4) + '</td>' +
+                '<td class="banner-td-pct" style="opacity:0.5">—</td>' +
+                '<td class="banner-td-change" style="opacity:0.2">—</td>' +
+                '<td class="banner-td-pct ' + pcls + '">' + (periodPct >= 0 ? '+' : '') + periodPct.toFixed(2) + '%</td>' +
+                '<td class="banner-td-change ' + pcls + '" style="opacity:0.4">' + (last - arr[0].close >= 0 ? '+' : '') + (last - arr[0].close).toFixed(4) + '</td>' +
+                '</tr>';
+        });
+        return html;
+    }
+
     function renderAssetRow(ticker, color, label) {
         const t = tickersData[ticker] || lastTickersData[ticker];
         if (!t) return '';           // данных нет — строку не рисуем (доедут из первого полного опроса)
@@ -1220,6 +1284,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         tblHtml += renderAssetRow('TGLD@', themeColor('tgld', COLORS.tgold), 'TGLD');
         tblHtml += renderAssetRow('XAU/USD', themeColor('xau', '#cc7722'), 'XAU');
         tblHtml += renderAssetRow('USD/RUB', themeColor('usd', '#3ba3ff'), 'USD');
+        tblHtml += renderFxSourceRows();
         tblHtml += renderAssetRow('Brent', themeColor('brent', '#556B2F'), 'Brent');
         tblHtml += renderMorningGapRow();
 
@@ -1481,7 +1546,13 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     window.InvestBanner = {
         update: updateInvestBanner,
-        renderFromData: renderFromData
+        renderFromData: renderFromData,
+        refreshFxSources: refreshFxSources
     };
+
+    $(document).ready(function() {
+        setTimeout(function() { refreshFxSources(true); }, 1200);
+        setInterval(function() { refreshFxSources(false); }, 60 * 1000);
+    });
 
 })(jQuery);

@@ -1491,6 +1491,43 @@ def upsert_fx_rate(ts_epoch, pair="USD/RUB", close=None, bid=None, ask=None, sou
         return False
 
 
+def read_fx_sources(pair="USD/RUB", period="-2 day", db_path=None):
+    """Курсы по каждому источнику отдельно: {source: [ {ts, close} ]}.
+
+    Нужно для нескольких строк USD в баннер-таблице (ЦБ / Yahoo / биржа).
+    """
+    if not os.path.exists(db_path or DB_PATH):
+        return {"_error": "Invest DB not found", "_error_code": 404}
+    try:
+        cutoff = cutoff_epoch(period)
+        conn = connect(db_path or DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        has_fx = cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='fx_rates'"
+        ).fetchone() is not None
+        if not has_fx:
+            conn.close()
+            return {"pair": pair, "sources": {}}
+        rows = cur.execute("""
+            SELECT source, ts_epoch, close
+            FROM fx_rates
+            WHERE pair=? AND ts_epoch >= ?
+            ORDER BY ts_epoch ASC
+        """, (pair, cutoff)).fetchall()
+        conn.close()
+        out = {}
+        for r in rows:
+            src = r["source"] or "tinkoff"
+            out.setdefault(src, []).append({
+                "ts": int(r["ts_epoch"]),
+                "close": round(float(r["close"]), 4),
+            })
+        return {"pair": pair, "sources": out}
+    except Exception as e:
+        return {"_error": str(e), "_error_code": 500}
+
+
 def read_fx(pair="USD/RUB", period="-7 day", interval="hour", bucket_size=None, db_path=None):
     if not os.path.exists(db_path or DB_PATH):
         return {"_error": "Invest DB not found", "_error_code": 404}

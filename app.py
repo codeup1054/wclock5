@@ -807,6 +807,20 @@ def _morning_gap_from_rows(rows, figi=MORNING_GAP_FIGI):
             "horizons": _morning_gap_horizons(days),
             "summary": _morning_gap_summary(days)}
 
+@app.route("/api/invest/fx/sources")
+def api_invest_fx_sources():
+    """Курсы USD/RUB по источникам (cbr / yahoo / tinkoff) — строки в баннере."""
+    pair = request.args.get('pair', 'USD/RUB')
+    period = request.args.get('period', '-2 day')
+    try:
+        data = invest_repo.read_fx_sources(pair=pair, period=period, db_path=INVEST_DB_PATH)
+        if isinstance(data, dict) and data.get("_error"):
+            return jsonify(data), data.get("_error_code", 500)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"_error": str(e), "_error_code": 500}), 500
+
+
 @app.route("/api/invest/ticker/<ticker>")
 @app.route("/api/invest/ticker/<base>/<quote>")
 def api_invest_ticker(ticker=None, base=None, quote=None):

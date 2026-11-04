@@ -108,6 +108,19 @@ services:
       - ./invest_repo.py:/app/invest_repo.py
       - ./invest_portfolio.db:/app/invest_portfolio.db
 
+  fx-sources-parser:
+    build: .
+    image: ${DOCKER_PREFIX:-wclock5}-inv
+    container_name: ${DOCKER_PREFIX:-wclock5}-fx-sources
+    command: sh -c "while true; do python parsers/invest/fx_sources.py --days 3; sleep 900; done"
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - wclock-net
+    volumes:
+      - ./parsers/invest:/app/parsers/invest
+
   tickers-parser:
     build: .
     image: ${DOCKER_PREFIX:-wclock5}-tickers
