@@ -337,7 +337,7 @@ bash sh/deploy_js.sh [file]
 | `#sun_panel` | `#sun` flex 100%, `#sunrise/#daylight/#sunset` | `10cqi` | ✅ |
 | `#date_panel` | `#day`, `#month`, `#weekday` | `60/25/32cqi` | ✅ |
 | `#invest_banner_capital` | `.banner-capital-line`, `.banner-turnover-block` | `13cqi` / `4.0cqi` (настр.) | ✅ |
-| `#invest_banner_table` | `[class*="banner-td-"]` | `2.7cqi` (настр.) | ✅ |
+| `#invest_banner_table` | `[class*="banner-td-"]` | таблица `2.05cqi`, даты `1.18cqi` | ✅ |
 | `#invest_banner_total` | `.banner-total-only` | `12.5cqi` | ✅ |
 | `#wind_cond_precip_panel` | иконки `img[id*=condition]`, стрелки `div[id*='_wind_dir_a']`, скорости/направления/осадки | иконки `min(22cqi,44cqh)`, шрифт `min(16cqi,36cqh)` (`container-type: size`) | ✅ |
 | `#press_humidity_temp_panel` | давление/влажность/темп/feels_like (плоская сетка 2×4, `#temp` → `display: contents`) | колонки `1fr 1fr 1fr 0.5fr`, шрифт `min(22cqi,46cqh)`, `feels_like` ×0.7 (`container-type: size`) | ✅ |
@@ -390,6 +390,25 @@ bash sh/deploy_js.sh [file]
 | `day` | 120 мин | `#f44336` |
 
 Формат: `⚠ HH:MM (N мин)` — красный, жирный. Если свежий — `✓ HH:MM` — серый.
+
+### 7.4 Колонки «скачано / изменено» в баннер-таблице
+
+Код: `invest_repo.read_freshness()` + `GET /api/invest/freshness`,
+`static/js/invest_banner.js::freshnessCells()`.
+
+| Аспект | Правило |
+|--------|---------|
+| Формат значения | `dd.MM HH:mm` (локальное время); в `title` — `dd.MM.yyyy HH:mm:ss` |
+| «Скачано» | время последней записи/котировки показателя |
+| «Изменено» | последний момент, когда значение отличалось от предыдущего; равные подряд не считаются |
+| Источник времени | `fx_rates.fetched_ts` (когда котировка реально появилась), иначе `ts_epoch`; у ЦБ публикация 11:30 МСК может быть позже факта |
+| Цвета | скачано `rgba(214,232,245,.55)`, изменено `rgba(126,214,158,.75)` — визуально разделяет соседние колонки |
+| Вёрстка | таблица `2.05cqi`, даты `1.18cqi`, правый отступ `.invest-banner-host` 4px |
+| Узкая панель | `@container (max-width: 769px)` → скрыть 2-ю колонку (полосы долей), иначе даты уезжают за рамку |
+| Проверка | у двух последних ячеек `scrollWidth == clientWidth`; зазор до рамки ≥ 3px |
+
+Строки таблицы: счета, T+F, TGLD/XAU/USD/Brent, три USD-источника, Gap.
+Эталон: `static/js/invest_banner.js`, `static/css/wclock.css` (`.banner-td-stamp`).
 
 ## 8. Минутные свечи: слой portfolio_min
 
@@ -615,6 +634,10 @@ finam-портфеля — единицы процентов; 42%-й прова�
 ## Лист изменений
 
 Версии `X.Y`. Новые записи — сверху.
+
+- **0.12** · 2026-11-04 — §6/§7.4: баннер-таблица 12 колонок, даты
+  «скачано/изменено» (`GET /api/invest/freshness`, `fetched_ts` у ЦБ),
+  зелёный оттенок «изменено», `@container (max-width: 769px)` для узких панелей.
 
 - **0.11** · 2026-11-03 — §14 профили настроек: файл `profiles/<name>.json`
   (panels + panel_profiles + theme + settings + user_settings), API
