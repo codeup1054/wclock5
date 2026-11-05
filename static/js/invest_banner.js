@@ -572,6 +572,28 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             'stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>';
     }
 
+    // Микрографик по истории портфеля: сумма по source (или по всем
+    // источникам, если source не задан) в пределах выбранного диапазона.
+    function sparklineFromHistory(history, timestamps, source, startMs, color) {
+        var prices = [];
+        for (var i = 0; i < timestamps.length; i++) {
+            var ts = timestamps[i];
+            if (new Date(ts).getTime() < startMs) continue;
+            var entry = history[ts];
+            if (!Array.isArray(entry)) continue;
+            var v = source
+                ? sumEntryBySource(entry, source)
+                : entry.reduce(function(sum, p) {
+                    var val = Number(p && p.value);
+                    return sum + (isNaN(val) ? 0 : val);
+                }, 0);
+            if (v > 0) prices.push({ timestamp: ts, price: v });
+        }
+        if (prices.length < 2) return { prices: prices, svg: '' };
+        var days = Math.max(1, Math.ceil((Date.now() - startMs) / 86400000) + 1);
+        return { prices: prices, svg: sparklineSvg(prices, color, days) };
+    }
+
     // Чекбокс видимости серии на графике (синхрон с легендой).
     function visCell(datasetLabel) {
         if (!datasetLabel) return '<td class="banner-td-vis"></td>';
@@ -841,10 +863,10 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     function renderFxSourceRows() {
         if (!_fxSources || !Object.keys(_fxSources).length) return '';
+        // В таблице достаточно двух строк USD: «USD» (T-Invest) и «USD Yahoo».
+        // ЦБ и MOEX дублируют друг друга, их ряды остаются только на графике.
         var DEFS = [
-            { key: 'cbr',     label: 'USD ЦБ',    color: '#b8c4cc' },
-            { key: 'yahoo',   label: 'USD Yahoo', color: '#d0a000' },
-            { key: 'tinkoff', label: 'USD MOEX',  color: '#3ba3ff' }
+            { key: 'yahoo', label: 'USD Yahoo', color: '#d0a000' }
         ];
         var html = '';
         var dayStart = new Date();
@@ -873,7 +895,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             html += '<tr id="banner-row-' + id + '" class="banner-row-asset fx-source">' +
                 visCell(def.label) +
                 '<td class="banner-td-shares">' + spark + '</td>' +
-                '<td class="banner-td-ticker" style="color:' + def.color + ';font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">' + def.label + '</td>' +
+                '<td class="banner-td-ticker" style="color:' + def.color + ';font-size:1.9cqi;font-weight:bold;text-align:left;white-space:nowrap;">' + def.label + '</td>' +
                 '<td class="banner-td-num" style="color:' + def.color + '">' + last.toFixed(4) + '</td>' +
                 '<td class="banner-td-pct ' + cls + '">' + (dayPct >= 0 ? '+' : '') + dayPct.toFixed(2) + '%</td>' +
                 '<td class="banner-td-change ' + cls + '" style="opacity:0.4">' + (dayAbs >= 0 ? '+' : '') + dayAbs.toFixed(4) + '</td>' +
@@ -920,7 +942,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return `<tr id="banner-row-${assetId}" class="${rowCls}">
             ${visCell(label)}
             <td class="banner-td-shares" data-hover-spark="${assetId}">${sparklineSvg(t.prices, color, 7)}</td>
-            <td id="banner-td-${assetId}-marker" class="banner-td-ticker" style="color:${color};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">${label}</td>
+            <td id="banner-td-${assetId}-marker" class="banner-td-ticker" style="color:${color};font-size:1.9cqi;font-weight:bold;text-align:left;white-space:nowrap;">${label}</td>
             <td id="banner-td-${assetId}-value" class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
             <td id="banner-td-${assetId}-day-pct" class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
             <td id="banner-td-${assetId}-day-change" class="banner-td-change ${dayClass}" style="${absStyle}">${formatTickerAbs(dayAbs)}</td>
@@ -951,7 +973,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
             <td class="banner-td-vis"></td>
             <td class="banner-td-shares"></td>
-            <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:15px;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
+            <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:1.9cqi;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
             <td id="banner-td-tgldgap-value" class="banner-td-num" style="color:${col}">${val ? formatPercent(val.gap_pct) : '—'}</td>
             <td id="banner-td-tgldgap-day-pct" class="banner-td-pct ${cls(day)}">${pct(day)}</td>
             <td id="banner-td-tgldgap-day-change" class="banner-td-change ${cls(day)}" style="${absStyle}">${abs(day)}</td>
@@ -1143,8 +1165,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             const absChangePeriod = currentTotal - baselinePeriodTotal;
             const pctChangePeriod = baselinePeriodTotal !== 0 ? (absChangePeriod / baselinePeriodTotal * 100) : 0;
             const meta = SOURCE_META[src] || { label: src, marker: '?', color: '#888', cssClass: '' };
+            const spark = sparklineFromHistory(dynHistory, dynTimestamps, src, rangeStartMs, meta.color);
             return {
                 source: src,
+                sparkPrices: spark.prices,
+                sparkSvg: spark.svg,
                 label: meta.label,
                 marker: meta.marker,
                 sep: meta.sep,
@@ -1282,6 +1307,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             return arr.sort(function(a, b) { return b.value - a.value; });
         })();
         _hoverData.shares.__total = totalAssets;
+        var totalSpark = sparklineFromHistory(dynHistory, dynTimestamps, null, rangeStartMs, '#a7aeae');
+        _hoverData.sparks.__total = { prices: totalSpark.prices, color: '#a7aeae' };
 
         // --- T+F итого (первая строка): только когда активны 2+ источника ---
         if (portfolioRows.length > 1) {
@@ -1308,8 +1335,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
             tblHtml += `<tr id="banner-row-total" class="banner-row-portfolio-total">
             <td class="banner-td-vis"></td>
-            <td class="banner-td-shares" data-hover-shares="__total">${shareBarsHtml(totalAssets)}</td>
-            <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:2.2cqi;min-width:16px;text-align:left;white-space:nowrap;">T+F</td>
+            <td class="banner-td-shares" data-hover-spark="__total" title="Капитал T+F">${totalSpark.svg}</td>
+            <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:1.85cqi;min-width:16px;text-align:left;white-space:nowrap;">T+F</td>
             <td id="banner-td-total-value" class="banner-td-num" style="color:#dcdcdc;font-weight:bold;white-space:nowrap;" title="Суммарный капитал по портфелям">${Math.round(tfCurrent).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-total-day-change" class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
             <td id="banner-td-total-day-pct" class="banner-td-pct ${tfDayCls}">${formatPercent(tfPct)}</td>
@@ -1323,11 +1350,12 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
         portfolioRows.forEach(function(row) {
             const rowId = row.source;
+            _hoverData.sparks[rowId] = { prices: row.sparkPrices, color: row.color };
             const rowOpacity = row.cssClass === 'banner-row-portfolio-finam' ? 1 : 0.7;
             tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};" title="${row.label}">
             ${visCell(row.label + ', ₽')}
-            <td class="banner-td-shares" data-hover-shares="${row.source}">${shareBarsHtml(row.assets)}</td>
-            <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:2.2cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + (row.sep || ':') + row.instrument) : row.marker}</td>
+            <td class="banner-td-shares" data-hover-spark="${row.source}" title="Капитал: ${row.label}">${row.sparkSvg}</td>
+            <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:1.85cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + (row.sep || ':') + row.instrument) : row.marker}</td>
             <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-${rowId}-day-pct" class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
             <td id="banner-td-${rowId}-day-change" class="banner-td-change ${row.dayChangeClass}">${formatChange(row.absChange)}</td>
@@ -1403,11 +1431,11 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                 var sId = cell.getAttribute('data-hover-shares');
                 var kId = cell.getAttribute('data-hover-spark');
                 try {
-                    if (sId && _hoverData.shares[sId]) {
-                        drawSharesChart(placeHoverPopup(cell), _hoverData.shares[sId]);
-                    } else if (kId && _hoverData.sparks[kId]) {
+                    if (kId && _hoverData.sparks[kId]) {
                         var d = _hoverData.sparks[kId];
                         drawSparkChart(placeHoverPopup(cell), d.prices, d.color);
+                    } else if (sId && _hoverData.shares[sId]) {
+                        drawSharesChart(placeHoverPopup(cell), _hoverData.shares[sId]);
                     }
                 } catch (e) { hideHoverPopup(); }
             });

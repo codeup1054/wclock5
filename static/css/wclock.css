@@ -806,28 +806,61 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .banner-table {
     width: 100%;
     border-collapse: collapse;
-    /* 12 колонок (чекбокс + доли + метрики + «скачано/изменено»)
-       должны влезать в панель без обрезки справа */
-    font-size: 2.05cqi;
+    /* 12 колонок фиксированной пропорциональной ширины: таблица всегда
+       влезает в панель, последняя колонка «изменено» не обрезается.
+       Шрифты в cqi, поэтому пропорции сохраняются на любой ширине. */
+    table-layout: fixed;
+    font-size: 1.85cqi;
     margin: 2px 0;
 }
 
 .invest-banner-host .banner-table td {
     padding: 0px 1px;
     text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Первый столбец (тикер/счёт) — по ширине самой длинной метки:
-   ширина 1% + nowrap не даёт колонке растягиваться и выравнивает все строки. */
+/* 0. чекбокс серии */
+.invest-banner-host .banner-table td:nth-child(1) {
+    width: 2.5%;
+}
+
+/* 1. микрографик / полосы долей */
 .invest-banner-host .banner-table td:nth-child(2) {
-    width: 1%;
+    width: 13%;
     white-space: nowrap;
     padding-right: 2px;
 }
 
+/* 2. метка счёта/тикера */
+.invest-banner-host .banner-table td:nth-child(3) {
+    width: 11%;
+}
+
+/* 3. значение */
+.invest-banner-host .banner-table td:nth-child(4) {
+    width: 12%;
+}
+
+/* 4–9. день/неделя/период: % и абсолют */
+.invest-banner-host .banner-table td:nth-child(5),
+.invest-banner-host .banner-table td:nth-child(6),
+.invest-banner-host .banner-table td:nth-child(7),
+.invest-banner-host .banner-table td:nth-child(8),
+.invest-banner-host .banner-table td:nth-child(9),
+.invest-banner-host .banner-table td:nth-child(10) {
+    width: 7.9%;
+}
+
+/* 10–11. «скачано» и «изменено» */
+.invest-banner-host .banner-table td:nth-child(11),
+.invest-banner-host .banner-table td:nth-child(12) {
+    width: 7%;
+}
+
 /* Столбец с чекбоксом видимости серии на графике */
 .invest-banner-host .banner-table .banner-td-vis {
-    width: 1%;
     padding: 0 2px;
     text-align: center;
     white-space: nowrap;
@@ -835,18 +868,18 @@ div#browser_reload.panel-dragging {
 
 .invest-banner-host .banner-td-vis input {
     width: 12px;
+    max-width: 100%;
     height: 12px;
+    max-height: 100%;
     margin: 0;
     accent-color: #2cba99;
     cursor: pointer;
     vertical-align: middle;
 }
 
-/* Первый столбец таблицы — индикаторы долей активов */
+/* Индикаторы долей активов и микрографики */
 .invest-banner-host .banner-table .banner-td-shares {
-    /* доля от ширины таблицы — не распирает её фиксированными px */
-    width: 20%;
-    min-width: 50px;
+    min-width: 0;
     padding: 0 2px 0 0;
 }
 
@@ -876,11 +909,7 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host [class*="banner-td-"] {
-    font-size: 2.4cqi;
-}
-
-.invest-banner-host .banner-td-change {
-    min-width: 6cqi;
+    font-size: 1.85cqi;
 }
 
 /* Числовые ячейки не переносим: «8 895 047» должно оставаться одной строкой */
@@ -888,17 +917,17 @@ div#browser_reload.panel-dragging {
     white-space: nowrap;
 }
 
+.invest-banner-host .banner-td-change,
 .invest-banner-host .banner-td-pct {
-    min-width: 4.6cqi;
+    min-width: 0;
 }
 
-/* Последние две колонки: «скачано» и «изменено» (дата + время).
-   Мельче чисел, иначе 12 колонок перестают влезать в панель. */
+/* Последние две колонки: «скачано» и «изменено» (дата + время). */
 .invest-banner-host .banner-table .banner-td-stamp {
     font-size: 1.18cqi;
     color: rgba(214, 232, 245, 0.55);
     white-space: nowrap;
-    min-width: 3.3cqi;
+    min-width: 0;
     padding-left: 1px;
 }
 
@@ -906,14 +935,6 @@ div#browser_reload.panel-dragging {
    и визуально разделять две соседние колонки с датами. */
 .invest-banner-host .banner-table .banner-td-stamp.banner-td-changed {
     color: rgba(126, 214, 158, 0.75);
-}
-
-/* Узкая панель: 12 колонок с датами не влезают — жертвуем полосами долей
-   (2-я колонка), чтобы обе колонки «скачано/изменено» остались видны. */
-@container (max-width: 769px) {
-    .invest-banner-host .banner-table td:nth-child(2) {
-        display: none;
-    }
 }
 
 .invest-banner-host .banner-td-empty {
