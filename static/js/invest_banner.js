@@ -574,19 +574,30 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
 
     // Микрографик по истории портфеля: сумма по source (или по всем
     // источникам, если source не задан) в пределах выбранного диапазона.
-    function sparklineFromHistory(history, timestamps, source, startMs, color) {
+    function sparklineFromHistory(history, timestamps, source, startMs, color, minSources) {
         var prices = [];
         for (var i = 0; i < timestamps.length; i++) {
             var ts = timestamps[i];
             if (new Date(ts).getTime() < startMs) continue;
             var entry = history[ts];
             if (!Array.isArray(entry)) continue;
-            var v = source
-                ? sumEntryBySource(entry, source)
-                : entry.reduce(function(sum, p) {
+            var v;
+            if (source) {
+                v = sumEntryBySource(entry, source);
+            } else {
+                // Итог: только точки, где присутствуют все счета. Иначе
+                // пропавший счёт даёт «провал» капитала на миллионы.
+                var seen = {}, sum = 0;
+                entry.forEach(function(p) {
                     var val = Number(p && p.value);
-                    return sum + (isNaN(val) ? 0 : val);
-                }, 0);
+                    if (isFinite(val) && val > 0 && p && p.source) {
+                        seen[p.source] = 1;
+                        sum += val;
+                    }
+                });
+                if (minSources && Object.keys(seen).length < minSources) continue;
+                v = sum;
+            }
             if (v > 0) prices.push({ timestamp: ts, price: v });
         }
         if (prices.length < 2) return { prices: prices, svg: '' };
@@ -637,8 +648,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         el.className = 'banner-hover-popup';
         el.style.display = 'none';
         var cv = document.createElement('canvas');
-        cv.width = 360;
-        cv.height = 220;
+        cv.width = 720;
+        cv.height = 440;
         el.appendChild(cv);
         document.body.appendChild(el);
         _hoverEl = el;
@@ -663,7 +674,8 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     }
 
     function drawSharesChart(ctx, assets) {
-        var W = ctx.canvas.width, H = ctx.canvas.height;
+        var W = ctx.canvas.width / 2, H = ctx.canvas.height / 2;
+        ctx.setTransform(2, 0, 0, 2, 0, 0);
         ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = 'rgba(10, 14, 18, 0.96)';
         ctx.fillRect(0, 0, W, H);
@@ -701,12 +713,13 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
     }
 
     function drawSparkChart(ctx, prices, color) {
-        var W = ctx.canvas.width, H = ctx.canvas.height;
+        var W = ctx.canvas.width / 2, H = ctx.canvas.height / 2;
+        ctx.setTransform(2, 0, 0, 2, 0, 0);
         ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = 'rgba(10, 14, 18, 0.96)';
         ctx.fillRect(0, 0, W, H);
 
-        var cutoff = Date.now() - 7 * 86400 * 1000;
+        var cutoff = Date.now() - 14 * 86400 * 1000;
         var pts = [];
         (prices || []).forEach(function(p) {
             var t = Date.parse(p.timestamp), v = Number(p.price);
@@ -714,12 +727,24 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         });
         if (pts.length < 2) return;
 
-        var padL = 52, padR = 12, padT = 14, padB = 26;
-        var plotW = W - padL - padR, plotH = H - padT - padB;
-        var t0 = pts[0][0], t1 = pts[pts.length - 1][0], span = Math.max(1, t1 - t0);
+        var padT = 14, padB = 30, padR = 22;
         var min = Math.min.apply(null, pts.map(function(p) { return p[1]; }));
         var max = Math.max.apply(null, pts.map(function(p) { return p[1]; }));
         var range = Math.max(1e-9, max - min);
+
+        // Подписи Y разной длины («10 935 560») — ширина поля считается
+        // по самой длинной, иначе левый край обрезается.
+        ctx.font = '11px sans-serif';
+        var labels = [];
+        for (var li = 0; li <= 4; li++) {
+            var lv = max - range * li / 4;
+            labels.push(lv >= 1000 ? Math.round(lv).toLocaleString('ru-RU') : lv.toFixed(2));
+        }
+        var maxLabelW = 0;
+        labels.forEach(function(t) { maxLabelW = Math.max(maxLabelW, ctx.measureText(t).width); });
+        var padL = Math.max(52, Math.ceil(maxLabelW) + 10);
+        var plotW = W - padL - padR, plotH = H - padT - padB;
+        var t0 = pts[0][0], t1 = pts[pts.length - 1][0], span = Math.max(1, t1 - t0);
 
         // сетка + подписи Y
         ctx.strokeStyle = 'rgba(255,255,255,0.14)';
@@ -730,8 +755,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         for (var i = 0; i <= 4; i++) {
             var y = padT + plotH * i / 4;
             ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
-            var val = max - range * i / 4;
-            ctx.fillText(val >= 1000 ? Math.round(val).toLocaleString('ru-RU') : val.toFixed(2), padL - 6, y);
+            ctx.fillText(labels[i], padL - 6, y);
         }
         // сетка + даты X
         ctx.textAlign = 'center';
@@ -1310,7 +1334,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             return arr.sort(function(a, b) { return b.value - a.value; });
         })();
         _hoverData.shares.__total = totalAssets;
-        var totalSpark = sparklineFromHistory(dynHistory, dynTimestamps, null, rangeStartMs, '#a7aeae');
+        var totalSpark = sparklineFromHistory(dynHistory, dynTimestamps, null, rangeStartMs, '#a7aeae', presentSources.length);
         _hoverData.sparks.__total = { prices: totalSpark.prices, color: '#a7aeae' };
 
         // --- T+F итого (первая строка): только когда активны 2+ источника ---

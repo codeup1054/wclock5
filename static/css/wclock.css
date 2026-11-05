@@ -1108,9 +1108,33 @@ canvas#weatherChart {
     top: 0vh; 
     z-index: 20; /* Повышен приоритет */
     width: 100% !important;
-    height: 97% !important; 
+    /* низ панели занимает баннер ресурсов планшета */
+    height: calc(100% - 20px) !important;
     border: 1px solid rgba(0, 100, 255, 0.0); 
 }
+
+/* Ресурсы планшета под графиком погоды */
+#tablet_resources {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 6px;
+    font-size: max(9px, 1.35cqi);
+    color: #8a9ba6;
+    white-space: nowrap;
+    overflow: hidden;
+    z-index: 21;
+    border-top: 1px solid rgba(196, 196, 196, 0.10);
+    background: rgba(0, 0, 0, 0.35);
+}
+#tablet_resources .tr-label { color: #5f7078; margin-right: 4px; }
+#tablet_resources b { font-weight: normal; color: #d6e4ea; }
+#tablet_resources b.tr-ok { color: #31e378; }
+#tablet_resources b.tr-warn { color: #ffb020; }
+#tablet_resources b.tr-alert { color: #ff5341; }
 
 .weatherChart-fullscreen {
     position: fixed !important;
@@ -2620,6 +2644,6 @@ input:checked + .slider:before {
 
 .banner-hover-popup canvas {
     display: block;
-    width: 360px;
-    height: 220px;
+    width: 720px;
+    height: 440px;
 }

@@ -1627,18 +1627,34 @@ try {
 
             var timestamps = Object.keys(rawData).filter(function(k) { return k.charAt(0) !== '_'; }).sort();
 
-            // Portfolio values
+            // Portfolio values. В снапшоте может не быть части счетов —
+            // тогда сумма падает на миллионы. Такие точки заменяем последним
+            // полным итогом (forward-fill), иначе на графике «скачки».
+            var maxSources = 0;
+            for (var si = 0; si < timestamps.length; si++) {
+                var se = rawData[timestamps[si]];
+                if (!Array.isArray(se)) continue;
+                var ss = {};
+                se.forEach(function(p) { if (p && p.source) ss[p.source] = 1; });
+                maxSources = Math.max(maxSources, Object.keys(ss).length);
+            }
             var portfolioValues = [];
             var lastValidTotal = 0;
             for (var i = 0; i < timestamps.length; i++) {
                 var entry = rawData[timestamps[i]];
                 var total = 0;
                 if (Array.isArray(entry)) {
+                    var seen = {};
                     total = entry.reduce(function(sum, p) {
                         var val = Number(p.value);
+                        if (p && p.source) seen[p.source] = 1;
                         return sum + (isNaN(val) ? 0 : val);
                     }, 0);
-                    lastValidTotal = total;
+                    if (maxSources > 0 && Object.keys(seen).length < maxSources && lastValidTotal > 0) {
+                        total = lastValidTotal;      // неполный снапшот
+                    } else {
+                        lastValidTotal = total;
+                    }
                 } else {
                     total = lastValidTotal;
                 }

@@ -9,6 +9,7 @@ import sqlite3
 import json
 import time
 import traceback
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from flask import Flask, jsonify, render_template, request, make_response, url_for
 
@@ -1454,6 +1455,52 @@ def api_data_mediator():
     res["ts"] = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime(
         "%Y-%m-%d %H:%M:%S")
     return jsonify(res)
+
+
+
+
+# === Ресурсы планшета: прокси /api/stats с кэшем 20 с =====================
+_TABLET_STATS_CACHE = {"ts": 0.0, "data": None}
+
+
+def _tablet_endpoint():
+    host = os.environ.get("TABLET_HOST", "")
+    port = os.environ.get("TABLET_PORT", "")
+    cfg_path = os.path.join(BASE_DIR, "parsers", "invest", "desktop_sync", "config.json")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, encoding="utf-8") as f:
+                cfg = json.load(f)
+            host = host or cfg.get("host") or ""
+            port = port or cfg.get("port") or ""
+        except Exception:
+            pass
+    return host or "192.168.3.33", int(port or 9090)
+
+
+@app.route("/api/tablet/stats")
+def api_tablet_stats():
+    """CPU/RSS/история планшета для баннера под графиком погоды."""
+    now = time.time()
+    cached = _TABLET_STATS_CACHE
+    if cached["data"] is not None and (now - cached["ts"]) < 20:
+        data = dict(cached["data"])
+        data["ageSec"] = int(now - cached["ts"])
+        return jsonify(data)
+    host, port = _tablet_endpoint()
+    try:
+        url = f"http://{host}:{port}/api/stats"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        data["host"] = host
+        data["port"] = port
+        data["ageSec"] = 0
+    except Exception as e:
+        data = {"ok": False, "host": host, "port": port,
+                "error": str(e), "ageSec": 0}
+    cached["ts"] = now
+    cached["data"] = data
+    return jsonify(data)
 
 
 
