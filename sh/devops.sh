@@ -125,6 +125,43 @@ start_local_bg() {
 
 read_pid() { cat "$(local_pidfile "$1")" 2>/dev/null || true; }
 
+# Фактический порт локального веба (может отличаться от LOCAL_PORT,
+# если базовый порт занят чужим процессом)
+local_web_port() {
+    local p; p="$(cat "$LOCAL_DIR/web.port" 2>/dev/null || true)"
+    if [ -n "$p" ]; then echo "$p"; else echo "$LOCAL_PORT"; fi
+}
+
+find_free_port() {
+    local p="$1" i=0
+    while [ "$i" -lt 20 ]; do
+        if [ -z "$(port_pids "$p")" ]; then echo "$p"; return 0; fi
+        p=$((p + 1)); i=$((i + 1))
+    done
+    return 1
+}
+
+# Принадлежит ли процесс нашему проекту (venv python / наш скрипт).
+# Нужно, чтобы НИКОГДА не убить чужой процесс по совпавшему PID.
+pid_is_ours() {
+    local pid="${1:-}"
+    [ -n "$pid" ] || return 1
+    if [ "$IS_WINDOWS" = "1" ]; then
+        local line
+        line="$(ps -W 2>/dev/null | awk -v w="$pid" '$4==w {print $1" "$NF; exit}')"
+        [ -n "$line" ] || return 1
+        echo "$line" | grep -qiE "venv[/\](Scripts[/\])?python"
+    else
+        local cmd
+        cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+        [ -n "$cmd" ] || return 1
+        case "$cmd" in
+            *"$PROJECT_ROOT"*|*"app.py"*|*"parsers/"*) return 0 ;;
+            *) return 1 ;;
+        esac
+    fi
+}
+
 # --- venv ---------------------------------------------------
 local_ensure_venv() {
     local vpy
@@ -159,31 +196,40 @@ local_deps() {
 local_web_start() {
     local_ensure_venv || return 1
     local vpy; vpy="$(venv_python)"
+    local port; port="$(local_web_port)"
     local pid; pid="$(read_pid web)"
-    if pid_alive "$pid"; then
-        info "WEB уже запущен (PID=$pid) → http://127.0.0.1:${LOCAL_PORT}/"
+
+    # Уже запущен: PID живой и порт действительно слушается
+    if pid_alive "$pid" && [ -n "$(port_pids "$port")" ]; then
+        info "WEB уже запущен (PID=$pid) → http://127.0.0.1:${port}/"
         return 0
     fi
-
-    # Порт занят (например, старый процесс без pid-файла) — освобождаем
-    local busy; busy="$(port_pids "$LOCAL_PORT" | head -1)"
-    if [ -n "$busy" ]; then
-        warn "Порт ${LOCAL_PORT} занят (PID=$busy) — останавливаю"
-        kill_pid "$busy"
-        sleep 1
+    # Устаревший pid-файл (процесс умер / порт освободился)
+    if [ -n "$pid" ]; then
+        rm -f "$(local_pidfile web)"
     fi
 
-    info "Запуск Flask локально (без Docker), порт ${LOCAL_PORT}..."
-    start_local_bg web "$PROJECT_ROOT" env \
-        PORT="$LOCAL_PORT" PYTHONIOENCODING=utf-8 "$vpy" -u app.py
+    # Чужой процесс на порту НЕ трогаем — берём следующий свободный.
+    # Стартуем всегда от LOCAL_PORT, чтобы после освобождения базового
+    # порта вернуться на него (а не залипать на 5002).
+    port="$LOCAL_PORT"
+    if [ -n "$(port_pids "$port")" ]; then
+        warn "Порт ${port} занят другим процессом — не трогаю его"
+        port="$(find_free_port "$port")"             || { err "Нет свободного порта в диапазоне ${LOCAL_PORT}..$((LOCAL_PORT + 20))"; return 1; }
+        info "Использую свободный порт ${port}"
+    fi
+
+    info "Запуск Flask локально (без Docker), порт ${port}..."
+    start_local_bg web "$PROJECT_ROOT" env         PORT="$port" PYTHONIOENCODING=utf-8 "$vpy" -u app.py
     pid="$(read_pid web)"
+    echo "$port" > "$LOCAL_DIR/web.port"
     sleep 4
 
-    local code; code=$(curl -so /dev/null -w "%{http_code}" --max-time 8 \
-        "http://127.0.0.1:${LOCAL_PORT}/" 2>/dev/null || true)
+    local code; code=$(curl -so /dev/null -w "%{http_code}" --max-time 8         "http://127.0.0.1:${port}/" 2>/dev/null || true)
     if [ "$code" = "200" ]; then
-        ok "WEB: http://127.0.0.1:${LOCAL_PORT}/  (PID=$pid)"
-        echo "    вход: http://127.0.0.1:${LOCAL_PORT}/?KEY=6HKJ809-YUI67-HKJJL-5677-HJKK"
+        ok "WEB: http://127.0.0.1:${port}/  (PID=$pid)"
+        echo "    вход: http://127.0.0.1:${port}/?KEY=6HKJ809-YUI67-HKJJL-5677-HJKK"
+        echo "    стоп: ./sh/devops.sh stop"
     else
         err "WEB не отвечает (HTTP ${code:-000}), лог: $LOCAL_DIR/web.log"
         return 1
@@ -255,8 +301,12 @@ local_stop_one() {
     fi
     local pid; pid="$(cat "$f" 2>/dev/null || true)"
     if pid_alive "$pid"; then
-        kill_pid "$pid"
-        ok "остановлен $name (PID=$pid)"
+        if pid_is_ours "$pid"; then
+            kill_pid "$pid"
+            ok "остановлен $name (PID=$pid)"
+        else
+            warn "$name: PID=$pid больше не наш — не трогаю"
+        fi
     fi
     rm -f "$f"
 }
@@ -270,12 +320,12 @@ local_stop() {
         local_stop_one "$name"
     done
 
-    # Подчищаем процесс на порту, если pid-файла не было
-    local busy; busy="$(port_pids "$LOCAL_PORT" | head -1)"
+    # Порт после остановки: только сообщаем, чужие процессы не убиваем
+    local port; port="$(local_web_port)"
+    sleep 1
+    local busy; busy="$(port_pids "$port" | head -1)"
     if [ -n "$busy" ]; then
-        kill_pid "$busy"
-        ok "освобождён порт ${LOCAL_PORT} (PID=$busy)"
-        stopped=$((stopped + 1))
+        warn "порт ${port} всё ещё занят (PID=$busy) — это не наш процесс, не трогаю"
     fi
 
     if [ "$stopped" -eq 0 ]; then
@@ -292,16 +342,17 @@ local_status() {
     if [ -n "$vpy" ]; then ok "venv: $vpy"; else warn "venv не найден (./sh/devops.sh deps)"; fi
 
     local pid; pid="$(read_pid web)"
+    local port; port="$(local_web_port)"
     local code; code=$(curl -so /dev/null -w "%{http_code}" --max-time 5 \
-        "http://127.0.0.1:${LOCAL_PORT}/" 2>/dev/null || true)
+        "http://127.0.0.1:${port}/" 2>/dev/null || true)
     if pid_alive "$pid"; then
         if [ "$code" = "200" ]; then
-            ok "web: PID=$pid  http://127.0.0.1:${LOCAL_PORT}/ → 200"
+            ok "web: PID=$pid  http://127.0.0.1:${port}/ → 200"
         else
             err "web: PID=$pid, но HTTP ${code:-000} — см. $LOCAL_DIR/web.log"
         fi
     elif [ "$code" = "200" ]; then
-        warn "web: отвечает на ${LOCAL_PORT}, но PID-файла нет (запущен вручную?)"
+        warn "web: отвечает на ${port}, но PID-файла нет (запущен вручную?)"
     else
         info "web: не запущен"
     fi
@@ -452,13 +503,14 @@ restart_parsers() {
 # HELP / SHORT STATUS
 # ============================================================
 short_status() {
-    echo "Локальный веб (без Docker, порт ${LOCAL_PORT}):"
+    local port; port="$(local_web_port)"
+    echo "Локальный веб (без Docker, порт ${port}):"
     local lcode
-    lcode=$(curl -so /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:${LOCAL_PORT}/" 2>/dev/null || true)
+    lcode=$(curl -so /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:${port}/" 2>/dev/null || true)
     if [ "$lcode" = "200" ]; then
-        echo "  http://127.0.0.1:${LOCAL_PORT}/  →  ${lcode}"
+        echo "  http://127.0.0.1:${port}/  →  ${lcode}"
     else
-        echo "  http://127.0.0.1:${LOCAL_PORT}/  →  не запущен"
+        echo "  http://127.0.0.1:${port}/  →  не запущен"
     fi
 
     echo "Docker (порт ${PORT}):"
@@ -528,12 +580,13 @@ diagnostic() {
 
     # ─── 2. Локальный HTTP ───────────────────────────────────
     echo -e "${CYAN}── Локальный HTTP ──${NC}"
+    local local_port; local_port="$(local_web_port)"
     local local_code
-    local_code=$(curl -so /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:${LOCAL_PORT}/" 2>/dev/null || true)
+    local_code=$(curl -so /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:${local_port}/" 2>/dev/null || true)
     if [ -z "$local_code" ] || [ "$local_code" = "000" ]; then
-        info "http://127.0.0.1:${LOCAL_PORT}/ (без Docker) — не запущен"
+        info "http://127.0.0.1:${local_port}/ (без Docker) — не запущен"
     else
-        ok "http://127.0.0.1:${LOCAL_PORT}/ (без Docker) → ${local_code}"
+        ok "http://127.0.0.1:${local_port}/ (без Docker) → ${local_code}"
     fi
 
     local docker_code

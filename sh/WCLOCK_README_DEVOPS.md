@@ -4,6 +4,12 @@
 
 ## Лист изменений
 
+- **2.1** · 2026-11-05 — безопасный выбор порта: локальный режим **больше не
+  убивает чужой процесс** на `LOCAL_PORT`. Если порт занят (например, VS Code
+  agent host), скрипт пишет предупреждение и берёт следующий свободный
+  (`5001 → 5002 → …`), а фактический порт сохраняет в `logs/local/web.port`.
+  `stop` завершает только процессы из PID-файлов и дополнительно проверяет,
+  что это наш `venv`-процесс. Исправлен неверный ключ входа в сообщении.
 - **2.0** · 2026-11-05 — добавлен локальный запуск **без Docker**
   (`./sh/devops.sh local | upall | stop | lstatus | llogs | deps`):
   venv + `python app.py`, PID/логи в `logs/local/`, порт `LOCAL_PORT=5001`
@@ -97,13 +103,19 @@ cd E:/_dev/10.gpx/04.gpx_clock_beget/wclock5
 
 1. Проверяет `venv` (создаёт при отсутствии: `python -m venv venv`).
 2. Проверяет Flask в venv; при отсутствии — `pip install -r requirements.txt`.
-3. Освобождает `LOCAL_PORT` (по умолчанию 5001), если он занят.
-4. Запускает `python -u app.py` с `PORT=$LOCAL_PORT`.
-5. Пишет PID в `logs/local/web.pid`, лог — в `logs/local/web.log`.
+3. Выбирает порт: `LOCAL_PORT` (5001); если занят — следующий свободный.
+   **Чужой процесс на порту не трогается.**
+4. Запускает `python -u app.py` с `PORT=<выбранный порт>`.
+5. Пишет PID в `logs/local/web.pid`, порт — в `logs/local/web.port`,
+   лог — в `logs/local/web.log`.
 6. Ждёт ответ и печатает URL.
 
 `upall` делает то же и дополнительно поднимает демонов из `LOCAL_DAEMONS`
 (по умолчанию: `weather tickers tinkoff finam funit funit2 tdiv trnd fx`).
+
+> В PowerShell запускайте через bash: `bash sh/devops.sh local`.
+> `./sh/devops.sh` без bash может открыть файл или запустить его в отдельной
+> консоли — тогда вывод и процесс теряются.
 
 ### Демоны локально
 
@@ -340,11 +352,12 @@ deploy.conf → scp → docker compose down → up -d --build → image prune
 | Проблема | Решение |
 |----------|---------|
 | `venv не найден` | `./sh/devops.sh deps` |
-| Порт занят | `./sh/devops.sh stop` или `LOCAL_PORT=5002 ./sh/devops.sh local` |
+| Порт занят | ничего делать не нужно: скрипт возьмёт следующий свободный (см. `logs/local/web.port`); можно задать `LOCAL_PORT=5002` |
 | `web: PID есть, HTTP 000` | `./sh/devops.sh llogs web` |
 | Демон упал сразу | `./sh/devops.sh llogs <имя>`; чаще всего нет сети/токена |
 | «Нет сети/DNS с хоста» | веб работает; демоны оставьте в Docker |
 | Процесс не убивается | `taskkill //F //T //PID <pid>` (Windows), `kill -9` (Unix) |
+| PowerShell: команда «зависла»/закрылась | `bash sh/devops.sh local` вместо `./sh/devops.sh local` |
 
 ### Docker / прод
 
