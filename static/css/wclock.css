@@ -810,7 +810,7 @@ div#browser_reload.panel-dragging {
        влезает в панель, последняя колонка «изменено» не обрезается.
        Шрифты в cqi, поэтому пропорции сохраняются на любой ширине. */
     table-layout: fixed;
-    font-size: 1.85cqi;
+    font-size: 1.75cqi;
     margin: 2px 0;
 }
 
@@ -823,30 +823,30 @@ div#browser_reload.panel-dragging {
 
 /* 0. чекбокс серии */
 .invest-banner-host .banner-table td:nth-child(1) {
-    width: 2.4%;
+    width: 2.0%;
 }
 
 /* 1. микрографик капитала/цены */
 .invest-banner-host .banner-table td:nth-child(2) {
-    width: 10.1%;
+    width: 8.2%;
     white-space: nowrap;
     padding-right: 1px;
 }
 
 /* 2. структура портфеля (полосы долей активов) */
 .invest-banner-host .banner-table td:nth-child(3) {
-    width: 7%;
+    width: 6.2%;
     padding: 0 1px;
 }
 
 /* 3. метка счёта/тикера */
 .invest-banner-host .banner-table td:nth-child(4) {
-    width: 10.4%;
+    width: 11.0%;
 }
 
 /* 4. значение */
 .invest-banner-host .banner-table td:nth-child(5) {
-    width: 11%;
+    width: 9.5%;
 }
 
 /* 5–10. день/неделя/период: % и абсолют */
@@ -856,13 +856,13 @@ div#browser_reload.panel-dragging {
 .invest-banner-host .banner-table td:nth-child(9),
 .invest-banner-host .banner-table td:nth-child(10),
 .invest-banner-host .banner-table td:nth-child(11) {
-    width: 7.7%;
+    width: 8.18%;
 }
 
 /* 12–13. «скачано» и «изменено» */
 .invest-banner-host .banner-table td:nth-child(12),
 .invest-banner-host .banner-table td:nth-child(13) {
-    width: 6.45%;
+    width: 7.0%;
 }
 
 /* Столбец с чекбоксом видимости серии на графике */
@@ -918,7 +918,10 @@ div#browser_reload.panel-dragging {
 }
 
 .invest-banner-host [class*="banner-td-"] {
-    font-size: 1.85cqi;
+    /* 1.7cqi оставляет запас ~3% под рост чисел (+1 234 567),
+       чтобы показатели не обрезались многоточием */
+    font-size: 1.7cqi;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Числовые ячейки не переносим: «8 895 047» должно оставаться одной строкой */
