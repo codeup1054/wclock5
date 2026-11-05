@@ -14,10 +14,51 @@ if ! command -v docker &> /dev/null; then
 fi
 
 # Проверка работы Docker
-if ! docker info &> /dev/null; then
-    echo "❌ Docker не запущен или недоступен"
-    echo "Пожалуйста, запустите Docker Desktop и дождитесь полной загрузки"
-    exit 1
+docker_ready() { docker info >/dev/null 2>&1; }
+
+# На Windows Docker Desktop можно поднять прямо из скрипта и подождать
+start_docker_desktop() {
+    case "$(uname -s 2>/dev/null || echo unknown)" in
+        MINGW*|MSYS*|CYGWIN*) ;;
+        *) return 1 ;;
+    esac
+    local exe="/c/Program Files/Docker/Docker/Docker Desktop.exe"
+    [ -f "$exe" ] || return 1
+    echo "🚀 Docker Desktop не отвечает — запускаю (до 3 минут)..."
+    cmd //c start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe" >/dev/null 2>&1 || return 1
+    local i
+    for i in $(seq 1 36); do
+        sleep 5
+        if docker_ready; then
+            echo "✅ Docker Desktop готов (за $((i * 5)) с)"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if ! docker_ready; then
+    case "$ACTION" in
+        start|restart|build) ;;
+        *)
+            echo "⚠️  Docker не запущен — команда '$ACTION' требует Docker"
+            echo "   Запустите Docker Desktop или работайте без него:"
+            echo "     bash sh/devops.sh upall / lstatus / stop"
+            exit 1
+            ;;
+    esac
+    if start_docker_desktop; then
+        :
+    else
+        echo "❌ Docker не запущен или недоступен"
+        echo ""
+        echo "Варианты:"
+        echo "  1) Запустить Docker Desktop вручную и повторить: ./run_docker.sh $ACTION"
+        echo "  2) Работать без Docker (легче по памяти):"
+        echo "       bash sh/devops.sh upall    # веб + все демоны"
+        echo "       bash sh/devops.sh lstatus  # статус"
+        exit 1
+    fi
 fi
 
 # Проверка docker-compose
@@ -26,19 +67,25 @@ if ! command -v docker compose &> /dev/null; then
     exit 1
 fi
 
+SERVICES="wclock weather-parser invest-parser finam-invest-parser funit-invest-parser funit2-invest-parser tdiv-invest-parser trnd-invest-parser tickers-parser fx-sources-parser"
+
 check_status() {
     echo "=== Статус контейнеров ==="
     docker compose ps
     echo ""
-    
-    # Проверка каждого сервиса
-    for service in wclock weather-parser invest-parser tickers-parser; do
-        if docker compose ps $service 2>/dev/null | grep -q "Up"; then
-            echo "✅ $service - работает"
-        elif docker compose ps $service 2>/dev/null | grep -q "Exited"; then
-            echo "❌ $service - остановлен"
-        else
+
+    local service cid state
+    for service in $SERVICES; do
+        cid=$(docker compose ps -q "$service" 2>/dev/null | head -1)
+        if [ -z "$cid" ]; then
             echo "⚪ $service - не запущен"
+            continue
+        fi
+        state=$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null)
+        if [ "$state" = "running" ]; then
+            echo "✅ $service - работает"
+        else
+            echo "❌ $service - $state"
         fi
     done
 }
@@ -46,14 +93,11 @@ check_status() {
 clean_docker() {
     echo "=== Очистка Docker ==="
     echo "🛑 Остановка контейнеров..."
-    docker compose down 2>/dev/null
-    
-    echo "🗑️ Удаление образов..."
-    docker rmi wclock3-wclock wclock3-weather-parser wclock3-invest-parser wclock3-tickers-parser 2>/dev/null || true
-    
+    docker compose down --rmi local 2>/dev/null || docker compose down 2>/dev/null
+
     echo "🧹 Очистка неиспользуемых ресурсов..."
     docker system prune -f
-    
+
     echo "✅ Очистка завершена"
 }
 

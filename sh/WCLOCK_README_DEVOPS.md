@@ -4,6 +4,13 @@
 
 ## Лист изменений
 
+- **2.2** · 2026-11-05 — демоны **работают без Docker**: проверены все 9
+  (погода, тикеры, T-Invest, Finam×3, Tinkoff×2, FX) — данные пишутся в БД.
+  Ресурсы: ~40 МБ на все процессы против ~6.4 ГБ у Docker Desktop
+  (`vmmem` 5.7 ГБ + процессы). `run_docker.sh start` теперь сам поднимает
+  Docker Desktop и ждёт готовности; `status/stop/logs` не будят Docker;
+  статус показывает все 10 сервисов. Ложное «нет сети/DNS» убрано —
+  проверка идёт из Python, а не через `curl`.
 - **2.1** · 2026-11-05 — безопасный выбор порта: локальный режим **больше не
   убивает чужой процесс** на `LOCAL_PORT`. Если порт занят (например, VS Code
   agent host), скрипт пишет предупреждение и берёт следующий свободный
@@ -51,15 +58,16 @@
 | Web UI + API (`app.py`) | ✅ | `python app.py`, порт `LOCAL_PORT` (5001) |
 | Чтение БД (`parsers/*/*.db`) | ✅ | те же файлы, что монтируются в контейнеры |
 | Профили, настройки, кэш | ✅ | `profiles/`, `cache/`, `settings` в БД |
-| Демоны (погода, тикеры, инвестиции, Finam, FX) | ⚠️ | только если с хоста есть сеть/DNS |
+| Демоны (погода, тикеры, инвестиции, Finam, FX) | ✅ | нужна сеть/DNS с хоста |
 | Playwright/Chromium | ➖ | приложению не нужен |
-| Автозапуск после перезагрузки | ❌ | Docker делает `restart: unless-stopped` |
+| Автозапуск после перезагрузки | ⚠️ | настраивается Планировщиком заданий (см. ниже) |
 
 Ограничения локального режима:
 
-1. **Сеть.** В текущем окружении DNS на хосте не работает, а из контейнеров
-   сеть доступна. Поэтому локально имеет смысл запускать только веб,
-   а демоны — в Docker. Скрипт предупреждает об этом перед стартом демонов.
+1. **Сеть.** Демонам нужен рабочий DNS/сеть с хоста. Если сеть есть —
+   все 9 демонов работают локально (проверено 05.11). Если DNS сломан —
+   веб продолжит работать, данные перестанут обновляться; в этом случае
+   демонов лучше держать в Docker (сеть из контейнеров обычно есть).
 2. **Файлы БД общие.** Локальные демоны и контейнеры пишут в одни и те же
    `parsers/invest/*.db`. Не запускайте одно и то же одновременно.
 3. **Секреты.** Демоны читают `.env` (Finam/T-Invest токены) сами; вебу
@@ -77,10 +85,14 @@
 ```bash
 cd E:/_dev/10.gpx/04.gpx_clock_beget/wclock5
 
-./sh/run_docker.sh start          # docker compose up -d
+./sh/run_docker.sh start          # поднимет Docker Desktop, если нужно, и compose up -d
 # или
 docker compose up -d --build
 ```
+
+> `run_docker.sh start|restart|build` сам запускает Docker Desktop и ждёт
+> до 3 минут. `status|stop|logs` Docker не будят — просто сообщают, что он
+> выключен.
 
 Приложение: `http://127.0.0.1:10405/`
 Вход в инвестиции: `http://127.0.0.1:10405/?KEY=6HKJ809-YUI67-HKJJL-5677-HJKK`
@@ -167,6 +179,39 @@ LOCAL_DAEMONS="tickers tinkoff" ./sh/devops.sh upall
 #  ✓ остановлен web (PID=21568)
 ```
 
+### Почему это выгодно: ресурсы
+
+Замер 05.11 (все 9 демонов + веб):
+
+| Вариант | Память |
+|---|---|
+| Без Docker (9 демонов + Flask) | **~40 МБ** |
+| Docker Desktop (простаивает, без контейнеров) | **~6.4 ГБ** (`vmmem` 5.7 ГБ + процессы Docker ~0.7 ГБ) |
+
+Демоны — обычные Python-процессы: погода (`requests` + `bs4`), тикеры,
+T-Invest и Finam (`requests`), FX. Chromium/Playwright им не нужен.
+
+### Автозапуск без Docker (Windows)
+
+Docker делает `restart: unless-stopped`; без Docker автозапуск настраивается
+один раз:
+
+1. **Планировщик заданий** (при входе в систему) — через готовый
+   `sh/wclock_local.cmd` (там же правится путь `WROOT`, если проект перенесён):
+
+```powershell
+schtasks /Create /SC ONLOGON /TN "WClock5 local" ^
+  /TR "E:\_dev\10.gpx\04.gpx_clock_beget\wclock5\sh\wclock_local.cmd" ^
+  /RL LIMITED /F
+```
+
+2. **Автозагрузка**: ярлык на `sh\wclock_local.cmd` в `shell:startup`.
+
+Остановка — `bash sh/devops.sh stop` (или `schtasks /Delete /TN "WClock5 local" /F`).
+
+В Docker Desktop отключите «Start Docker Desktop when you sign in», если
+хотите совсем не держать его в памяти.
+
 ### Windows: почему PID-файлы
 
 В Git Bash нет `lsof` / `pgrep` / `pkill`. `$!` даёт MSYS-PID, а
@@ -252,6 +297,7 @@ LOCAL_DAEMONS="tickers tinkoff" ./sh/devops.sh upall
 | Script | Description |
 |--------|-------------|
 | `sh/devops.sh` | Единая точка входа: локальный запуск без Docker, деплой, диагностика |
+| `sh/wclock_local.cmd` | Автозапуск без Docker (веб + демоны) для Планировщика/Startup |
 | `sh/run_docker.sh` | `start / stop / restart / status / logs / build` для Docker |
 | `sh/run_local.sh` | Простой локальный запуск (веб + погода + T-Invest, без PID-файлов) |
 | `sh/run_server.sh` | Диагностика сервера напрямую или по SSH |
@@ -416,6 +462,7 @@ ssh root@217.114.8.5 "tar -czf /root/wclock5-db-$(date +%F).tar.gz \
 wclock5/
 ├── sh/
 │   ├── devops.sh             # единая точка входа (local + remote)
+│   ├── wclock_local.cmd      # автозапуск без Docker (веб + демоны)
 │   ├── run_docker.sh         # управление Docker
 │   ├── run_local.sh          # простой локальный запуск
 │   ├── run_server.sh         # диагностика сервера

@@ -258,8 +258,14 @@ local_daemons_start() {
     local vpy; vpy="$(venv_python)"
     local list="${LOCAL_DAEMONS:-$LOCAL_DAEMONS_DEFAULT}"
 
-    if [ -z "$(curl -so /dev/null -w '%{http_code}' --max-time 5 https://www.cbr-xml-daily.ru/ 2>/dev/null | grep -v 000 || true)" ]; then
-        warn "Нет сети/DNS с хоста — демоны не смогут скачивать данные (веб будет работать)"
+    # Проверка сети именно из Python (curl на Windows может врать из-за TLS)
+    if ! "$vpy" - <<'PY' >/dev/null 2>&1
+import socket
+for host in ("pogoda.mail.ru", "api.finam.ru"):
+    socket.create_connection((host, 443), timeout=6).close()
+PY
+    then
+        warn "Нет сети/DNS с хоста — демоны могут не получать данные (веб работает)"
     fi
 
     for name in $list; do
