@@ -895,6 +895,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             html += '<tr id="banner-row-' + id + '" class="banner-row-asset fx-source">' +
                 visCell(def.label) +
                 '<td class="banner-td-shares">' + spark + '</td>' +
+                '<td class="banner-td-struct"></td>' +
                 '<td class="banner-td-ticker" style="color:' + def.color + ';font-size:1.9cqi;font-weight:bold;text-align:left;white-space:nowrap;">' + def.label + '</td>' +
                 '<td class="banner-td-num" style="color:' + def.color + '">' + last.toFixed(4) + '</td>' +
                 '<td class="banner-td-pct ' + cls + '">' + (dayPct >= 0 ? '+' : '') + dayPct.toFixed(2) + '%</td>' +
@@ -942,6 +943,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return `<tr id="banner-row-${assetId}" class="${rowCls}">
             ${visCell(label)}
             <td class="banner-td-shares" data-hover-spark="${assetId}">${sparklineSvg(t.prices, color, 7)}</td>
+            <td class="banner-td-struct"></td>
             <td id="banner-td-${assetId}-marker" class="banner-td-ticker" style="color:${color};font-size:1.9cqi;font-weight:bold;text-align:left;white-space:nowrap;">${label}</td>
             <td id="banner-td-${assetId}-value" class="banner-td-num" style="color:${color}">${formatPrice(price)}</td>
             <td id="banner-td-${assetId}-day-pct" class="banner-td-pct ${dayClass}">${formatPercent(dayPct)}</td>
@@ -973,6 +975,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         return `<tr id="banner-row-tgldgap" class="banner-row-asset tgldgap">
             <td class="banner-td-vis"></td>
             <td class="banner-td-shares"></td>
+            <td class="banner-td-struct"></td>
             <td id="banner-td-tgldgap-marker" class="banner-td-ticker" style="color:${col};font-size:1.9cqi;font-weight:bold;text-align:left;white-space:nowrap;">Gap</td>
             <td id="banner-td-tgldgap-value" class="banner-td-num" style="color:${col}">${val ? formatPercent(val.gap_pct) : '—'}</td>
             <td id="banner-td-tgldgap-day-pct" class="banner-td-pct ${cls(day)}">${pct(day)}</td>
@@ -1336,6 +1339,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             tblHtml += `<tr id="banner-row-total" class="banner-row-portfolio-total">
             <td class="banner-td-vis"></td>
             <td class="banner-td-shares" data-hover-spark="__total" title="Капитал T+F">${totalSpark.svg}</td>
+            <td class="banner-td-struct" data-hover-shares="__total" title="Структура T+F">${shareBarsHtml(totalAssets)}</td>
             <td id="banner-td-total-marker" class="banner-td-num" style="color:#999;font-size:1.85cqi;min-width:16px;text-align:left;white-space:nowrap;">T+F</td>
             <td id="banner-td-total-value" class="banner-td-num" style="color:#dcdcdc;font-weight:bold;white-space:nowrap;" title="Суммарный капитал по портфелям">${Math.round(tfCurrent).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-total-day-change" class="banner-td-change ${tfDayCls}">${formatChange(tfAbs)}</td>
@@ -1355,6 +1359,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
             tblHtml += `<tr id="banner-row-${rowId}" class="${row.cssClass}" style="opacity:${rowOpacity};" title="${row.label}">
             ${visCell(row.label + ', ₽')}
             <td class="banner-td-shares" data-hover-spark="${row.source}" title="Капитал: ${row.label}">${row.sparkSvg}</td>
+            <td class="banner-td-struct" data-hover-shares="${row.source}" title="Структура: ${row.label}">${shareBarsHtml(row.assets)}</td>
             <td id="banner-td-${rowId}-marker" class="banner-td-num" title="${row.label}" style="color:${row.color};font-size:1.85cqi;font-weight:bold;min-width:16px;text-align:left;white-space:nowrap;">${row.instrument ? (row.marker + (row.sep || ':') + row.instrument) : row.marker}</td>
             <td id="banner-td-${rowId}-value" class="banner-td-num" style="color:${row.color};text-align:right;">${Math.round(row.currentTotal).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')}</td>
             <td id="banner-td-${rowId}-day-pct" class="banner-td-pct ${row.dayChangeClass}">${formatPercent(row.pctChange)}</td>
@@ -1426,7 +1431,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
         // Попапы при наведении: доли на строках счетов, увеличенный микрографик на тикерах
         if (!window.__bannerHoverBound) {
             window.__bannerHoverBound = true;
-            $(document).on('mouseover', '#invest_banner_table_content .banner-td-shares', function() {
+            $(document).on('mouseover', '#invest_banner_table_content .banner-td-shares, #invest_banner_table_content .banner-td-struct', function() {
                 var cell = this;
                 var sId = cell.getAttribute('data-hover-shares');
                 var kId = cell.getAttribute('data-hover-spark');
@@ -1439,7 +1444,7 @@ console.log("🚀 invest_banner.js загружен (HTML version)");
                     }
                 } catch (e) { hideHoverPopup(); }
             });
-            $(document).on('mouseout', '#invest_banner_table_content .banner-td-shares', hideHoverPopup);
+            $(document).on('mouseout', '#invest_banner_table_content .banner-td-shares, #invest_banner_table_content .banner-td-struct', hideHoverPopup);
             $(document).on('change', '#invest_banner_table_content .banner-vis', function() {
                 var label = this.getAttribute('data-dataset');
                 if (!label) return;
