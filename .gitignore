@@ -165,3 +165,8 @@ tmon_preview.html
 
 # Локальный запуск без Docker: PID и логи процессов
 logs/local/
+
+# Десктоп-синхронизация с планшетом: локальные конфиг/данные/логи
+parsers/invest/desktop_sync/config.json
+parsers/invest/desktop_sync/data/
+parsers/invest/desktop_sync/logs/

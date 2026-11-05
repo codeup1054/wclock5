@@ -98,6 +98,28 @@ Flask. Локальный режим в `sh/devops.sh` (токен `пд`):
 - Проверка сети перед стартом демонов — из Python (`socket.create_connection`),
   не через `curl`: на Windows curl может давать ложный 000 при рабочей сети.
 
+### 1.2 Десктоп-синхронизация с планшетом
+
+Код: `parsers/invest/desktop_sync/` (без Docker, свой
+`requirements-sync.txt`). Планшет — `wclock_android`, LAN-порт **9090**
+(8080 — только loopback WebView; в этой сети 8080 режется reset).
+
+```powershell
+.env\Scripts\python.exe -m parsers.invest.desktop_sync          # окно
+.env\Scripts\python.exe -m parsers.invest.desktop_sync --once   # один проход
+```
+
+| Правило | Значение |
+|---|---|
+| API планшета | `/api/ping`, `/api/stats`, `/api/invest/history`, `/api/invest/prune`, `/api/alerts` |
+| Инкремент | `since = min(последних ts по счетам)`; раз в 24 ч `since=0` |
+| Архив | `data/invest_YYYYMM.parquet`, fallback `data/invest.db`, ключ `(source, ts)` |
+| Горячая БД | `invest_buckets(res='min')` — графики; `portfolio_history` — только свежие 10 мин |
+| Расхождения | допуск 0.3 %; seed на `:00` сверяется с любой минутой часа; последняя точка — не расхождение |
+| Prune | `histBytes > 200 КБ`, старше 7 суток, после проверки архива, с подтверждением |
+| Алерты | `logs/alerts.db` + CSV; Telegram `[SK_DESK]` / `[TAB]` |
+| Отчёт | `logs/sync_log.csv` |
+
 ## 2. Инвест-данные
 
 - Время — **всегда числовой `ts_epoch`** (Unix UTC) в БД; ISO-строки только
@@ -671,6 +693,8 @@ finam-портфеля — единицы процентов; 42%-й прова�
 
 Версии `X.Y`. Новые записи — сверху.
 
+- **0.18** · 2026-11-05 — §1.2: десктоп-синхронизация с планшетом (LAN 9090),
+  parquet-архив + горячая БД, prune с подтверждением, алерты и Telegram.
 - **0.17** · 2026-11-05 — §7.4: пересчёт ширин — показатели не обрезаются
   (`+409 266`, `+3.89%`); числа `1.7cqi`, запас ~7 px на 928, даты `1.18cqi`.
 - **0.16** · 2026-11-05 — §7.4: отдельный столбец структуры портфеля

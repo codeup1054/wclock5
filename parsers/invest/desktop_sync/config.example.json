@@ -1,0 +1,21 @@
+{
+  "host": "192.168.3.33",
+  "port": 9090,
+  "timeoutSec": 5,
+  "retries": 3,
+  "autoStart": true,
+  "syncMinutes": 10,
+  "archiveDir": "data",
+  "hotDbPath": "../invest_portfolio.db",
+  "maxTabletKb": 200,
+  "maxArchiveMb": 500,
+  "sqliteVacuumMb": 1024,
+  "pruneAfterSync": true,
+  "askBeforePrune": true,
+  "keepDaysOnTablet": 7,
+  "logsDir": "logs",
+  "telegramEnabled": true,
+  "telegramToken": "",
+  "telegramChatId": "",
+  "telegramProxy": ""
+}
