@@ -65,6 +65,30 @@ Compose-сервисы: `wclock` (app), `invest-parser`, `finam-invest-parser`
 - systemd-сервисы хоста (вне compose): `tg-turnover`
   (`parsers/telegram/tg_turnover_daemon.py`).
 
+### 1.1 Локальный запуск без Docker
+
+Docker нужен только для изоляции и автозапуска демонов; веб — обычный
+Flask. Локальный режим в `sh/devops.sh` (токен `пд`):
+
+| Команда | Действие |
+|---------|----------|
+| `./sh/devops.sh local` | веб на `LOCAL_PORT` (5001), без Docker |
+| `./sh/devops.sh upall` | веб + демоны из `LOCAL_DAEMONS` |
+| `./sh/devops.sh stop` | остановить веб и демонов, освободить порт |
+| `./sh/devops.sh lstatus` | PID, HTTP, свежесть БД |
+| `./sh/devops.sh llogs <имя>` | `tail -f logs/local/<имя>.log` |
+| `./sh/devops.sh deps` | venv + `pip install -r requirements.txt` |
+
+Правила:
+- `LOCAL_PORT` (5001) ≠ `PORT` (10405, Docker) — локальный запуск не трогает
+  контейнеры и не убивает прод-порт.
+- PID и логи — в `logs/local/` (gitignore). На Windows `lsof`/`pgrep`/`pkill`
+  отсутствуют: PID-файлы хранят WINPID (`ps -W`), остановка —
+  `taskkill //F //T`, порт — `netstat -ano`.
+- Без Docker доступны веб, API и чтение `parsers/*/*.db`; демоны требуют
+  сети/DNS с хоста. Если DNS на хосте не работает — демонов держим в Docker.
+- Нельзя одновременно писать в одну БД локальными демонами и контейнерами.
+
 ## 2. Инвест-данные
 
 - Время — **всегда числовой `ts_epoch`** (Unix UTC) в БД; ISO-строки только
@@ -634,6 +658,10 @@ finam-портфеля — единицы процентов; 42%-й прова�
 ## Лист изменений
 
 Версии `X.Y`. Новые записи — сверху.
+
+- **0.13** · 2026-11-05 — §1.1: локальный запуск без Docker (`devops.sh`
+  `local/upall/stop/lstatus/llogs/deps`), `LOCAL_PORT` 5001 vs Docker 10405,
+  PID-файлы и WINPID на Windows; гайд `sh/WCLOCK_README_DEVOPS.md` обновлён.
 
 - **0.12** · 2026-11-04 — §6/§7.4: баннер-таблица 12 колонок, даты
   «скачано/изменено» (`GET /api/invest/freshness`, `fetched_ts` у ЦБ),

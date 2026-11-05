@@ -162,3 +162,6 @@ tmon_preview.html
 # SQLite служебные файлы
 *.db-wal
 *.db-shm
+
+# Локальный запуск без Docker: PID и логи процессов
+logs/local/
